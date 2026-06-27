@@ -1,0 +1,17 @@
+.students-list { background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.students-list__toolbar { padding: 16px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid #f1f5f9; }
+.students-list__search { display: flex; align-items: center; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; max-width: 280px; color: #94a3b8; }
+.students-list__search input { border: none; outline: none; font-size: 14px; width: 100%; }
+.students-list__add { display: flex; align-items: center; gap: 6px; background: #1d4ed8; color: white; font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 8px; align-self: flex-start; }
+.students-list__table-wrap { overflow-x: auto; }
+.students-list__table { width: 100%; font-size: 14px; border-collapse: collapse; }
+.students-list__table thead { background: #f8fafc; color: #94a3b8; font-size: 12px; }
+.students-list__table th, .students-list__table td { text-align: left; padding: 12px; }
+.students-list__table tbody tr { border-top: 1px solid #f1f5f9; }
+.students-list__name { font-weight: 500; color: #1e293b; }
+.students-list__badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.students-list__badge--paid { background: #dcfce7; color: #16a34a; }
+.students-list__badge--unpaid { background: #fee2e2; color: #dc2626; }
+.students-list__footer { padding: 16px; }
+
+@media (min-width: 640px) { .students-list__toolbar { flex-direction: row; align-items: center; justify-content: space-between; } }

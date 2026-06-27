@@ -1,0 +1,11 @@
+.results { display: flex; flex-direction: column; gap: 20px; }
+.results__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.results__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.results__header h3, .results__card h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+.results__badge { font-size: 11px; font-weight: 600; background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 999px; }
+.results__row { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+.results__row:last-child { border-bottom: none; }
+.results__muted { color: var(--subtext); }
+.results__total { display: flex; justify-content: space-between; padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--border); font-weight: 600; color: var(--text); }
+.results__total-value { color: var(--accent); font-weight: 700; }
+.results__download { width: 100%; margin-top: 16px; border: 1px solid var(--border); color: var(--subtext); font-size: 14px; font-weight: 500; padding: 10px; border-radius: 8px; background: var(--bg); }

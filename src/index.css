@@ -1,0 +1,8 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Poppins', 'Nunito', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button { cursor: pointer; font-family: inherit; border: none; background: none; }
+input, select { font-family: inherit; }

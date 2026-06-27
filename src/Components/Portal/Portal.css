@@ -1,0 +1,4 @@
+.portal { display: flex; min-height: 100vh; background: var(--bg); }
+.portal__main { flex: 1; padding: 20px; padding-bottom: 90px; }
+
+@media (min-width: 1024px) { .portal__main { padding: 32px; padding-bottom: 32px; } }

@@ -1,0 +1,21 @@
+.app { min-height: 100vh; position: relative; }
+.content-with-bg { position: relative; z-index: 1; }
+.content-with-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("/images/hero/hero1.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  opacity: 0.12;
+}
+.back-to-top {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--accent); color: white;
+  padding: 12px; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 50;
+}

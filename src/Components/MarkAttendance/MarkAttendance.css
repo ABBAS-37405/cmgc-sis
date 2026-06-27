@@ -1,0 +1,16 @@
+.mark-attendance { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+.mark-attendance__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.mark-attendance__header h3 { font-size: 14px; font-weight: 600; color: #1e293b; }
+.mark-attendance__header select { font-size: 14px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; }
+.mark-attendance__row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.mark-attendance__row:last-of-type { border-bottom: none; }
+.mark-attendance__name { font-size: 14px; font-weight: 500; color: #1e293b; }
+.mark-attendance__roll { font-size: 12px; color: #94a3b8; }
+.mark-attendance__buttons { display: flex; gap: 8px; }
+.mark-attendance__btn { font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 8px; border: 1px solid #e2e8f0; color: #94a3b8; }
+.mark-attendance__btn--active.mark-attendance__btn--present { background: #f0fdf4; border-color: #4ade80; color: #15803d; }
+.mark-attendance__btn--active.mark-attendance__btn--absent { background: #fef2f2; border-color: #f87171; color: #b91c1c; }
+.mark-attendance__btn--active.mark-attendance__btn--leave { background: #fffbeb; border-color: #fbbf24; color: #b45309; }
+.mark-attendance__save { width: 100%; margin-top: 16px; background: #1d4ed8; color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
+.mark-attendance__confirm { color: #16a34a; font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+.mark-attendance__footer { margin-top: 12px; }

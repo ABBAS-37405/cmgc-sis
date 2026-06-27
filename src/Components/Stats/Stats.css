@@ -1,0 +1,8 @@
+.stats { background: var(--bg); padding: 48px 20px; position: relative; z-index: 10; margin-top: -1px; }
+.stats__grid { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.stats__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.stats__icon { color: var(--accent); margin-bottom: 8px; }
+.stats__value { font-size: 26px; font-weight: 700; color: var(--text); }
+.stats__label { font-size: 13px; color: var(--subtext); }
+
+@media (min-width: 1024px) { .stats__grid { grid-template-columns: repeat(4, 1fr); } }

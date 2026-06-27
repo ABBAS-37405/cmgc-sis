@@ -1,0 +1,5 @@
+.working-on-it {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; padding: 5px 10px;
+  border-radius: 999px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
+}

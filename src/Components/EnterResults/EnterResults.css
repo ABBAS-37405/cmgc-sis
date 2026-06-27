@@ -1,0 +1,9 @@
+.enter-results { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; max-width: 480px; }
+.enter-results h3 { font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 16px; }
+.enter-results select { width: 100%; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; }
+.enter-results__row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.enter-results__row label { font-size: 14px; color: #64748b; }
+.enter-results__row input { width: 96px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; text-align: right; }
+.enter-results__save { width: 100%; background: #1d4ed8; color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; margin-top: 8px; }
+.enter-results__confirm { color: #16a34a; font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+.enter-results__footer { margin-top: 12px; }

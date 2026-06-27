@@ -1,0 +1,4 @@
+.portal-teaser { background: var(--card); padding: 64px 20px; text-align: center; }
+.portal-teaser h2 { color: var(--text); font-size: 24px; margin-bottom: 12px; }
+.portal-teaser p { color: var(--subtext); font-size: 14px; max-width: 420px; margin: 0 auto 16px; }
+.portal-teaser__btn { background: var(--accent); color: white; font-weight: 600; padding: 12px 24px; border-radius: 8px; }

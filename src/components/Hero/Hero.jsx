@@ -4,7 +4,7 @@ import "./Hero.css";
 
 const PHRASES = ["Empowering Girls Through Education", "Excellence in FSc, FA, ICS, ICOM", "Admissions Open 2026"];
 
-export default function Hero({ scrollTo, onPortalClick }) {
+export default function Hero({ scrollTo, onPortalClick, onAdmissionClick }) {
   const [idx, setIdx] = useState(0);
   const [display, setDisplay] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -37,7 +37,7 @@ export default function Hero({ scrollTo, onPortalClick }) {
         <p className="hero__typed">{display}<span className="hero__cursor">|</span></p>
         <p className="hero__location">Gulzar-e-Quaid, Rawalpindi, Punjab — Affiliated with BISE Rawalpindi</p>
         <div className="hero__actions">
-          <button className="hero__btn hero__btn--primary" onClick={() => scrollTo("admission")}>Apply for Admission</button>
+          <button className="hero__btn hero__btn--primary" onClick={onAdmissionClick}>Apply for Admission</button>
           <button className="hero__btn hero__btn--outline" onClick={onPortalClick}>Go to Portal</button>
         </div>
       </div>

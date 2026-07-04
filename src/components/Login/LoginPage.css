@@ -15,3 +15,4 @@
 .login__forgot { text-align: center; color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 12px; cursor: pointer; }
 .login__footer { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.2); }
 .login__back { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 16px; }
+.login__error { color: #fca5a5; font-size: 12px; display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }

@@ -1,3 +1,4 @@
+import { supabase } from "../../lib/supabaseClient";
 import { useState } from "react";
 import LoginPage from "../Login/LoginPage";
 import Sidebar from "../Sidebar/Sidebar";
@@ -24,7 +25,12 @@ export default function Portal({ onExit }) {
   };
 
   const handleLogin = (r) => { setRole(r); setLoggedIn(true); };
-  const handleLogout = () => { setLoggedIn(false); setActiveTab("overview"); onExit && onExit(); };
+const handleLogout = async () => {
+  await supabase.auth.signOut();
+  setLoggedIn(false);
+  setActiveTab("overview");
+  onExit && onExit();
+};
 
   if (!loggedIn) return <LoginPage onLogin={handleLogin} onBack={onExit} />;
 

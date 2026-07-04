@@ -13,6 +13,7 @@ import Portal from "./components/Portal/Portal";
 import AdmissionPage from "./components/AdmissionPage/AdmissionPage";
 import "./styles/themes.css";
 import "./App.css";
+import NoticeBoard from "./components/NoticeBoard/NoticeBoard";
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("cmgc-theme") || "light");
@@ -42,12 +43,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <Navbar theme={theme} setTheme={setTheme} scrolled={scrolled} />
+      <Navbar theme={theme} setTheme={setTheme} scrolled={scrolled} onAdmissionClick={() => setShowAdmission(true)} />
       <Hero scrollTo={scrollTo} onPortalClick={() => setShowPortal(true)} onAdmissionClick={() => setShowAdmission(true)} />
       <Stats />
       <About />
       <Programs />
       <Gallery />
+      <NoticeBoard />
       <Admission onAdmissionClick={() => setShowAdmission(true)} />
       <PortalTeaser onPortalClick={() => setShowPortal(true)} />
       <Footer />

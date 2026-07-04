@@ -1,11 +1,18 @@
 .notices { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.notices__form, .notices__list { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-.notices h3 { font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 12px; }
-.notices__form input, .notices__form select { width: 100%; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
-.notices__form button { width: 100%; background: #1d4ed8; color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
-.notices__working { margin-top: 12px; }
-.notices__row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #374151; }
+.notices__form, .notices__list { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.notices h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+.notices__form input, .notices__form select { width: 100%; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; background: var(--bg); color: var(--text); font-family: inherit; }
+.notices__form button { width: 100%; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
+.notices__form button:disabled { opacity: 0.6; cursor: not-allowed; }
+.notices__empty { color: var(--subtext); font-size: 14px; text-align: center; padding: 20px 0; }
+.notices__row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 8px; }
 .notices__row:last-child { border-bottom: none; }
-.notices__row span { font-size: 11px; background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 999px; }
+.notices__row-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.notices__row-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.notices__icon { font-size: 18px; flex-shrink: 0; }
+.notices__title { font-size: 14px; color: var(--text); font-weight: 500; }
+.notices__date { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+.notices__cat { font-size: 11px; background: var(--bg); border: 1px solid var(--border); color: var(--subtext); padding: 2px 8px; border-radius: 999px; }
+.notices__delete { color: #ef4444; padding: 4px; }
 
 @media (min-width: 1024px) { .notices { grid-template-columns: 1fr 1fr; } }

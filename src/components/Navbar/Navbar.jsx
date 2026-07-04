@@ -7,17 +7,22 @@ const NAV_LINKS = [
   { id: "about", label: "About" },
   { id: "programs", label: "Programs" },
   { id: "gallery", label: "Gallery" },
+  { id: "notices", label: "Notices" },
   { id: "admission", label: "Admission" },
   { id: "contact", label: "Contact" },
 ];
 
 const THEME_NAMES = ["light", "dark", "soft", "academic"];
 
-export default function Navbar({ theme, setTheme, scrolled }) {
+export default function Navbar({ theme, setTheme, scrolled, onAdmissionClick }) {
   const [open, setOpen] = useState(false);
 
   const scrollTo = (id) => {
     setOpen(false);
+    if (id === "admission") {
+      onAdmissionClick && onAdmissionClick();
+      return;
+    }
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -48,7 +53,7 @@ export default function Navbar({ theme, setTheme, scrolled }) {
               />
             ))}
           </div>
-          <button className="navbar__cta" onClick={() => scrollTo("admission")}>Apply Now</button>
+          <button className="navbar__cta" onClick={() => onAdmissionClick && onAdmissionClick()}>Apply Now</button>
         </div>
 
         <button className="navbar__hamburger" onClick={() => setOpen(!open)}>

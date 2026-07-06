@@ -4,6 +4,3 @@
 .admission__subheading { color: var(--subtext); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
 .admission__cta { background: var(--accent); color: white; font-weight: 700; font-size: 15px; padding: 14px 32px; border-radius: 10px; transition: background 0.2s; }
 .admission__cta:hover { background: var(--accent-hover); }
-.admission__upload-filename { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #16a34a; margin-top: 3px; }
-.admission__error--banner { display: flex; align-items: center; gap: 6px; background: #fef2f2; padding: 10px; border-radius: 8px; font-size: 13px; }
-.admission__submit:disabled { opacity: 0.6; cursor: not-allowed; }

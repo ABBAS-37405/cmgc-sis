@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { GraduationCap, User, Users, Shield, Lock, Eye, EyeOff, ArrowLeft, AlertCircle } from "lucide-react";
-import WorkingOnIt from "../WorkingOnIt/WorkingOnIt";
 import { supabase } from "../../lib/supabaseClient";
 import "./LoginPage.css";
 
@@ -20,29 +19,43 @@ export default function LoginPage({ onLogin, onBack }) {
 
   const handleLogin = async () => {
     setError("");
-
-    if (role === "admin") {
-      if (!id.trim() || !password.trim()) {
-        setError("Please enter email and password");
-        return;
-      }
-      setLoading(true);
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: id,
-        password: password,
-      });
-      setLoading(false);
-
-      if (authError) {
-        setError("Invalid email or password");
-        return;
-      }
-      onLogin(role, id);
+    if (!id.trim() || !password.trim()) {
+      setError("Please enter your ID and password");
       return;
     }
 
-    // Student/Parent — still mock for now
-    if (id.trim() && password.trim()) onLogin(role, id);
+    setLoading(true);
+
+    if (role === "admin") {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: id,
+        password,
+      });
+      setLoading(false);
+      if (authError) { setError("Invalid email or password"); return; }
+      onLogin("admin", id, null);
+      return;
+    }
+
+    if (role === "student" || role === "parent") {
+      // Students table se roll number + password check karein
+      const { data, error: dbError } = await supabase
+        .from("students")
+        .select("*")
+        .eq("roll_no", id.trim())
+        .eq("password", password.trim())
+        .single();
+
+      setLoading(false);
+
+      if (dbError || !data) {
+        setError("Invalid Roll Number or Password");
+        return;
+      }
+
+      onLogin(role, id, data);
+      return;
+    }
   };
 
   return (
@@ -67,22 +80,24 @@ export default function LoginPage({ onLogin, onBack }) {
         </div>
 
         <input
-  value={id}
-  onChange={(e) => setId(e.target.value)}
-  onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-  placeholder={role === "admin" ? "Admin Email" : "Roll Number / ID"}
-  className="login__input"
-/>
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+          placeholder={role === "admin" ? "Admin Email" : "Roll Number (e.g. CMGC-2026-001)"}
+          className="login__input"
+        />
         <div className="login__password-wrap">
           <input
-  type={showPass ? "text" : "password"}
-  value={password}
-  onChange={(e) => setPassword(e.target.value)}
-  onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-  placeholder="Password"
-  className="login__input"
-/>
-          <button className="login__eye" onClick={() => setShowPass(!showPass)}>{showPass ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+            type={showPass ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            placeholder="Password"
+            className="login__input"
+          />
+          <button className="login__eye" onClick={() => setShowPass(!showPass)}>
+            {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
 
         {error && <p className="login__error"><AlertCircle size={13} /> {error}</p>}
@@ -91,12 +106,6 @@ export default function LoginPage({ onLogin, onBack }) {
           <Lock size={16} /> {loading ? "Logging in..." : "Login"}
         </button>
         <p className="login__forgot">Forgot Password?</p>
-
-        {role !== "admin" && (
-          <div className="login__footer">
-            <WorkingOnIt text="Real login verification — pending Supabase Auth connection" />
-          </div>
-        )}
       </div>
     </div>
   );

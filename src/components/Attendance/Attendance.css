@@ -1,21 +1,10 @@
-.attendance { display: flex; flex-direction: column; gap: 20px; }
-.attendance__summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.attendance__stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
-.attendance__stat p:last-child { font-size: 12px; color: var(--subtext); }
-.attendance__num { font-size: 22px; font-weight: 700; }
-.attendance__num--green { color: #16a34a; }
-.attendance__num--red { color: #ef4444; }
-.attendance__num--amber { color: #d97706; }
-.attendance__num--blue { color: #2563eb; }
-.attendance__calendar-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-.attendance__calendar-card h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
-.attendance__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.attendance__day { aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: white; font-weight: 500; }
-.attendance__day--present { background: #22c55e; }
-.attendance__day--absent { background: #ef4444; }
-.attendance__day--leave { background: #fbbf24; }
-.attendance__legend { display: flex; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--subtext); }
-.attendance__dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
-.attendance__dot--green { background: #22c55e; }
-.attendance__dot--red { background: #ef4444; }
-.attendance__dot--amber { background: #fbbf24; }
+.attendance__loading { text-align: center; color: var(--subtext); padding: 32px; }
+.attendance__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 20px 0; }
+.attendance__list { display: flex; flex-direction: column; gap: 0; }
+.attendance__row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.attendance__row:last-child { border-bottom: none; }
+.attendance__date { font-size: 14px; color: var(--text); }
+.attendance__status { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.attendance__status--present { background: #dcfce7; color: #16a34a; }
+.attendance__status--absent { background: #fee2e2; color: #dc2626; }
+.attendance__status--leave { background: #fef3c7; color: #b45309; }

@@ -1,18 +1,32 @@
-import { useState } from "react";
-import WorkingOnIt from "../WorkingOnIt/WorkingOnIt";
+import { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabaseClient";
 import "./Attendance.css";
 
-export default function Attendance() {
-  const [days] = useState(() =>
-    Array.from({ length: 30 }, () => {
-      const r = Math.random();
-      return r > 0.85 ? "leave" : r > 0.15 ? "present" : "absent";
-    })
-  );
-  const present = days.filter((d) => d === "present").length;
-  const absent = days.filter((d) => d === "absent").length;
-  const leave = days.filter((d) => d === "leave").length;
-  const percent = Math.round((present / days.length) * 100);
+export default function Attendance({ studentId }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (studentId) fetchAttendance();
+  }, [studentId]);
+
+  const fetchAttendance = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("attendance")
+      .select("*")
+      .eq("student_id", studentId)
+      .order("date", { ascending: false });
+    if (data) setRecords(data);
+    setLoading(false);
+  };
+
+  const present = records.filter((r) => r.status === "Present").length;
+  const absent = records.filter((r) => r.status === "Absent").length;
+  const leave = records.filter((r) => r.status === "Leave").length;
+  const percent = records.length > 0 ? Math.round((present / records.length) * 100) : 0;
+
+  if (loading) return <div className="attendance"><p className="attendance__loading">Loading attendance...</p></div>;
 
   return (
     <div className="attendance">
@@ -22,20 +36,22 @@ export default function Attendance() {
         <div className="attendance__stat"><p className="attendance__num attendance__num--amber">{leave}</p><p>Leave</p></div>
         <div className="attendance__stat"><p className="attendance__num attendance__num--blue">{percent}%</p><p>Overall</p></div>
       </div>
+
       <div className="attendance__calendar-card">
-        <h3>This Month</h3>
-        <div className="attendance__grid">
-          {days.map((d, i) => (
-            <div key={i} className={`attendance__day attendance__day--${d}`}>{i + 1}</div>
-          ))}
-        </div>
-        <div className="attendance__legend">
-          <span><i className="attendance__dot attendance__dot--green"></i> Present</span>
-          <span><i className="attendance__dot attendance__dot--red"></i> Absent</span>
-          <span><i className="attendance__dot attendance__dot--amber"></i> Leave</span>
-        </div>
+        <h3>Attendance Records</h3>
+        {records.length === 0 ? (
+          <p className="attendance__empty">No attendance records found</p>
+        ) : (
+          <div className="attendance__list">
+            {records.map((r) => (
+              <div key={r.id} className="attendance__row">
+                <span className="attendance__date">{new Date(r.date).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</span>
+                <span className={`attendance__status attendance__status--${r.status.toLowerCase()}`}>{r.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <WorkingOnIt text="Live attendance sync — pending Supabase connection" />
     </div>
   );
 }

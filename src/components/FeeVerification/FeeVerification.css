@@ -1,12 +1,32 @@
-.fee-verification { display: flex; flex-direction: column; gap: 12px; }
-.fee-verification__empty { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; color: #94a3b8; font-size: 14px; }
-.fee-verification__card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.fee-verification__name { font-size: 14px; font-weight: 600; color: #1e293b; }
-.fee-verification__name span { color: #94a3b8; font-weight: 400; }
-.fee-verification__meta { font-size: 12px; color: #64748b; }
-.fee-verification__actions { display: flex; gap: 8px; }
-.fee-verification__view { font-size: 12px; border: 1px solid #e2e8f0; padding: 6px 12px; border-radius: 8px; color: #64748b; }
-.fee-verification__approve { font-size: 12px; background: #16a34a; color: white; padding: 6px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; }
-.fee-verification__reject { font-size: 12px; background: #fee2e2; color: #dc2626; padding: 6px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; }
+.fee-v { display: flex; flex-direction: column; gap: 16px; }
+.fee-v__tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.fee-v__tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.fee-v__tab--active { background: var(--accent); color: white; }
+.fee-v__count { background: white; color: var(--accent); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+.fee-v__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.fee-v__empty-icon { color: #16a34a; }
+.fee-v__list { display: flex; flex-direction: column; gap: 10px; }
+.fee-v__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.fee-v__card--selected { border-color: var(--accent); }
+.fee-v__student-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.fee-v__student-name span { font-weight: 400; color: var(--subtext); margin-left: 6px; font-size: 12px; }
+.fee-v__meta { font-size: 12px; color: var(--subtext); margin-top: 3px; }
+.fee-v__date { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+.fee-v__card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fee-v__view { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--accent); border: 1px solid var(--border); padding: 6px 12px; border-radius: 8px; background: var(--bg); }
+.fee-v__approve { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; background: #16a34a; color: white; padding: 6px 14px; border-radius: 8px; }
+.fee-v__reject { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; background: #fee2e2; color: #dc2626; padding: 6px 14px; border-radius: 8px; }
+.fee-v__approve:disabled, .fee-v__reject:disabled { opacity: 0.6; cursor: not-allowed; }
+.fee-v__note { display: flex; align-items: flex-start; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; color: var(--subtext); }
+.fee-v__table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+.fee-v__table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.fee-v__table thead { background: var(--bg); }
+.fee-v__table th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--subtext); font-weight: 600; text-transform: uppercase; }
+.fee-v__table td { padding: 10px 12px; border-top: 1px solid var(--border); color: var(--text); }
+.fee-v__roll { font-size: 11px; color: var(--subtext); }
+.fee-v__badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.fee-v__badge--pending { background: #fef3c7; color: #b45309; }
+.fee-v__badge--success { background: #dcfce7; color: #16a34a; }
+.fee-v__badge--rejected { background: #fee2e2; color: #dc2626; }
 
-@media (min-width: 640px) { .fee-verification__card { flex-direction: row; align-items: center; justify-content: space-between; } }
+@media (min-width: 640px) { .fee-v__card { flex-direction: row; align-items: center; justify-content: space-between; } }

@@ -1,25 +1,17 @@
-.students-list__back { color: var(--accent); font-size: 14px; font-weight: 500; margin-bottom: 16px; display: block; }
-.students-list__detail { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.students-list__detail-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px; background: var(--accent); color: white; }
-.students-list__detail-header h2 { font-size: 18px; font-weight: 700; }
-.students-list__detail-header p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
-.students-list__detail-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
-.students-list__detail-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.students-list__detail-section h3 { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-.students-list__detail-section p { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--subtext); }
-.students-list__detail-section p:last-child { border-bottom: none; }
-.students-list__detail-section p strong { color: var(--text); text-align: right; }
-.students-list__doc-link { display: block; color: var(--accent); font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
-.students-list__doc-link:last-child { border-bottom: none; }
-.students-list__actions { display: flex; gap: 12px; padding: 16px 20px; }
-.students-list__approve { flex: 1; background: #16a34a; color: white; font-weight: 600; padding: 12px; border-radius: 8px; font-size: 14px; }
-.students-list__reject { flex: 1; background: #dc2626; color: white; font-weight: 600; padding: 12px; border-radius: 8px; font-size: 14px; }
-.students-list__loading, .students-list__empty { padding: 40px; text-align: center; color: var(--subtext); font-size: 14px; }
-.students-list__view { display: flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; font-weight: 500; }
+.students-list__tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+.students-list__tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); }
+.students-list__tab--active { background: var(--accent); color: white; }
+.students-list__add-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.students-list__add-form h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+.students-list__add-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+.students-list__add-field { display: flex; flex-direction: column; gap: 4px; }
+.students-list__add-field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+.students-list__add-field input, .students-list__add-field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
+.students-list__form-error { color: #ef4444; font-size: 12px; margin-bottom: 8px; }
+.students-list__form-success { color: #16a34a; font-size: 12px; margin-bottom: 8px; }
+.students-list__save-btn { display: flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 8px; }
+.students-list__save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.students-list__delete { display: flex; align-items: center; gap: 4px; color: #dc2626; font-size: 12px; font-weight: 500; }
 .students-list__counts { display: flex; gap: 8px; flex-wrap: wrap; }
-.students-list__badge { display: inline-flex; align-items: center; gap: 4px; }
-.students-list__badge--pending { background: #fef3c7; color: #b45309; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
-.students-list__badge--approved { background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
-.students-list__badge--rejected { background: #fee2e2; color: #dc2626; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
 
-@media (min-width: 768px) { .students-list__detail-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 640px) { .students-list__add-grid { grid-template-columns: 1fr 1fr; } }

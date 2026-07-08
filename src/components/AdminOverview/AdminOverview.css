@@ -1,11 +1,24 @@
-.admin-overview { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.admin-overview__card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+.admin-overview { display: flex; flex-direction: column; gap: 20px; }
+.admin-overview__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.admin-overview__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .admin-overview__icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
 .admin-stat--blue { background: #eff6ff; color: #2563eb; }
 .admin-stat--amber { background: #fffbeb; color: #d97706; }
 .admin-stat--purple { background: #faf5ff; color: #9333ea; }
 .admin-stat--red { background: #fef2f2; color: #dc2626; }
-.admin-overview__value { font-size: 18px; font-weight: 700; color: #1e293b; }
-.admin-overview__label { font-size: 12px; color: #64748b; }
+.admin-overview__value { font-size: 22px; font-weight: 700; color: var(--text); }
+.admin-overview__label { font-size: 12px; color: var(--subtext); margin-top: 2px; }
+.admin-overview__recent { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.admin-overview__recent h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+.admin-overview__empty { color: var(--subtext); font-size: 14px; text-align: center; padding: 20px 0; }
+.admin-overview__table-wrap { overflow-x: auto; }
+.admin-overview__table { width: 100%; font-size: 14px; border-collapse: collapse; }
+.admin-overview__table thead { background: var(--bg); }
+.admin-overview__table th { text-align: left; padding: 8px 12px; font-size: 12px; color: var(--subtext); font-weight: 600; }
+.admin-overview__table td { padding: 10px 12px; border-top: 1px solid var(--border); color: var(--text); }
+.admin-overview__badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.admin-overview__badge--pending { background: #fef3c7; color: #b45309; }
+.admin-overview__badge--approved { background: #dcfce7; color: #16a34a; }
+.admin-overview__badge--rejected { background: #fee2e2; color: #dc2626; }
 
-@media (min-width: 1024px) { .admin-overview { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) { .admin-overview__stats { grid-template-columns: repeat(4, 1fr); } }

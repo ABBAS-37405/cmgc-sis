@@ -6,6 +6,8 @@ import "./AdminOverview.css";
 export default function AdminOverview() {
   const [stats, setStats] = useState({
     totalStudents: 0,
+    firstYearStudents: 0,
+    secondYearStudents: 0,
     pendingApplications: 0,
     totalNotices: 0,
     todayAttendance: "Not Marked",
@@ -25,6 +27,16 @@ export default function AdminOverview() {
     const { count: studentsCount } = await supabase
       .from("students")
       .select("*", { count: "exact", head: true });
+
+    const { count: firstYearCount } = await supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .eq("year_of_study", "1st Year");
+
+    const { count: secondYearCount } = await supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .eq("year_of_study", "2nd Year");
 
     // Pending applications
     const { count: pendingCount } = await supabase
@@ -52,6 +64,8 @@ export default function AdminOverview() {
 
     setStats({
       totalStudents: studentsCount || 0,
+      firstYearStudents: firstYearCount || 0,
+      secondYearStudents: secondYearCount || 0,
       pendingApplications: pendingCount || 0,
       totalNotices: noticesCount || 0,
       todayAttendance: attendanceCount > 0 ? `${attendanceCount} Records` : "Not Marked",
@@ -62,10 +76,12 @@ export default function AdminOverview() {
   };
 
   const statCards = [
-    { label: "Total Students", value: loading ? "..." : stats.totalStudents, icon: Users, cls: "admin-stat--blue" },
+    { label: "Total 1st Year", value: loading ? "..." : stats.firstYearStudents, icon: Users, cls: "admin-stat--blue" },
+    { label: "Total 2nd Year", value: loading ? "..." : stats.secondYearStudents, icon: Users, cls: "admin-stat--green" },
+    { label: "Grand Total", value: loading ? "..." : stats.totalStudents, icon: Users, cls: "admin-stat--purple" },
     { label: "Pending Applications", value: loading ? "..." : stats.pendingApplications, icon: Wallet, cls: "admin-stat--amber" },
-    { label: "Notices Posted", value: loading ? "..." : stats.totalNotices, icon: Bell, cls: "admin-stat--purple" },
-    { label: "Today's Attendance", value: loading ? "..." : stats.todayAttendance, icon: CalendarCheck, cls: "admin-stat--red" },
+    { label: "Notices Posted", value: loading ? "..." : stats.totalNotices, icon: Bell, cls: "admin-stat--red" },
+    { label: "Today's Attendance", value: loading ? "..." : stats.todayAttendance, icon: CalendarCheck, cls: "admin-stat--teal" },
   ];
 
   const statusColor = (status) => {

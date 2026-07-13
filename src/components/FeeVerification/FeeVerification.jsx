@@ -5,6 +5,8 @@ import "./FeeVerification.css";
 
 export default function FeeVerification() {
   const [pending, setPending] = useState([]);
+  const [unpaidFees, setUnpaidFees] = useState([]);
+  const [yearFilter, setYearFilter] = useState("Both");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("pending");
@@ -12,6 +14,7 @@ export default function FeeVerification() {
 
   useEffect(() => {
     fetchPending();
+    fetchUnpaidFees();
     fetchAll();
   }, []);
 
@@ -37,6 +40,30 @@ export default function FeeVerification() {
       setPending(enriched);
     }
     setLoading(false);
+  };
+
+  const fetchUnpaidFees = async () => {
+    const { data: feesData } = await supabase
+      .from("fees")
+      .select("id, student_id, amount_due, due_date, status")
+      .eq("status", "Unpaid")
+      .order("due_date", { ascending: true });
+
+    if (feesData) {
+      const enriched = await Promise.all(
+        feesData.map(async (fee) => {
+          const { data: student } = await supabase
+            .from("students")
+            .select("id, name, roll_no, program, year_of_study")
+            .eq("id", fee.student_id)
+            .single();
+
+          return { ...fee, student };
+        })
+      );
+
+      setUnpaidFees(enriched);
+    }
   };
 
   const fetchAll = async () => {
@@ -107,6 +134,11 @@ export default function FeeVerification() {
     window.open(url, "_blank");
   };
 
+  const filteredUnpaidFees = unpaidFees.filter((fee) => {
+    if (yearFilter === "Both") return true;
+    return fee.student?.year_of_study === yearFilter;
+  });
+
   return (
     <div className="fee-v">
       <div className="fee-v__tabs">
@@ -117,6 +149,15 @@ export default function FeeVerification() {
           Pending Verification
           {pending.length > 0 && (
             <span className="fee-v__count">{pending.length}</span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("unpaid")}
+          className={"fee-v__tab " + (activeTab === "unpaid" ? "fee-v__tab--active" : "")}
+        >
+          Unpaid Fee
+          {unpaidFees.length > 0 && (
+            <span className="fee-v__count">{unpaidFees.length}</span>
           )}
         </button>
         <button
@@ -197,6 +238,56 @@ export default function FeeVerification() {
               Approving will mark fee as <strong>Paid</strong>. Rejecting will
               keep it <strong>Unpaid</strong>.
             </p>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "unpaid" && (
+        <div>
+          <div className="fee-v__year-filters" role="group" aria-label="Filter by class year">
+            <button onClick={() => setYearFilter("1st Year")} className={"fee-v__year-btn " + (yearFilter === "1st Year" ? "fee-v__year-btn--active" : "")}>1st Year</button>
+            <button onClick={() => setYearFilter("2nd Year")} className={"fee-v__year-btn " + (yearFilter === "2nd Year" ? "fee-v__year-btn--active" : "")}>2nd Year</button>
+            <button onClick={() => setYearFilter("Both")} className={"fee-v__year-btn " + (yearFilter === "Both" ? "fee-v__year-btn--active" : "")}>Both</button>
+          </div>
+          <div className="fee-v__table-wrap">
+            {filteredUnpaidFees.length === 0 ? (
+              <p className="fee-v__empty">No unpaid fees found</p>
+            ) : (
+              <table className="fee-v__table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Roll No</th>
+                  <th>Program</th>
+                  <th>Year</th>
+                  <th>Pending Fee</th>
+                  <th>Due Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUnpaidFees.map((fee) => (
+                  <tr key={fee.id}>
+                    <td>
+                      <p className="fee-v__student-name">
+                        {fee.student ? fee.student.name : "Unknown"}
+                      </p>
+                    </td>
+                    <td>{fee.student ? fee.student.roll_no : "—"}</td>
+                    <td>{fee.student ? fee.student.program : "—"}</td>
+                    <td>{fee.student && fee.student.year_of_study ? fee.student.year_of_study : "—"}</td>
+                    <td>Rs {fee.amount_due ? fee.amount_due.toLocaleString() : "—"}</td>
+                    <td>
+                      {fee.due_date ? new Date(fee.due_date).toLocaleDateString("en-PK", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      }) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}

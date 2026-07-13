@@ -15,6 +15,7 @@ const SUBJECTS = {
 
 export default function EnterResults() {
   const [program, setProgram] = useState("Pre-Medical");
+  const [yearFilter, setYearFilter] = useState("Both");
   const [examName, setExamName] = useState("Mid-Term 2026");
   const [students, setStudents] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -27,15 +28,21 @@ export default function EnterResults() {
 
   useEffect(() => {
     fetchStudents();
-  }, [program]);
+  }, [program, yearFilter]);
 
   const fetchStudents = async () => {
     setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from("students")
       .select("id, name, roll_no")
       .eq("program", program)
       .order("name");
+
+    if (yearFilter !== "Both") {
+      query = query.eq("year_of_study", yearFilter);
+    }
+
+    const { data } = await query;
     if (data) setStudents(data);
     setLoading(false);
     setSelected(null);
@@ -120,6 +127,12 @@ export default function EnterResults() {
           <label>Exam Name</label>
           <input value={examName} onChange={(e) => setExamName(e.target.value)} placeholder="e.g. Mid-Term 2026" />
         </div>
+      </div>
+
+      <div className="enter-results__year-filters" role="group" aria-label="Filter by class year">
+        <button onClick={() => setYearFilter("1st Year")} className={"enter-results__year-btn " + (yearFilter === "1st Year" ? "enter-results__year-btn--active" : "")}>1st Year</button>
+        <button onClick={() => setYearFilter("2nd Year")} className={"enter-results__year-btn " + (yearFilter === "2nd Year" ? "enter-results__year-btn--active" : "")}>2nd Year</button>
+        <button onClick={() => setYearFilter("Both")} className={"enter-results__year-btn " + (yearFilter === "Both" ? "enter-results__year-btn--active" : "")}>Both</button>
       </div>
 
       <div className="enter-results__layout">

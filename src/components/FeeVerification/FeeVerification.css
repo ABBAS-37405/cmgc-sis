@@ -1,5 +1,8 @@
 .fee-v { display: flex; flex-direction: column; gap: 16px; }
 .fee-v__tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.fee-v__year-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.fee-v__year-btn { border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--subtext); background: var(--card); }
+.fee-v__year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
 .fee-v__tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .fee-v__tab--active { background: var(--accent); color: white; }
 .fee-v__count { background: white; color: var(--accent); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }

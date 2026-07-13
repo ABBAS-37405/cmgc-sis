@@ -60,13 +60,14 @@ export default function AdmissionPage({ onBack }) {
   const [group, setGroup] = useState("");
   const [selectedBoard, setSelectedBoard] = useState("");
 
+  // ✅ CHANGE 1: yearOfStudy added to form state
   const [form, setForm] = useState({
     name: "", father: "", dob: "", bform: "", fatherCnic: "",
     nationality: "", religion: "", orphan: "no", fatherOccupation: "",
     monthlyIncome: "", familyMembers: "", financialAssistance: "no",
     phone1: "", phone2: "", whatsapp: "", email: "", address: "",
     sscRollNo: "", sscRegNo: "", marksObtained: "", totalMarks: "",
-    percentage: "", sscGroup: "",
+    percentage: "", sscGroup: "", yearOfStudy: "1st Year",
   });
   const [errors, setErrors] = useState({});
 
@@ -168,6 +169,7 @@ export default function AdmissionPage({ onBack }) {
       uploadedUrls[doc.key] = urlData.publicUrl;
     }
 
+    // ✅ CHANGE 2: year_of_study added to insert
     const { error } = await supabase.from("applications").insert({
       student_name: form.name,
       father_name: form.father,
@@ -194,6 +196,7 @@ export default function AdmissionPage({ onBack }) {
       board: selectedBoard,
       student_group: form.sscGroup,
       group_selected: group,
+      year_of_study: form.yearOfStudy,
       photo_url: uploadedUrls.photo || null,
       bform_doc_url: uploadedUrls.bformDoc || null,
       father_id_doc_url: uploadedUrls.fatherIdDoc || null,
@@ -394,7 +397,7 @@ export default function AdmissionPage({ onBack }) {
 
             {/* Section 4 */}
             <section className="ap-section">
-              <SectionHeading number="4" title="HSSC-I Admission" />
+              <SectionHeading number="4" title="HSSC-I & II Admission" />
               <Field label="Select Group *" error={errors.group}>
                 <div className="ap-group-btns">
                   {Object.keys(GROUPS).map((g) => (
@@ -410,6 +413,32 @@ export default function AdmissionPage({ onBack }) {
                   </div>
                 </div>
               )}
+
+              {/* ✅ CHANGE 3: Year of Admission field */}
+              <div style={{ marginTop: "16px" }}>
+                <Field label="Year of Admission *">
+                  <div className="ap-radio-row">
+                    <label className="ap-radio">
+                      <input
+                        type="radio"
+                        name="yearOfStudy"
+                        value="1st Year"
+                        checked={form.yearOfStudy === "1st Year"}
+                        onChange={up("yearOfStudy")}
+                      /> 1st Year
+                    </label>
+                    <label className="ap-radio">
+                      <input
+                        type="radio"
+                        name="yearOfStudy"
+                        value="2nd Year"
+                        checked={form.yearOfStudy === "2nd Year"}
+                        onChange={up("yearOfStudy")}
+                      /> 2nd Year
+                    </label>
+                  </div>
+                </Field>
+              </div>
             </section>
 
             {/* Section 5 */}
@@ -422,7 +451,7 @@ export default function AdmissionPage({ onBack }) {
               )}
               {!selectedBoard && (
                 <div className="ap-notice ap-notice--blue" style={{ marginBottom: 12 }}>
-                  <p>ℹ️ Please select your <strong>Board Name</strong> in Section 3 first — document requirements may vary.</p>
+                  <p>Please select your <strong>Board Name</strong> in Section 3 first.</p>
                 </div>
               )}
               <div className="ap-docs">

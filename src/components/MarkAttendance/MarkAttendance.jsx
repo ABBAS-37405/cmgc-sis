@@ -9,6 +9,7 @@ export default function MarkAttendance() {
   const [students, setStudents] = useState([]);
   const [records, setRecords] = useState({});
   const [program, setProgram] = useState("Pre-Medical");
+  const [yearFilter, setYearFilter] = useState("Both");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -17,7 +18,7 @@ export default function MarkAttendance() {
 
   useEffect(() => {
     fetchStudents();
-  }, [program]);
+  }, [program, yearFilter]);
 
   useEffect(() => {
     if (students.length > 0) checkAlreadyMarked();
@@ -25,11 +26,17 @@ export default function MarkAttendance() {
 
   const fetchStudents = async () => {
     setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from("students")
       .select("id, name, roll_no")
       .eq("program", program)
       .order("name");
+
+    if (yearFilter !== "Both") {
+      query = query.eq("year_of_study", yearFilter);
+    }
+
+    const { data } = await query;
     if (data) {
       setStudents(data);
       const initial = {};
@@ -91,6 +98,12 @@ export default function MarkAttendance() {
           <label>Date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
+      </div>
+
+      <div className="mark-attendance__year-filters" role="group" aria-label="Filter by class year">
+        <button onClick={() => setYearFilter("1st Year")} className={"mark-attendance__year-btn " + (yearFilter === "1st Year" ? "mark-attendance__year-btn--active" : "")}>1st Year</button>
+        <button onClick={() => setYearFilter("2nd Year")} className={"mark-attendance__year-btn " + (yearFilter === "2nd Year" ? "mark-attendance__year-btn--active" : "")}>2nd Year</button>
+        <button onClick={() => setYearFilter("Both")} className={"mark-attendance__year-btn " + (yearFilter === "Both" ? "mark-attendance__year-btn--active" : "")}>Both</button>
       </div>
 
       {alreadyMarked && !saved && (

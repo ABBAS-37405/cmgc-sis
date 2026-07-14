@@ -12,6 +12,27 @@
   --nav-bg: rgba(15,23,42,0.95);
   --hero-from: #0f172a; --hero-to: #172554;
 }
+[root], :root {
+  /* Responsive breakpoints */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  /* Container widths */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+}
+
+/* Utility container for centered content */
+.container {
+  width: 100%;
+  max-width: var(--container-lg);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
 [data-theme="soft"] {
   --bg: #fdf2f8; --text: #374151; --subtext: #6b7280;
   --card: #ffffff; --border: #fbcfe8;

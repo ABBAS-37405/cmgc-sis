@@ -15,12 +15,6 @@ export default function FeeVerification() {
   const [feeAdjustmentAmount, setFeeAdjustmentAmount] = useState("");
   const [savingAdjustment, setSavingAdjustment] = useState(false);
 
-  useEffect(() => {
-    fetchPending();
-    fetchUnpaidFees();
-    fetchAll();
-  }, []);
-
   const fetchPending = async () => {
     setLoading(true);
     const { data } = await supabase
@@ -98,6 +92,15 @@ export default function FeeVerification() {
     }
   };
 
+  useEffect(() => {
+    const loadData = async () => {
+      await fetchPending();
+      await fetchUnpaidFees();
+      await fetchAll();
+    };
+    loadData();
+  }, []);
+
   const resolve = async (txn, newStatus) => {
     setProcessing(true);
     await supabase
@@ -105,23 +108,37 @@ export default function FeeVerification() {
       .update({ status: newStatus, verified_by: "Admin" })
       .eq("id", txn.id);
 
-    if (newStatus === "Success") {
-      const { data: feeData } = await supabase
+      if (newStatus === "Success") {
+      const { data: feeData, error: feeError } = await supabase
         .from("fees")
-        .select("amount_due, amount_paid")
+        .select("amount_due")
         .eq("id", txn.fee_id)
         .single();
 
-      const previousPaid = Number(feeData?.amount_paid || 0);
-      const newPaid = previousPaid + Number(txn.amount || 0);
-      const remaining = Math.max(Number(feeData?.amount_due || 0) - newPaid, 0);
+      const { data: successTxns, error: txnError } = await supabase
+        .from("payment_transactions")
+        .select("amount, created_at")
+        .eq("fee_id", txn.fee_id)
+        .eq("status", "Success");
+
+      if (feeError || txnError) {
+        console.error("Failed to resolve fee approval:", feeError || txnError);
+      }
+
+      const paidAmount = (successTxns || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const latestPaymentDate = (successTxns || []).reduce((latest, t) => {
+        if (!t.created_at) return latest;
+        const txDate = new Date(t.created_at);
+        return !latest || txDate > latest ? txDate : latest;
+      }, null);
+      const remaining = Math.max(Number(feeData?.amount_due || 0) - paidAmount, 0);
 
       await supabase
         .from("fees")
         .update({
           status: remaining > 0 ? "Partially Paid" : "Paid",
-          amount_paid: newPaid,
-          last_payment_date: new Date().toISOString(),
+          amount_paid: paidAmount,
+          last_payment_date: latestPaymentDate ? latestPaymentDate.toISOString() : new Date().toISOString(),
         })
         .eq("id", txn.fee_id);
     } else {

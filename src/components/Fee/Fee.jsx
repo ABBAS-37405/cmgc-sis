@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import "./Fee.css";
+
+const buildProofPath = (fileName) => `payment-proofs/${new Date().getTime()}-${fileName}`;
 
 const COLLEGE_ACCOUNTS = [
   {
@@ -54,11 +56,7 @@ export default function Fee({ studentId }) {
   const [uploadError, setUploadError] = useState("");
   const fileRef = useRef();
 
-  useEffect(() => {
-    if (studentId) fetchFees();
-  }, [studentId]);
-
-  const fetchFees = async () => {
+  const fetchFees = useCallback(async () => {
     setLoading(true);
     const { data: feesData } = await supabase
       .from("fees")
@@ -70,19 +68,41 @@ export default function Fee({ studentId }) {
       const feeIds = feesData.map((fee) => fee.id);
       const { data: transactions } = await supabase
         .from("payment_transactions")
-        .select("fee_id, amount, status")
+        .select("fee_id, amount, status, created_at, proof_image_url, reference_number, payment_method")
         .in("fee_id", feeIds)
         .eq("status", "Success");
 
-      const paidByFeeId = (transactions || []).reduce((acc, txn) => {
-        acc[txn.fee_id] = (acc[txn.fee_id] || 0) + Number(txn.amount || 0);
-        return acc;
-      }, {});
+      const paidByFeeId = {};
+      const lastPaymentDateByFeeId = {};
+      const txnsByFeeId = {};
+      (transactions || []).forEach((txn) => {
+        paidByFeeId[txn.fee_id] = (paidByFeeId[txn.fee_id] || 0) + Number(txn.amount || 0);
+        txnsByFeeId[txn.fee_id] = txnsByFeeId[txn.fee_id] || [];
+        txnsByFeeId[txn.fee_id].push(txn);
+        if (txn.created_at) {
+          const txnDate = new Date(txn.created_at);
+          const existingDate = lastPaymentDateByFeeId[txn.fee_id]
+            ? new Date(lastPaymentDateByFeeId[txn.fee_id])
+            : null;
+          if (!existingDate || txnDate > existingDate) {
+            lastPaymentDateByFeeId[txn.fee_id] = txn.created_at;
+          }
+        }
+      });
 
       const enrichedFees = feesData.map((fee) => {
         const paidAmount = Number(paidByFeeId[fee.id] || 0);
         const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
-        return { ...fee, amount_paid: paidAmount, remaining_amount: remainingAmount };
+        const computedStatus = remainingAmount === 0 ? "Paid" : fee.status;
+        const computedLastPaymentDate = fee.last_payment_date || lastPaymentDateByFeeId[fee.id];
+        return {
+          ...fee,
+          amount_paid: paidAmount,
+          remaining_amount: remainingAmount,
+          status: computedStatus,
+          last_payment_date: computedLastPaymentDate,
+          transactions: txnsByFeeId[fee.id] || [],
+        };
       });
 
       setFees(enrichedFees);
@@ -91,7 +111,15 @@ export default function Fee({ studentId }) {
     }
 
     setLoading(false);
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    const load = async () => {
+      await fetchFees();
+    };
+    load();
+  }, [studentId, fetchFees]);
 
   const handleProofSubmit = async (feeId) => {
     setUploadError("");
@@ -102,7 +130,7 @@ export default function Fee({ studentId }) {
     setUploading(true);
 
     // Upload proof to Supabase Storage
-    const path = `payment-proofs/${Date.now()}-${proofFile.name}`;
+    const path = buildProofPath(proofFile.name);
     const { error: uploadErr } = await supabase.storage
       .from("admission-documents")
       .upload(path, proofFile);
@@ -151,7 +179,8 @@ export default function Fee({ studentId }) {
     fetchFees();
   };
 
-  const statusBadge = (status) => {
+  const statusBadge = (status, remainingAmount) => {
+    if (remainingAmount === 0) return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
     if (status === "Paid") return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
     if (status === "Partially Paid") return <span className="fee__badge fee__badge--pending">⚠️ Partially Paid</span>;
     if (status === "Pending Verification") return <span className="fee__badge fee__badge--pending">⏳ Pending Verification</span>;
@@ -182,7 +211,7 @@ export default function Fee({ studentId }) {
           <div key={f.id} className="fee__card">
             <div className="fee__header">
               <h3>{f.program} — Fee</h3>
-              {statusBadge(f.status)}
+              {statusBadge(f.status, Number(f.remaining_amount ?? 0))}
             </div>
             <p className="fee__amount">Rs {Number(f.remaining_amount ?? f.amount_due ?? 0).toLocaleString()} to pay</p>
             {f.due_date && (
@@ -190,6 +219,26 @@ export default function Fee({ studentId }) {
             )}
             {f.last_payment_date && (
               <p className="fee__due fee__due--paid">Paid on: {new Date(f.last_payment_date).toLocaleDateString("en-PK")}</p>
+            )}
+
+            {f.transactions && f.transactions.length > 0 && (
+              <div className="fee__payments">
+                <h4>Payments</h4>
+                {f.transactions.map((t) => (
+                  <div key={t.created_at + t.amount} className="fee__payment-row">
+                    <div className="fee__payment-info">
+                      <strong>Rs {Number(t.amount || 0).toLocaleString()}</strong>
+                      <span className="fee__payment-meta">{t.payment_method} • {t.reference_number || "—"}</span>
+                    </div>
+                    <div className="fee__payment-actions">
+                      <span className="fee__payment-date">{t.created_at ? new Date(t.created_at).toLocaleDateString("en-PK") : "—"}</span>
+                      {t.proof_image_url ? (
+                        <button onClick={() => window.open(t.proof_image_url, "_blank")} className="fee__view-receipt">View Receipt</button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {f.status !== "Paid" && Number(f.remaining_amount ?? 0) > 0 && (

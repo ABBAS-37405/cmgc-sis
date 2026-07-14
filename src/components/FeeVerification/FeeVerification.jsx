@@ -11,6 +11,9 @@ export default function FeeVerification() {
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("pending");
   const [allTransactions, setAllTransactions] = useState([]);
+  const [editingFeeId, setEditingFeeId] = useState(null);
+  const [feeAdjustmentAmount, setFeeAdjustmentAmount] = useState("");
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
 
   useEffect(() => {
     fetchPending();
@@ -45,8 +48,7 @@ export default function FeeVerification() {
   const fetchUnpaidFees = async () => {
     const { data: feesData } = await supabase
       .from("fees")
-      .select("id, student_id, amount_due, due_date, status")
-      .eq("status", "Unpaid")
+      .select("id, student_id, amount_due, amount_paid, due_date, status")
       .order("due_date", { ascending: true });
 
     if (feesData) {
@@ -58,11 +60,19 @@ export default function FeeVerification() {
             .eq("id", fee.student_id)
             .single();
 
-          return { ...fee, student };
+          const { data: transactions } = await supabase
+            .from("payment_transactions")
+            .select("amount, status")
+            .eq("fee_id", fee.id)
+            .eq("status", "Success");
+
+          const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+          const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
+          return { ...fee, student, remaining_amount: remainingAmount };
         })
       );
 
-      setUnpaidFees(enriched);
+      setUnpaidFees(enriched.filter((fee) => Number(fee.remaining_amount || 0) > 0 && !["Paid"].includes(fee.status)));
     }
   };
 
@@ -96,24 +106,44 @@ export default function FeeVerification() {
       .eq("id", txn.id);
 
     if (newStatus === "Success") {
+      const { data: feeData } = await supabase
+        .from("fees")
+        .select("amount_due, amount_paid")
+        .eq("id", txn.fee_id)
+        .single();
+
+      const previousPaid = Number(feeData?.amount_paid || 0);
+      const newPaid = previousPaid + Number(txn.amount || 0);
+      const remaining = Math.max(Number(feeData?.amount_due || 0) - newPaid, 0);
+
       await supabase
         .from("fees")
         .update({
-          status: "Paid",
-          amount_paid: txn.amount,
+          status: remaining > 0 ? "Partially Paid" : "Paid",
+          amount_paid: newPaid,
           last_payment_date: new Date().toISOString(),
         })
         .eq("id", txn.fee_id);
     } else {
+      const { data: feeData } = await supabase
+        .from("fees")
+        .select("amount_due, amount_paid")
+        .eq("id", txn.fee_id)
+        .single();
+
+      const previousPaid = Number(feeData?.amount_paid || 0);
+      const remaining = Math.max(Number(feeData?.amount_due || 0) - previousPaid, 0);
       await supabase
         .from("fees")
-        .update({ status: "Unpaid" })
+        .update({ status: remaining > 0 ? (previousPaid > 0 ? "Partially Paid" : "Unpaid") : "Paid" })
         .eq("id", txn.fee_id);
     }
 
     setPending((p) => p.filter((t) => t.id !== txn.id));
     setProcessing(false);
-    fetchAll();
+    await fetchPending();
+    await fetchUnpaidFees();
+    await fetchAll();
   };
 
   const statusBadge = (status) => {
@@ -138,6 +168,49 @@ export default function FeeVerification() {
     if (yearFilter === "Both") return true;
     return fee.student?.year_of_study === yearFilter;
   });
+
+  const startFeeEdit = (fee) => {
+    setEditingFeeId(fee.id);
+    setFeeAdjustmentAmount(String(fee.amount_due || ""));
+  };
+
+  const saveFeeAdjustment = async (fee) => {
+    if (!feeAdjustmentAmount || isNaN(feeAdjustmentAmount)) return;
+    setSavingAdjustment(true);
+
+    const { data: transactions } = await supabase
+      .from("payment_transactions")
+      .select("amount, status")
+      .eq("fee_id", fee.id)
+      .eq("status", "Success");
+
+    const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+    const newRemainingAmount = Math.max(Number(feeAdjustmentAmount), 0);
+    const newTotalDue = paidAmount + newRemainingAmount;
+    const newStatus = newRemainingAmount > 0
+      ? (fee.status === "Pending Verification" ? "Pending Verification" : (paidAmount > 0 ? "Partially Paid" : "Unpaid"))
+      : "Paid";
+
+    const { error } = await supabase
+      .from("fees")
+      .update({
+        amount_due: newTotalDue,
+        amount_paid: paidAmount,
+        status: newStatus,
+      })
+      .eq("id", fee.id);
+
+    setSavingAdjustment(false);
+    if (error) {
+      alert("Failed to update fee amount: " + error.message);
+      return;
+    }
+    setEditingFeeId(null);
+    setFeeAdjustmentAmount("");
+    await fetchPending();
+    await fetchUnpaidFees();
+    await fetchAll();
+  };
 
   return (
     <div className="fee-v">
@@ -194,7 +267,7 @@ export default function FeeVerification() {
                       </span>
                     </p>
                     <p className="fee-v__meta">
-                      {p.payment_method} &bull; Ref: {p.reference_number} &bull; Rs{" "}
+                      {p.payment_method} &bull; {p.payment_method === "Cash in College Office" ? "Receipt" : "Ref"}: {p.reference_number} &bull; Rs{" "}
                       {p.amount ? p.amount.toLocaleString() : "—"}
                     </p>
                     <p className="fee-v__date">
@@ -262,6 +335,7 @@ export default function FeeVerification() {
                   <th>Year</th>
                   <th>Pending Fee</th>
                   <th>Due Date</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -275,13 +349,30 @@ export default function FeeVerification() {
                     <td>{fee.student ? fee.student.roll_no : "—"}</td>
                     <td>{fee.student ? fee.student.program : "—"}</td>
                     <td>{fee.student && fee.student.year_of_study ? fee.student.year_of_study : "—"}</td>
-                    <td>Rs {fee.amount_due ? fee.amount_due.toLocaleString() : "—"}</td>
+                    <td>Rs {fee.remaining_amount ? fee.remaining_amount.toLocaleString() : "—"}</td>
                     <td>
                       {fee.due_date ? new Date(fee.due_date).toLocaleDateString("en-PK", {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                       }) : "—"}
+                    </td>
+                    <td>
+                      {editingFeeId === fee.id ? (
+                        <div className="fee-v__edit-row">
+                          <input
+                            type="number"
+                            value={feeAdjustmentAmount}
+                            onChange={(e) => setFeeAdjustmentAmount(e.target.value)}
+                          />
+                          <button onClick={() => saveFeeAdjustment(fee)} disabled={savingAdjustment} className="fee-v__view">
+                            {savingAdjustment ? "Saving..." : "Save"}
+                          </button>
+                          <button onClick={() => setEditingFeeId(null)} className="fee-v__reject">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => startFeeEdit(fee)} className="fee-v__view">Edit Fee</button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -13,6 +13,65 @@ const FEE_AMOUNTS = {
   "Humanities": 2500,
 };
 
+const normalizeWhatsAppNumber = (value) => {
+  if (!value) return "";
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("92")) return `+${digits}`;
+  if (digits.startsWith("0")) return `+92${digits.slice(1)}`;
+  return `+${digits}`;
+};
+
+const buildCredentialsMessage = (studentName, rollNo, password) => {
+  return [
+    `Assalamualaikum ${studentName},`,
+    "",
+    "Your CMGC student portal credentials are ready.",
+    "",
+    `Student ID: ${rollNo}`,
+    `Password: ${password}`,
+    "",
+    "Please use these details to login to the CMGC portal.",
+    "Thank you.",
+  ].join("\n");
+};
+
+const shareCredentials = (application, rollNo, password) => {
+  let email = (application?.email || "").trim();
+  let whatsapp = (application?.whatsapp || "").trim();
+
+  if (!email && !whatsapp) {
+    const enteredEmail = window.prompt("Student email is missing. Enter an email address to receive the credentials:", "");
+    if (enteredEmail && enteredEmail.trim()) {
+      email = enteredEmail.trim();
+    }
+    const enteredWhatsApp = window.prompt("Student WhatsApp number is missing. Enter a WhatsApp number (03XXXXXXXXX):", "");
+    if (enteredWhatsApp && enteredWhatsApp.trim()) {
+      whatsapp = enteredWhatsApp.trim();
+    }
+  }
+
+  if (!email && !whatsapp) {
+    alert("Please provide at least one contact detail (email or WhatsApp) before sending credentials.");
+    return false;
+  }
+
+  const body = encodeURIComponent(buildCredentialsMessage(application?.student_name || "Student", rollNo, password));
+
+  if (email) {
+    const mailto = `mailto:${email}?subject=${encodeURIComponent("CMGC Student Portal Credentials")}&body=${body}`;
+    window.open(mailto, "_blank", "noopener,noreferrer");
+  }
+
+  if (whatsapp) {
+    const normalized = normalizeWhatsAppNumber(whatsapp);
+    const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+  }
+
+  return true;
+};
+
 export default function StudentsList() {
   const [applications, setApplications] = useState([]);
   const [students, setStudents] = useState([]);
@@ -126,6 +185,13 @@ export default function StudentsList() {
       });
       if (feeError) alert("Fee allocation failed: " + feeError.message);
 
+      const credentialsShared = shareCredentials(selected, rollNo, defaultPassword);
+      if (!credentialsShared) {
+        setApproving(false);
+        setAdmissionFeeConfirmed(false);
+        return;
+      }
+
       const updatedApp = { ...selected, status: "Approved" };
       setApplications((prev) => prev.map((a) => a.id === selected.id ? updatedApp : a));
       setSelected(updatedApp);
@@ -138,7 +204,7 @@ export default function StudentsList() {
         "Year: " + (selected.year_of_study || "1st Year") + "\n" +
         "Password: " + defaultPassword + "\n" +
         "Admission Fee Due: Rs " + ADMISSION_FEE.toLocaleString() + "\n\n" +
-        "Please share login details with the student."
+        "The login credentials were prepared for delivery via email or WhatsApp."
       );
     }
 

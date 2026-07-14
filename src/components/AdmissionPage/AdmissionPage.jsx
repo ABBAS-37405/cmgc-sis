@@ -102,8 +102,10 @@ export default function AdmissionPage({ onBack }) {
   const handlePhoto = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (f.size > 20 * 1024) {
-      setPhotoError(`Too large (${(f.size / 1024).toFixed(1)}KB). Max: 20KB`);
+    const maxSize = 2 * 1024 * 1024;
+    if (f.size > maxSize) {
+      const sizeLabel = f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)}MB` : `${(f.size / 1024).toFixed(1)}KB`;
+      setPhotoError(`Too large (${sizeLabel}). Max: 2MB`);
       return;
     }
     setPhotoError("");
@@ -127,6 +129,7 @@ export default function AdmissionPage({ onBack }) {
     if (!form.religion) e.religion = "Required";
     if (!/^03\d{9}$/.test(form.phone1)) e.phone1 = "Format: 03XXXXXXXXX";
     if (!/^03\d{9}$/.test(form.whatsapp)) e.whatsapp = "Format: 03XXXXXXXXX";
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Enter a valid email";
     if (!form.address.trim()) e.address = "Required";
     if (!form.marksObtained) e.marksObtained = "Required";
     if (!form.totalMarks) e.totalMarks = "Required";
@@ -217,7 +220,7 @@ export default function AdmissionPage({ onBack }) {
           <CheckCircle className="ap-success-icon" size={52} />
           <h2>Application Submitted ✅</h2>
           <p>Thank you! Your admission application has been successfully received by <strong>Community Model Girls College, Rawalpindi</strong>.</p>
-          <p className="ap-success-note">You will be informed about your admission status and confirmation via <strong>WhatsApp or Email</strong> within 3–5 working days. Please ensure your phone and email are active.</p>
+          <p className="ap-success-note">You will be informed about your admission status and confirmation via <strong>WhatsApp or Email</strong> within 3–5 working days. Please ensure your phone and email are active, because approved login credentials will be shared there.</p>
           <button onClick={onBack} className="ap-back-btn">Back to Website</button>
         </div>
       </div>
@@ -249,7 +252,7 @@ export default function AdmissionPage({ onBack }) {
                 <div className="ap-photo-overlay"><Upload size={16} /></div>
               </button>
               <input type="file" accept="image/*" ref={photoRef} onChange={handlePhoto} style={{ display: "none" }} />
-              {photoError ? <p className="ap-photo-error">{photoError}</p> : <p className="ap-photo-hint">Max 20KB</p>}
+              {photoError ? <p className="ap-photo-error">{photoError}</p> : <p className="ap-photo-hint">Max 2MB</p>}
               {photo && !photoError && <p className="ap-photo-ok">✓ Uploaded</p>}
               {errors.photo && <p className="ap-photo-error">{errors.photo}</p>}
             </div>
@@ -263,7 +266,7 @@ export default function AdmissionPage({ onBack }) {
             <div className="ap-notice ap-notice--amber">
               <p className="ap-notice-title">📋 Please have the following documents ready:</p>
               <ul>
-                <li>Student's recent passport-size photo with <strong>blue background</strong> (max 20KB)</li>
+                <li>Student's recent passport-size photo with <strong>blue background</strong> (max 2MB)</li>
                 <li>Student's <strong>B-Form</strong> (clear scan or photo)</li>
                 <li>Father's / Guardian's <strong>CNIC</strong> (both sides)</li>
                 <li>Matric / SSC <strong>Marksheet</strong> (original or attested copy)</li>

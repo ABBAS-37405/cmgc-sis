@@ -30,6 +30,14 @@ const COLLEGE_ACCOUNTS = [
       { label: "Account Title", value: "Qaiser Abbas Humayun" },
     ],
   },
+  {
+    method: "Cash in College Office",
+    icon: "💵",
+    details: [
+      { label: "Location", value: "College Office" },
+      { label: "Note", value: "Pay in cash and submit the receipt number below" },
+    ],
+  },
 ];
 
 export default function Fee({ studentId }) {
@@ -52,19 +60,43 @@ export default function Fee({ studentId }) {
 
   const fetchFees = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data: feesData } = await supabase
       .from("fees")
       .select("*")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
-    if (data) setFees(data);
+
+    if (feesData && feesData.length > 0) {
+      const feeIds = feesData.map((fee) => fee.id);
+      const { data: transactions } = await supabase
+        .from("payment_transactions")
+        .select("fee_id, amount, status")
+        .in("fee_id", feeIds)
+        .eq("status", "Success");
+
+      const paidByFeeId = (transactions || []).reduce((acc, txn) => {
+        acc[txn.fee_id] = (acc[txn.fee_id] || 0) + Number(txn.amount || 0);
+        return acc;
+      }, {});
+
+      const enrichedFees = feesData.map((fee) => {
+        const paidAmount = Number(paidByFeeId[fee.id] || 0);
+        const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
+        return { ...fee, amount_paid: paidAmount, remaining_amount: remainingAmount };
+      });
+
+      setFees(enrichedFees);
+    } else {
+      setFees([]);
+    }
+
     setLoading(false);
   };
 
   const handleProofSubmit = async (feeId) => {
     setUploadError("");
     if (!proofFile) return setUploadError("Please select a screenshot or photo");
-    if (!refNumber.trim()) return setUploadError("Please enter transaction reference number");
+    if (!refNumber.trim()) return setUploadError(paymentReferenceError);
     if (!amount || isNaN(amount)) return setUploadError("Please enter amount paid");
 
     setUploading(true);
@@ -121,9 +153,15 @@ export default function Fee({ studentId }) {
 
   const statusBadge = (status) => {
     if (status === "Paid") return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
+    if (status === "Partially Paid") return <span className="fee__badge fee__badge--pending">⚠️ Partially Paid</span>;
     if (status === "Pending Verification") return <span className="fee__badge fee__badge--pending">⏳ Pending Verification</span>;
     return <span className="fee__badge fee__badge--unpaid"><XCircle size={12} /> Unpaid</span>;
   };
+
+  const isCashMethod = selectedMethod === "Cash in College Office";
+  const paymentReferenceLabel = isCashMethod ? "Receipt Number *" : "Transaction Reference Number *";
+  const paymentReferencePlaceholder = isCashMethod ? "e.g. RCPT-1001" : "e.g. TXN-123456";
+  const paymentReferenceError = isCashMethod ? "Please enter receipt number" : "Please enter transaction reference number";
 
   if (loading) return <div className="fee"><p className="fee__loading">Loading fee records...</p></div>;
 
@@ -146,7 +184,7 @@ export default function Fee({ studentId }) {
               <h3>{f.program} — Fee</h3>
               {statusBadge(f.status)}
             </div>
-            <p className="fee__amount">Rs {f.amount_due?.toLocaleString()}</p>
+            <p className="fee__amount">Rs {Number(f.remaining_amount ?? f.amount_due ?? 0).toLocaleString()} to pay</p>
             {f.due_date && (
               <p className="fee__due">Due Date: {new Date(f.due_date).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}</p>
             )}
@@ -154,7 +192,7 @@ export default function Fee({ studentId }) {
               <p className="fee__due fee__due--paid">Paid on: {new Date(f.last_payment_date).toLocaleDateString("en-PK")}</p>
             )}
 
-            {f.status === "Unpaid" && (
+            {f.status !== "Paid" && Number(f.remaining_amount ?? 0) > 0 && (
               <div className="fee__pay-section">
                 <button
                   className="fee__pay-btn"
@@ -208,12 +246,13 @@ export default function Fee({ studentId }) {
                             <option>Easypaisa</option>
                             <option>Bank Al Habib</option>
                             <option>Raast</option>
+                            <option>Cash in College Office</option>
                           </select>
                         </div>
                         <div className="fee__proof-field">
-                          <label>Transaction Reference Number *</label>
+                          <label>{paymentReferenceLabel}</label>
                           <input
-                            placeholder="e.g. TXN-123456"
+                            placeholder={paymentReferencePlaceholder}
                             value={refNumber}
                             onChange={(e) => setRefNumber(e.target.value)}
                           />

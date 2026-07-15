@@ -1,7 +1,9 @@
 .overview { display: flex; flex-direction: column; gap: 24px; }
 .overview__welcome { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 12px; padding: 20px; color: white; }
+.overview__welcome-content { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
 .overview__welcome p { font-size: 13px; opacity: 0.85; }
 .overview__welcome h2 { font-size: 20px; font-weight: 700; }
+.overview__profile-pic { width: 100px; height: 130px; object-fit: cover; border-radius: 8px; border: 3px solid rgba(255,255,255,0.3); flex-shrink: 0; }
 .overview__meta { font-size: 12px; margin-top: 4px; opacity: 0.85; }
 .overview__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .overview__stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }

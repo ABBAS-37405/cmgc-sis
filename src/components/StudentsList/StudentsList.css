@@ -23,6 +23,7 @@
 .sl-view-btn { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; font-weight: 500; }
 .sl-add-btn { display: flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 8px; }
 .sl-fee-btn { display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-size: 12px; font-weight: 500; border: 1px solid #86efac; padding: 4px 8px; border-radius: 6px; background: #f0fdf4; }
+.sl-picture-btn { display: inline-flex; align-items: center; gap: 4px; color: #2563eb; font-size: 12px; font-weight: 500; border: 1px solid #93c5fd; padding: 4px 8px; border-radius: 6px; background: #eff6ff; margin-left: 4px; }
 
 /* Add Form */
 .sl-add-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
@@ -83,3 +84,18 @@
   .sl-add-grid { grid-template-columns: 1fr 1fr; }
   .sl-detail-sections { grid-template-columns: 1fr 1fr; }
 }
+
+/* Image Upload Section */
+.sl-add-image-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.sl-image-label { font-size: 12px; color: var(--subtext); font-weight: 500; display: block; margin-bottom: 8px; }
+.sl-image-upload { display: flex; flex-direction: column; gap: 10px; }
+.sl-image-upload-btn { display: flex; align-items: center; gap: 8px; background: var(--card); border: 2px dashed var(--border); border-radius: 8px; padding: 12px; font-size: 13px; color: var(--accent); font-weight: 500; cursor: pointer; transition: all 0.2s; }
+.sl-image-upload-btn:hover { border-color: var(--accent); background: var(--bg); }
+.sl-image-preview { position: relative; display: inline-block; }
+.sl-image-preview img { width: 120px; height: 140px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.sl-image-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: #ef4444; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+
+/* Student Picture in Table */
+.sl-pic-cell { width: 50px; text-align: center; }
+.sl-student-pic { width: 40px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+.sl-pic-placeholder { display: flex; align-items: center; justify-content: center; width: 40px; height: 50px; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); color: var(--subtext); font-size: 12px; }

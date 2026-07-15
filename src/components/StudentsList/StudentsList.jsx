@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft } from "lucide-react";
+import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import "./StudentsList.css";
 
@@ -87,10 +87,16 @@ export default function StudentsList() {
     roll_no: "", name: "", father_name: "", program: "Pre-Medical",
     phone: "", password: "", year_of_study: "1st Year",
   });
+  const [profileImage, setProfileImage] = useState(null);
+  const [profileImagePreview, setProfileImagePreview] = useState(null);
   const [formError, setFormError] = useState("");
   const [showFeeModal, setShowFeeModal] = useState(null);
   const [feeAmount, setFeeAmount] = useState("");
   const [feeDueDate, setFeeDueDate] = useState("");
+  const [showPictureModal, setShowPictureModal] = useState(null);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [pictureTempImage, setPictureTempImage] = useState(null);
+  const [pictureTempPreview, setPictureTempPreview] = useState(null);
   const [allocating, setAllocating] = useState(false);
   const [approving, setApproving] = useState(false);
   const [showAdmissionFeeModal, setShowAdmissionFeeModal] = useState(false);
@@ -163,6 +169,7 @@ export default function StudentsList() {
         password: defaultPassword,
         cnic: selected.bform,
         year_of_study: selected.year_of_study || "1st Year",
+        profile_picture_url: selected.photo_url || null,
       })
       .select()
       .single();
@@ -232,6 +239,45 @@ export default function StudentsList() {
     if (!form.password.trim()) return setFormError("Password is required");
     if (form.password.length < 6) return setFormError("Password must be at least 6 characters");
     setSaving(true);
+
+    let profileImageUrl = null;
+
+    // Upload image to Supabase Storage if provided
+    if (profileImage) {
+      try {
+        const fileExt = profileImage.name.split('.').pop().toLowerCase();
+        const fileName = `${form.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
+
+        // Try upload with upsert option
+        const { error: uploadError } = await supabase.storage
+          .from('student-profiles')
+          .upload(fileName, profileImage, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error("Upload detailed error:", uploadError);
+          throw new Error(uploadError.message || "Upload failed");
+        }
+
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('student-profiles')
+          .getPublicUrl(fileName);
+        
+        profileImageUrl = publicUrlData?.publicUrl || null;
+        
+        if (!profileImageUrl) {
+          throw new Error("Could not generate public URL");
+        }
+      } catch (error) {
+        setSaving(false);
+        setFormError("Image upload failed: " + (error?.message || "Unknown error"));
+        return;
+      }
+    }
+
     const { error } = await supabase.from("students").insert({
       roll_no: form.roll_no,
       name: form.name,
@@ -240,6 +286,7 @@ export default function StudentsList() {
       phone: form.phone,
       password: form.password,
       year_of_study: form.year_of_study,
+      profile_picture_url: profileImageUrl,
     });
     setSaving(false);
     if (error) {
@@ -249,8 +296,99 @@ export default function StudentsList() {
     }
     setSaved(true);
     setForm({ roll_no: "", name: "", father_name: "", program: "Pre-Medical", phone: "", password: "", year_of_study: "1st Year" });
+    setProfileImage(null);
+    setProfileImagePreview(null);
     fetchStudents();
     setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setFormError("Please select a valid image file");
+        return;
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setFormError("Image must be less than 5MB");
+        return;
+      }
+      setProfileImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setProfileImagePreview(e.target?.result);
+      reader.readAsDataURL(file);
+      setFormError("");
+    }
+  };
+
+  const handlePictureImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert("Please select a valid image file");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Image must be less than 5MB");
+        return;
+      }
+      setPictureTempImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setPictureTempPreview(e.target?.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadStudentPicture = async () => {
+    if (!showPictureModal || !pictureTempImage) return;
+    setUploadingPicture(true);
+
+    try {
+      const fileExt = pictureTempImage.name.split('.').pop().toLowerCase();
+      const fileName = `${showPictureModal.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('student-profiles')
+        .upload(fileName, pictureTempImage, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('student-profiles')
+        .getPublicUrl(fileName);
+
+      const pictureUrl = publicUrlData?.publicUrl;
+      if (!pictureUrl) throw new Error("Could not generate public URL");
+
+      // Update student record
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({ profile_picture_url: pictureUrl })
+        .eq('id', showPictureModal.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === showPictureModal.id ? { ...s, profile_picture_url: pictureUrl } : s
+        )
+      );
+
+      alert("Picture uploaded successfully!");
+      setShowPictureModal(null);
+      setPictureTempImage(null);
+      setPictureTempPreview(null);
+    } catch (error) {
+      alert("Picture upload failed: " + (error?.message || "Unknown error"));
+    } finally {
+      setUploadingPicture(false);
+    }
   };
 
   const openFeeModal = (student) => {
@@ -495,6 +633,38 @@ export default function StudentsList() {
         </div>
       )}
 
+      {/* Picture Upload Modal */}
+      {showPictureModal && (
+        <div className="sl-modal-overlay">
+          <div className="sl-modal">
+            <div className="sl-modal-header-row">
+              <h3>Upload Student Picture</h3>
+              <button onClick={() => { setShowPictureModal(null); setPictureTempImage(null); setPictureTempPreview(null); }}><X size={18} /></button>
+            </div>
+            <p className="sl-modal-info">Student: <strong>{showPictureModal.name}</strong> ({showPictureModal.roll_no})</p>
+            <div className="sl-modal-field">
+              <label>Select Picture *</label>
+              <input type="file" id="picture-upload-input" accept="image/*" onChange={handlePictureImageSelect} style={{ display: 'none' }} />
+              <button type="button" onClick={() => document.getElementById('picture-upload-input').click()} className="sl-image-upload-btn">
+                <ImageIcon size={18} /> Choose Picture
+              </button>
+              {pictureTempPreview && (
+                <div className="sl-image-preview">
+                  <img src={pictureTempPreview} alt="Preview" />
+                  <button type="button" onClick={() => { setPictureTempImage(null); setPictureTempPreview(null); }} className="sl-image-remove"><X size={14} /></button>
+                </div>
+              )}
+            </div>
+            <div className="sl-modal-actions">
+              <button onClick={() => { setShowPictureModal(null); setPictureTempImage(null); setPictureTempPreview(null); }} className="sl-modal-cancel">Cancel</button>
+              <button onClick={uploadStudentPicture} disabled={!pictureTempImage || uploadingPicture} className="sl-modal-save">
+                <ImageIcon size={14} /> {uploadingPicture ? "Uploading..." : "Upload Picture"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="sl-tabs">
         <button onClick={() => setActiveTab("applications")} className={"sl-tab " + (activeTab === "applications" ? "sl-tab--active" : "")}>
@@ -583,6 +753,21 @@ export default function StudentsList() {
                   </select>
                 </div>
               </div>
+              <div className="sl-add-image-section">
+                <label className="sl-image-label">Profile Picture (Optional)</label>
+                <div className="sl-image-upload">
+                  <input type="file" id="profile-image-input" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
+                  <button type="button" onClick={() => document.getElementById('profile-image-input').click()} className="sl-image-upload-btn">
+                    <ImageIcon size={18} /> {profileImagePreview ? 'Change Picture' : 'Upload Picture'}
+                  </button>
+                  {profileImagePreview && (
+                    <div className="sl-image-preview">
+                      <img src={profileImagePreview} alt="Preview" />
+                      <button type="button" onClick={() => { setProfileImage(null); setProfileImagePreview(null); }} className="sl-image-remove"><X size={14} /></button>
+                    </div>
+                  )}
+                </div>
+              </div>
               {formError && <p className="sl-form-error">{formError}</p>}
               {saved && <p className="sl-form-success">Student added successfully!</p>}
               <button onClick={addStudent} disabled={saving} className="sl-save-btn">
@@ -596,11 +781,18 @@ export default function StudentsList() {
             <div className="sl-table-wrap">
               <table className="sl-table">
                 <thead>
-                  <tr><th>Roll No</th><th>Name</th><th>Father</th><th>Program</th><th>Year</th><th>Phone</th><th>Actions</th></tr>
+                  <tr><th></th><th>Roll No</th><th>Name</th><th>Father</th><th>Program</th><th>Year</th><th>Phone</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {filteredStudents.map((s) => (
                     <tr key={s.id}>
+                      <td className="sl-pic-cell">
+                        {s.profile_picture_url ? (
+                          <img src={s.profile_picture_url} alt={s.name} className="sl-student-pic" />
+                        ) : (
+                          <div className="sl-student-pic sl-pic-placeholder">—</div>
+                        )}
+                      </td>
                       <td>{s.roll_no}</td>
                       <td className="sl-name">{s.name}</td>
                       <td>{s.father_name}</td>
@@ -619,6 +811,9 @@ export default function StudentsList() {
                       <td>
                         <button onClick={() => openFeeModal(s)} className="sl-fee-btn">
                           <DollarSign size={13} /> Fee
+                        </button>
+                        <button onClick={() => setShowPictureModal(s)} className="sl-picture-btn">
+                          <ImageIcon size={13} /> Picture
                         </button>
                       </td>
                     </tr>

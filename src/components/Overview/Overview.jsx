@@ -12,9 +12,16 @@ export default function Overview({ student }) {
   return (
     <div className="overview">
       <div className="overview__welcome">
-        <p>Welcome back,</p>
-        <h2>{student?.name || "Student"}</h2>
-        <p className="overview__meta">{student?.program} • Roll No: {student?.roll_no}</p>
+        <div className="overview__welcome-content">
+          <div>
+            <p>Welcome back,</p>
+            <h2>{student?.name || "Student"}</h2>
+            <p className="overview__meta">{student?.program} • Roll No: {student?.roll_no}</p>
+          </div>
+          {student?.profile_picture_url && (
+            <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" />
+          )}
+        </div>
       </div>
 
       <div className="overview__stats">

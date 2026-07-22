@@ -15,14 +15,15 @@ export default function MarkAttendance() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [alreadyMarked, setAlreadyMarked] = useState(false);
+  const [classesHeld, setClassesHeld] = useState(true);
 
   useEffect(() => {
     fetchStudents();
   }, [program, yearFilter]);
 
   useEffect(() => {
-    if (students.length > 0) checkAlreadyMarked();
-  }, [date, students]);
+    loadAttendanceForDate();
+  }, [date, students, classesHeld]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -37,23 +38,33 @@ export default function MarkAttendance() {
     }
 
     const { data } = await query;
-    if (data) {
-      setStudents(data);
-      const initial = {};
-      data.forEach((s) => initial[s.id] = "Present");
-      setRecords(initial);
-    }
+    if (data) setStudents(data);
     setLoading(false);
   };
 
-  const checkAlreadyMarked = async () => {
+  // Loads any attendance already saved for this date so it isn't overwritten
+  // by the default; students with no saved record fall back to the
+  // classesHeld default (auto-Present, or unmarked if classes weren't held).
+  const loadAttendanceForDate = async () => {
     if (students.length === 0) return;
+    const studentIds = students.map((s) => s.id);
     const { data } = await supabase
       .from("attendance")
-      .select("id")
+      .select("student_id, status")
       .eq("date", date)
-      .eq("student_id", students[0].id);
-    setAlreadyMarked(data && data.length > 0);
+      .in("student_id", studentIds);
+
+    const saved = {};
+    (data || []).forEach((r) => { saved[r.student_id] = r.status; });
+
+    const initial = {};
+    students.forEach((s) => {
+      if (saved[s.id]) initial[s.id] = saved[s.id];
+      else if (classesHeld) initial[s.id] = "Present";
+    });
+
+    setRecords(initial);
+    setAlreadyMarked(Object.keys(saved).length > 0);
     setSaved(false);
   };
 
@@ -63,6 +74,16 @@ export default function MarkAttendance() {
   };
 
   const saveAttendance = async () => {
+    if (!classesHeld) {
+      const unmarked = students.filter((s) => !records[s.id]);
+      if (unmarked.length > 0) {
+        alert(
+          "Classes are marked as not held today, so nobody is auto-present. Please mark each student individually before saving:\n\n" +
+          unmarked.map((s) => "- " + s.name).join("\n")
+        );
+        return;
+      }
+    }
     setSaving(true);
     // Pehle us date ka purana attendance delete karein
     const studentIds = students.map((s) => s.id);
@@ -106,6 +127,30 @@ export default function MarkAttendance() {
         <button onClick={() => setYearFilter("Both")} className={"mark-attendance__year-btn " + (yearFilter === "Both" ? "mark-attendance__year-btn--active" : "")}>Both</button>
       </div>
 
+      <div className="mark-attendance__classes-toggle-wrap">
+        <span className="mark-attendance__classes-label">College Classes Held Today?</span>
+        <div className="mark-attendance__classes-toggle" role="group" aria-label="Were classes held today">
+          <button
+            type="button"
+            onClick={() => setClassesHeld(true)}
+            className={"mark-attendance__classes-btn mark-attendance__classes-btn--yes " + (classesHeld ? "mark-attendance__classes-btn--active" : "")}>
+            Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => setClassesHeld(false)}
+            className={"mark-attendance__classes-btn mark-attendance__classes-btn--no " + (!classesHeld ? "mark-attendance__classes-btn--active" : "")}>
+            No
+          </button>
+        </div>
+      </div>
+
+      {!classesHeld && (
+        <div className="mark-attendance__warning">
+          ℹ️ Classes marked as not held — no student is auto-present. Mark each student individually before saving.
+        </div>
+      )}
+
       {alreadyMarked && !saved && (
         <div className="mark-attendance__warning">
           ⚠️ Attendance already marked for this date — saving will overwrite it.
@@ -132,6 +177,11 @@ export default function MarkAttendance() {
             <span className="mark-attendance__count mark-attendance__count--leave">
               Leave: {Object.values(records).filter(v => v === "Leave").length}
             </span>
+            {!classesHeld && (
+              <span className="mark-attendance__count mark-attendance__count--unmarked">
+                Unmarked: {students.filter((s) => !records[s.id]).length}
+              </span>
+            )}
           </div>
 
           {students.map((s) => (

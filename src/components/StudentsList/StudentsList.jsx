@@ -13,6 +13,15 @@ const FEE_AMOUNTS = {
   "Humanities": 2500,
 };
 
+const DOCUMENTS = [
+  { key: "photo", label: "Student Photo", urlField: "photo_url" },
+  { key: "bform", label: "B-Form", urlField: "bform_doc_url" },
+  { key: "father_id", label: "Father NIC", urlField: "father_id_doc_url" },
+  { key: "marksheet", label: "Matric Marksheet", urlField: "marksheet_url" },
+  { key: "noc", label: "NOC", urlField: "noc_url" },
+  { key: "verified_marksheet", label: "Verified Marksheet", urlField: "verified_marksheet_url" },
+];
+
 const normalizeWhatsAppNumber = (value) => {
   if (!value) return "";
   const digits = String(value).replace(/\D/g, "");
@@ -36,7 +45,75 @@ const buildCredentialsMessage = (studentName, rollNo, password) => {
   ].join("\n");
 };
 
-const shareCredentials = (application, rollNo, password) => {
+function WhatsappIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+      <path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.46 0 .09 5.37.09 11.95c0 2.11.55 4.09 1.51 5.81L0 24l6.4-1.68a11.86 11.86 0 0 0 5.64 1.43h.01c6.58 0 11.95-5.37 11.95-11.95 0-3.19-1.24-6.19-3.48-8.32ZM12.05 21.3h-.01a9.3 9.3 0 0 1-4.74-1.3l-.34-.2-3.53.93.94-3.44-.22-.35a9.3 9.3 0 0 1-1.43-4.99c0-5.14 4.19-9.33 9.34-9.33 2.49 0 4.83.97 6.59 2.73a9.26 9.26 0 0 1 2.73 6.6c0 5.15-4.19 9.35-9.33 9.35Zm5.34-6.98c-.29-.15-1.72-.85-1.99-.94-.27-.1-.46-.15-.66.15-.2.29-.76.94-.93 1.13-.17.2-.34.22-.63.07-.29-.15-1.22-.45-2.33-1.44-.86-.77-1.44-1.72-1.61-2.01-.17-.29-.02-.45.13-.6.14-.14.3-.36.45-.54.15-.18.2-.31.3-.51.1-.2.05-.37-.03-.51-.08-.15-.6-1.46-.82-2-.22-.53-.44-.46-.6-.47-.16-.01-.34-.01-.52-.01-.18 0-.47.07-.72.34-.25.27-.96.94-.96 2.3 0 1.36.99 2.67 1.13 2.86.14.18 1.86 2.84 4.5 3.87 2.65 1.03 2.65.69 3.12.64.47-.05 1.5-.61 1.71-1.2.21-.59.21-1.1.15-1.2-.06-.1-.24-.16-.53-.31Z" />
+    </svg>
+  );
+}
+
+const buildRejectionMessage = (studentName, rejectedDocLabels) => {
+  return [
+    `Assalamualaikum ${studentName},`,
+    "",
+    "We regret to inform you that your admission application has NOT been approved.",
+    "",
+    "Reason for rejection:",
+    ...rejectedDocLabels.map((label) => `- ${label} is incorrect/invalid`),
+    "",
+    "Please fill the application form again and re-upload all required documents, especially correcting the rejected document(s) mentioned above, so that your application can be approved.",
+    "",
+    "Thank you.",
+  ].join("\n");
+};
+
+const sendRejectionNotice = (application, message, waWindowRef) => {
+  let email = (application?.email || "").trim();
+  let whatsapp = (application?.whatsapp || "").trim();
+
+  if (!email && !whatsapp) {
+    if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
+    alert("No contact details found on this application to notify the student about the rejection.");
+    return false;
+  }
+
+  const body = encodeURIComponent(message);
+
+  if (email) {
+    const mailto = `mailto:${email}?subject=${encodeURIComponent("CMGC Admission Application - Rejected")}&body=${body}`;
+    window.open(mailto, "_blank", "noopener,noreferrer");
+  }
+
+  if (whatsapp) {
+    const normalized = normalizeWhatsAppNumber(whatsapp);
+    const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
+    if (waWindowRef && !waWindowRef.closed) {
+      waWindowRef.location.href = waUrl;
+    } else {
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+    }
+  } else if (waWindowRef && !waWindowRef.closed) {
+    waWindowRef.close();
+  }
+
+  return true;
+};
+
+const sendStudentCredentialsWhatsApp = (student) => {
+  let phone = (student?.phone || "").trim();
+  if (!phone) {
+    const entered = window.prompt("Student WhatsApp number is missing. Enter a WhatsApp number (03XXXXXXXXX):", "");
+    if (!entered || !entered.trim()) return;
+    phone = entered.trim();
+  }
+  const normalized = normalizeWhatsAppNumber(phone);
+  const body = encodeURIComponent(buildCredentialsMessage(student?.name || "Student", student?.roll_no, student?.password));
+  const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
+  window.open(waUrl, "_blank", "noopener,noreferrer");
+};
+
+const shareCredentials = (application, rollNo, password, waWindowRef) => {
   let email = (application?.email || "").trim();
   let whatsapp = (application?.whatsapp || "").trim();
 
@@ -52,6 +129,7 @@ const shareCredentials = (application, rollNo, password) => {
   }
 
   if (!email && !whatsapp) {
+    if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
     alert("Please provide at least one contact detail (email or WhatsApp) before sending credentials.");
     return false;
   }
@@ -66,7 +144,13 @@ const shareCredentials = (application, rollNo, password) => {
   if (whatsapp) {
     const normalized = normalizeWhatsAppNumber(whatsapp);
     const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
-    window.open(waUrl, "_blank", "noopener,noreferrer");
+    if (waWindowRef && !waWindowRef.closed) {
+      waWindowRef.location.href = waUrl;
+    } else {
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+    }
+  } else if (waWindowRef && !waWindowRef.closed) {
+    waWindowRef.close();
   }
 
   return true;
@@ -101,6 +185,8 @@ export default function StudentsList() {
   const [approving, setApproving] = useState(false);
   const [showAdmissionFeeModal, setShowAdmissionFeeModal] = useState(false);
   const [admissionFeeConfirmed, setAdmissionFeeConfirmed] = useState(false);
+  const [docReview, setDocReview] = useState({});
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -128,9 +214,68 @@ export default function StudentsList() {
     if (data) setStudents(data);
   };
 
+  const presentDocuments = () => DOCUMENTS.filter((d) => selected?.[d.urlField]);
+
   const handleApprove = () => {
+    if (!selected) return;
+    const presentDocs = presentDocuments();
+    const unreviewed = presentDocs.filter((d) => !docReview[d.key]);
+    if (unreviewed.length > 0) {
+      alert(
+        "Please mark each document as Correct or Incorrect before approving:\n\n" +
+        unreviewed.map((d) => "- " + d.label).join("\n")
+      );
+      return;
+    }
+
+    const rejectedDocs = presentDocs.filter((d) => docReview[d.key] === "rejected");
+    if (rejectedDocs.length > 0) {
+      rejectApplication(rejectedDocs.map((d) => d.label));
+      return;
+    }
+
     setAdmissionFeeConfirmed(false);
     setShowAdmissionFeeModal(true);
+  };
+
+  const rejectApplication = async (reasonLabels) => {
+    if (!selected) return;
+    const labels = reasonLabels.length > 0
+      ? reasonLabels
+      : ["Submitted documents did not meet admission requirements"];
+    const reasonLines = labels.map((l) => "- " + l).join("\n");
+    const confirmed = window.confirm(
+      "This application will be rejected for the following reason(s):\n" + reasonLines +
+      "\n\nThe student will be notified via WhatsApp/Email with this reason. Continue?"
+    );
+    if (!confirmed) return;
+
+    setRejecting(true);
+
+    // Opened synchronously (within the click's user-gesture window) so the
+    // WhatsApp redirect below isn't blocked as a popup after the awaits.
+    const waWindowRef = window.open("", "_blank");
+
+    const { error } = await supabase
+      .from("applications")
+      .update({ status: "Rejected" })
+      .eq("id", selected.id);
+
+    if (error) {
+      if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
+      alert("Failed to reject application: " + error.message);
+      setRejecting(false);
+      return;
+    }
+
+    const updatedApp = { ...selected, status: "Rejected" };
+    setApplications((prev) => prev.map((a) => a.id === selected.id ? updatedApp : a));
+    setSelected(updatedApp);
+
+    const message = buildRejectionMessage(selected.student_name || "Student", labels);
+    sendRejectionNotice(selected, message, waWindowRef);
+
+    setRejecting(false);
   };
 
   const doApprove = async () => {
@@ -138,12 +283,17 @@ export default function StudentsList() {
     setApproving(true);
     setShowAdmissionFeeModal(false);
 
+    // Opened synchronously (within the click's user-gesture window) so the
+    // WhatsApp redirect below isn't blocked as a popup after the awaits.
+    const waWindowRef = window.open("", "_blank");
+
     const { error: appError } = await supabase
       .from("applications")
       .update({ status: "Approved" })
       .eq("id", selected.id);
 
     if (appError) {
+      if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
       alert("Failed to update application: " + appError.message);
       setApproving(false);
       return;
@@ -175,6 +325,7 @@ export default function StudentsList() {
       .single();
 
     if (studentError) {
+      if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
       alert("Student enroll failed: " + studentError.message);
       setApproving(false);
       return;
@@ -192,7 +343,7 @@ export default function StudentsList() {
       });
       if (feeError) alert("Fee allocation failed: " + feeError.message);
 
-      const credentialsShared = shareCredentials(selected, rollNo, defaultPassword);
+      const credentialsShared = shareCredentials(selected, rollNo, defaultPassword, waWindowRef);
       if (!credentialsShared) {
         setApproving(false);
         setAdmissionFeeConfirmed(false);
@@ -213,23 +364,18 @@ export default function StudentsList() {
         "Admission Fee Due: Rs " + ADMISSION_FEE.toLocaleString() + "\n\n" +
         "The login credentials were prepared for delivery via email or WhatsApp."
       );
+    } else if (waWindowRef && !waWindowRef.closed) {
+      waWindowRef.close();
     }
 
     setApproving(false);
     setAdmissionFeeConfirmed(false);
   };
 
-  const handleReject = async () => {
+  const handleReject = () => {
     if (!selected) return;
-    if (!window.confirm("Are you sure you want to reject this application?")) return;
-    const { error } = await supabase
-      .from("applications")
-      .update({ status: "Rejected" })
-      .eq("id", selected.id);
-    if (error) { alert("Error: " + error.message); return; }
-    const updatedApp = { ...selected, status: "Rejected" };
-    setApplications((prev) => prev.map((a) => a.id === selected.id ? updatedApp : a));
-    setSelected(updatedApp);
+    const rejectedDocs = presentDocuments().filter((d) => docReview[d.key] === "rejected");
+    rejectApplication(rejectedDocs.map((d) => d.label));
   };
 
   const addStudent = async () => {
@@ -444,18 +590,47 @@ export default function StudentsList() {
     </div>
   );
 
+  const DocumentRow = ({ label, url, docKey }) => {
+    if (!url) return null;
+    const status = docReview[docKey];
+    const canReview = selected?.status !== "Approved";
+    return (
+      <div className="sl-doc-row">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 {label}</a>
+        {canReview && (
+          <div className="sl-doc-review-btns">
+            <button
+              type="button"
+              onClick={() => setDocReview((prev) => ({ ...prev, [docKey]: "approved" }))}
+              className={"sl-doc-approve-btn" + (status === "approved" ? " sl-doc-approve-btn--active" : "")}
+            >
+              <CheckCircle size={12} /> Correct
+            </button>
+            <button
+              type="button"
+              onClick={() => setDocReview((prev) => ({ ...prev, [docKey]: "rejected" }))}
+              className={"sl-doc-reject-btn" + (status === "rejected" ? " sl-doc-reject-btn--active" : "")}
+            >
+              <XCircle size={12} /> Incorrect
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ApproveSection = () => (
     <div className="sl-detail-actions">
       <div className="sl-fee-notice">
         <DollarSign size={16} />
-        <p>Admission fee of <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong> must be collected before approving.</p>
+        <p>Admission fee of <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong> must be collected before approving. Mark every document above as Correct/Incorrect first — if any document is Incorrect, the application will be rejected with the reason sent to the student instead of being approved.</p>
       </div>
       <div className="sl-action-btns">
-        <button onClick={handleReject} className="sl-reject-btn">
+        <button onClick={handleReject} disabled={approving || rejecting} className="sl-reject-btn">
           <XCircle size={16} /> Reject Application
         </button>
-        <button onClick={handleApprove} disabled={approving} className="sl-approve-btn">
-          <CheckCircle size={16} /> {approving ? "Processing..." : "Approve & Enroll"}
+        <button onClick={handleApprove} disabled={approving || rejecting} className="sl-approve-btn">
+          <CheckCircle size={16} /> {approving ? "Processing..." : rejecting ? "Rejecting..." : "Approve & Enroll"}
         </button>
       </div>
     </div>
@@ -571,12 +746,12 @@ export default function StudentsList() {
             </div>
             <div className="sl-detail-section">
               <h3>Uploaded Documents</h3>
-              {selected.photo_url && <a href={selected.photo_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📷 Student Photo</a>}
-              {selected.bform_doc_url && <a href={selected.bform_doc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 B-Form</a>}
-              {selected.father_id_doc_url && <a href={selected.father_id_doc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Father NIC</a>}
-              {selected.marksheet_url && <a href={selected.marksheet_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Matric Marksheet</a>}
-              {selected.noc_url && <a href={selected.noc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 NOC</a>}
-              {selected.verified_marksheet_url && <a href={selected.verified_marksheet_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Verified Marksheet</a>}
+              <DocumentRow label="Student Photo" url={selected.photo_url} docKey="photo" />
+              <DocumentRow label="B-Form" url={selected.bform_doc_url} docKey="bform" />
+              <DocumentRow label="Father NIC" url={selected.father_id_doc_url} docKey="father_id" />
+              <DocumentRow label="Matric Marksheet" url={selected.marksheet_url} docKey="marksheet" />
+              <DocumentRow label="NOC" url={selected.noc_url} docKey="noc" />
+              <DocumentRow label="Verified Marksheet" url={selected.verified_marksheet_url} docKey="verified_marksheet" />
               {!selected.photo_url && !selected.bform_doc_url && !selected.father_id_doc_url && !selected.marksheet_url && (
                 <p className="sl-no-docs">No documents uploaded</p>
               )}
@@ -719,7 +894,7 @@ export default function StudentsList() {
                   <td>{a.phone1}</td>
                   <td>{new Date(a.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}</td>
                   <td>{statusBadge(a.status)}</td>
-                  <td><button onClick={() => { setSearch(""); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button></td>
+                  <td><button onClick={() => { setSearch(""); setDocReview({}); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button></td>
                 </tr>
               ))}
             </tbody>
@@ -814,6 +989,9 @@ export default function StudentsList() {
                         </button>
                         <button onClick={() => setShowPictureModal(s)} className="sl-picture-btn">
                           <ImageIcon size={13} /> Picture
+                        </button>
+                        <button onClick={() => sendStudentCredentialsWhatsApp(s)} className="sl-whatsapp-btn" title="Send login ID & password via WhatsApp">
+                          <WhatsappIcon />
                         </button>
                       </td>
                     </tr>

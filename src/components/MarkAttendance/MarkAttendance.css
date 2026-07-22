@@ -7,6 +7,12 @@
 .mark-attendance__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
 .mark-attendance__field select, .mark-attendance__field input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
 .mark-attendance__warning { background: #fef3c7; border: 1px solid #fde68a; color: #b45309; font-size: 12px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
+.mark-attendance__classes-toggle-wrap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.mark-attendance__classes-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.mark-attendance__classes-toggle { display: flex; gap: 6px; }
+.mark-attendance__classes-btn { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+.mark-attendance__classes-btn--yes.mark-attendance__classes-btn--active { background: #dcfce7; border-color: #4ade80; color: #15803d; }
+.mark-attendance__classes-btn--no.mark-attendance__classes-btn--active { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
 .mark-attendance__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .mark-attendance__hint { font-size: 12px; color: var(--subtext); }
 .mark-attendance__summary { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -14,6 +20,7 @@
 .mark-attendance__count--present { background: #dcfce7; color: #16a34a; }
 .mark-attendance__count--absent { background: #fee2e2; color: #dc2626; }
 .mark-attendance__count--leave { background: #fef3c7; color: #b45309; }
+.mark-attendance__count--unmarked { background: #e5e7eb; color: #374151; }
 .mark-attendance__row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .mark-attendance__row:last-of-type { border-bottom: none; }
 .mark-attendance__name { font-size: 14px; font-weight: 500; color: var(--text); }

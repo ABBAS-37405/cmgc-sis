@@ -46,10 +46,10 @@ export default function Footer() {
         <div>
           <h4>Follow Us</h4>
           <div className="footer__socials">
-            <a href="https://facebook.com/cmgcrawalpindi" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--facebook"><FacebookIcon /></a>
-            <a href="https://youtube.com/@cmgc" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--youtube"><YoutubeIcon /></a>
-            <a href="https://wa.me/923000000000" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--whatsapp"><WhatsappIcon /></a>
-          </div>
+  <a href="https://whatsapp.com/channel/0029VbDjYFW0AgWC2CSzPK1k" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--whatsapp"><WhatsappIcon /></a>
+  <a href="https://www.facebook.com/profile.php?id=100063488536059" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--facebook"><FacebookIcon /></a>
+  <a href="https://www.youtube.com/channel/UCd3cWXQn_0k8XpOLgsPabTw" target="_blank" rel="noopener noreferrer" className="footer__social-btn footer__social-btn--youtube"><YoutubeIcon /></a>
+</div>
         </div>
       </div>
       <p className="footer__copyright">© 2026 Community Model Girls College. All rights reserved.</p>

@@ -1,0 +1,4369 @@
+diff --git a/SUPABASE_CHANGES.md b/SUPABASE_CHANGES.md
+new file mode 100644
+index 0000000..8368d94
+--- /dev/null
++++ b/SUPABASE_CHANGES.md
+@@ -0,0 +1,178 @@
++# Supabase Schema Changes - Student Profile Pictures
++
++## 1. Update Students Table Schema
++
++**Existing Table:** `students`
++
++**New Column to Add:**
++```sql
++ALTER TABLE students
++ADD COLUMN profile_picture_url TEXT DEFAULT NULL;
++```
++
++**Column Details:**
++- **Column Name:** `profile_picture_url`
++- **Type:** TEXT
++- **Default:** NULL
++- **Description:** URL of student's profile picture stored in Supabase Storage
++
++---
++
++## 2. Create Storage Bucket
++
++**Create new public storage bucket for student profiles:**
++
++1. Go to Supabase Dashboard
++2. Navigate to **Storage** section
++3. Click **Create a new bucket**
++4. **Bucket name:** `student-profiles`
++5. **Public/Private:** Set as **PUBLIC** (so URLs can be accessed without authentication)
++6. Click **Create bucket**
++
++---
++
++## 3. Storage Bucket Settings
++
++**Configure the bucket permissions:**
++
++```
++- Allow public read access (GET)
++- Allow authenticated users to upload (POST)
++- Allow authenticated users to delete their own files (DELETE)
++```
++
++### RLS Policy for student-profiles bucket:
++```sql
++-- Allow public read
++CREATE POLICY "Public read access"
++ON storage.objects FOR SELECT
++USING (bucket_id = 'student-profiles');
++
++-- Allow authenticated upload
++CREATE POLICY "Authenticated upload"
++ON storage.objects FOR INSERT
++WITH CHECK (bucket_id = 'student-profiles' AND auth.role() = 'authenticated');
++
++-- Allow authenticated delete own files
++CREATE POLICY "Authenticated delete own"
++ON storage.objects FOR DELETE
++USING (bucket_id = 'student-profiles' AND auth.uid()::text = owner);
++```
++
++---
++
++## 4. SQL Migration Script (Safe)
++
++**Run this SQL in Supabase SQL Editor:**
++
++```sql
++-- Add profile_picture_url column to students table
++ALTER TABLE students
++ADD COLUMN IF NOT EXISTS profile_picture_url TEXT;
++
++-- Add comment to the column
++COMMENT ON COLUMN students.profile_picture_url IS 'URL of student profile picture stored in Supabase Storage';
++```
++
++---
++
++## 5. File Upload Path Structure
++
++**Files are uploaded to:** `student-profiles/{roll_no}-{timestamp}.{extension}`
++
++**Example paths:**
++- `student-profiles/CMGC-2026-001-1721041200000.jpg`
++- `student-profiles/CMGC-2026-002-1721041250000.png`
++
++**Public URL format:**
++```
++https://{SUPABASE_URL}/storage/v1/object/public/student-profiles/CMGC-2026-001-1721041200000.jpg
++```
++
++---
++
++## 6. Frontend Code Integration
++
++### StudentsList Component:
++- ✅ Image upload field added (optional)
++- ✅ File validation (image type, max 5MB)
++- ✅ Upload to Supabase Storage before saving to DB
++- ✅ Store URL in `profile_picture_url` column
++- ✅ Display thumbnail in students table (40x50px)
++
++### Overview Component:
++- ✅ Display student profile picture in welcome section (100x130px)
++- ✅ Picture appears only if `profile_picture_url` is not null
++
++---
++
++## 7. Data Flow
++
++```
++User selects image
++    ↓
++File validation (type, size)
++    ↓
++Upload to Storage: student-profiles/{roll_no}-{timestamp}.ext
++    ↓
++Get public URL from Supabase
++    ↓
++Save student record with profile_picture_url
++    ↓
++If no image selected: profile_picture_url remains NULL
++```
++
++---
++
++## 8. Verification Steps
++
++### Check if migration is complete:
++```sql
++-- View students table structure
++SELECT column_name, data_type, is_nullable
++FROM information_schema.columns
++WHERE table_name = 'students'
++ORDER BY ordinal_position;
++
++-- Verify new column exists
++SELECT * FROM students LIMIT 1;
++```
++
++---
++
++## 9. Important Notes
++
++✅ **Profile picture upload is OPTIONAL** - if not provided, NULL is stored
++✅ **Max file size:** 5MB
++✅ **Supported formats:** JPEG, PNG, GIF, WebP
++✅ **Storage location:** Public bucket `student-profiles`
++✅ **Access:** URLs are publicly accessible (no authentication required for viewing)
++✅ **Null handling:** Database stores NULL if no picture is uploaded
++
++---
++
++## 10. Rollback (if needed)
++
++If you need to revert these changes:
++
++```sql
++-- Remove the column
++ALTER TABLE students
++DROP COLUMN IF EXISTS profile_picture_url;
++
++-- Delete the storage bucket (do this from UI)
++-- Navigate to Storage → student-profiles → Delete bucket
++```
++
++---
++
++## Summary
++
++| Component | Change | Status |
++|-----------|--------|--------|
++| Students Table | Add `profile_picture_url` column | ✅ Required |
++| Storage Bucket | Create `student-profiles` bucket | ✅ Required |
++| RLS Policies | Configure public read access | ✅ Required |
++| Frontend | Image upload & display | ✅ Implemented |
++
++**Database schema is backward compatible** - existing students will have NULL values for profile_picture_url
+diff --git a/package-lock.json b/package-lock.json
+index e7d4b28..bb99dde 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -9,9 +9,14 @@
+       "version": "0.0.0",
+       "dependencies": {
+         "@supabase/supabase-js": "^2.108.2",
++        "cors": "^2.8.6",
++        "dotenv": "^17.4.2",
++        "express": "^5.2.1",
+         "lucide-react": "^1.21.0",
++        "nodemailer": "^9.0.3",
+         "react": "^19.2.6",
+-        "react-dom": "^19.2.6"
++        "react-dom": "^19.2.6",
++        "twilio": "^6.0.2"
+       },
+       "devDependencies": {
+         "@eslint/js": "^10.0.1",
+@@ -1016,6 +1021,19 @@
+         }
+       }
+     },
++    "node_modules/accepts": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/accepts/-/accepts-2.0.0.tgz",
++      "integrity": "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-types": "^3.0.0",
++        "negotiator": "^1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/acorn": {
+       "version": "8.17.0",
+       "resolved": "https://registry.npmjs.org/acorn/-/acorn-8.17.0.tgz",
+@@ -1039,6 +1057,18 @@
+         "acorn": "^6.0.0 || ^7.0.0 || ^8.0.0"
+       }
+     },
++    "node_modules/agent-base": {
++      "version": "6.0.2",
++      "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz",
++      "integrity": "sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "4"
++      },
++      "engines": {
++        "node": ">= 6.0.0"
++      }
++    },
+     "node_modules/ajv": {
+       "version": "6.15.0",
+       "resolved": "https://registry.npmjs.org/ajv/-/ajv-6.15.0.tgz",
+@@ -1056,6 +1086,24 @@
+         "url": "https://github.com/sponsors/epoberezkin"
+       }
+     },
++    "node_modules/asynckit": {
++      "version": "0.4.0",
++      "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz",
++      "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
++      "license": "MIT"
++    },
++    "node_modules/axios": {
++      "version": "1.18.1",
++      "resolved": "https://registry.npmjs.org/axios/-/axios-1.18.1.tgz",
++      "integrity": "sha512-3nTvFlvpn9Zu/RkHUqtc7/+al4UpRW5az71ap5zccp6e8RAYEzhMTecX8Dz1wWDYrPpUoB1HAQEGEAEvUr7S9g==",
++      "license": "MIT",
++      "dependencies": {
++        "follow-redirects": "^1.16.0",
++        "form-data": "^4.0.5",
++        "https-proxy-agent": "^5.0.1",
++        "proxy-from-env": "^2.1.0"
++      }
++    },
+     "node_modules/balanced-match": {
+       "version": "4.0.4",
+       "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz",
+@@ -1079,6 +1127,43 @@
+         "node": ">=6.0.0"
+       }
+     },
++    "node_modules/body-parser": {
++      "version": "2.3.0",
++      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-2.3.0.tgz",
++      "integrity": "sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==",
++      "license": "MIT",
++      "dependencies": {
++        "bytes": "^3.1.2",
++        "content-type": "^2.0.0",
++        "debug": "^4.4.3",
++        "http-errors": "^2.0.1",
++        "iconv-lite": "^0.7.2",
++        "on-finished": "^2.4.1",
++        "qs": "^6.15.2",
++        "raw-body": "^3.0.2",
++        "type-is": "^2.1.0"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/body-parser/node_modules/content-type": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/content-type/-/content-type-2.0.0.tgz",
++      "integrity": "sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/brace-expansion": {
+       "version": "5.0.6",
+       "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.6.tgz",
+@@ -1126,6 +1211,50 @@
+         "node": "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7"
+       }
+     },
++    "node_modules/buffer-equal-constant-time": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
++      "integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==",
++      "license": "BSD-3-Clause"
++    },
++    "node_modules/bytes": {
++      "version": "3.1.2",
++      "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
++      "integrity": "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/call-bind-apply-helpers": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
++      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/call-bound": {
++      "version": "1.0.4",
++      "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
++      "integrity": "sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "get-intrinsic": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/caniuse-lite": {
+       "version": "1.0.30001799",
+       "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001799.tgz",
+@@ -1147,6 +1276,40 @@
+       ],
+       "license": "CC-BY-4.0"
+     },
++    "node_modules/combined-stream": {
++      "version": "1.0.8",
++      "resolved": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz",
++      "integrity": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
++      "license": "MIT",
++      "dependencies": {
++        "delayed-stream": "~1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/content-disposition": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-1.1.0.tgz",
++      "integrity": "sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/content-type": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
++      "integrity": "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/convert-source-map": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+@@ -1154,6 +1317,41 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/cookie": {
++      "version": "0.7.2",
++      "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz",
++      "integrity": "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/cookie-signature": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.2.2.tgz",
++      "integrity": "sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6.6.0"
++      }
++    },
++    "node_modules/cors": {
++      "version": "2.8.6",
++      "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.6.tgz",
++      "integrity": "sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==",
++      "license": "MIT",
++      "dependencies": {
++        "object-assign": "^4",
++        "vary": "^1"
++      },
++      "engines": {
++        "node": ">= 0.10"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/cross-spawn": {
+       "version": "7.0.6",
+       "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+@@ -1176,11 +1374,16 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/dayjs": {
++      "version": "1.11.21",
++      "resolved": "https://registry.npmjs.org/dayjs/-/dayjs-1.11.21.tgz",
++      "integrity": "sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==",
++      "license": "MIT"
++    },
+     "node_modules/debug": {
+       "version": "4.4.3",
+       "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+       "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "ms": "^2.1.3"
+@@ -1201,6 +1404,24 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/delayed-stream": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz",
++      "integrity": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4.0"
++      }
++    },
++    "node_modules/depd": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz",
++      "integrity": "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/detect-libc": {
+       "version": "2.1.2",
+       "resolved": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+@@ -1211,6 +1432,47 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/dotenv": {
++      "version": "17.4.2",
++      "resolved": "https://registry.npmjs.org/dotenv/-/dotenv-17.4.2.tgz",
++      "integrity": "sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==",
++      "license": "BSD-2-Clause",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://dotenvx.com"
++      }
++    },
++    "node_modules/dunder-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
++      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "gopd": "^1.2.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/ecdsa-sig-formatter": {
++      "version": "1.0.11",
++      "resolved": "https://registry.npmjs.org/ecdsa-sig-formatter/-/ecdsa-sig-formatter-1.0.11.tgz",
++      "integrity": "sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "safe-buffer": "^5.0.1"
++      }
++    },
++    "node_modules/ee-first": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz",
++      "integrity": "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==",
++      "license": "MIT"
++    },
+     "node_modules/electron-to-chromium": {
+       "version": "1.5.376",
+       "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.376.tgz",
+@@ -1218,6 +1480,60 @@
+       "dev": true,
+       "license": "ISC"
+     },
++    "node_modules/encodeurl": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz",
++      "integrity": "sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/es-define-property": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
++      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-errors": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
++      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-object-atoms": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz",
++      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-set-tostringtag": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz",
++      "integrity": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "get-intrinsic": "^1.2.6",
++        "has-tostringtag": "^1.0.2",
++        "hasown": "^2.0.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
+     "node_modules/escalade": {
+       "version": "3.2.0",
+       "resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+@@ -1228,6 +1544,12 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/escape-html": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz",
++      "integrity": "sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==",
++      "license": "MIT"
++    },
+     "node_modules/escape-string-regexp": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz",
+@@ -1426,6 +1748,58 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/etag": {
++      "version": "1.8.1",
++      "resolved": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz",
++      "integrity": "sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/express": {
++      "version": "5.2.1",
++      "resolved": "https://registry.npmjs.org/express/-/express-5.2.1.tgz",
++      "integrity": "sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==",
++      "license": "MIT",
++      "dependencies": {
++        "accepts": "^2.0.0",
++        "body-parser": "^2.2.1",
++        "content-disposition": "^1.0.0",
++        "content-type": "^1.0.5",
++        "cookie": "^0.7.1",
++        "cookie-signature": "^1.2.1",
++        "debug": "^4.4.0",
++        "depd": "^2.0.0",
++        "encodeurl": "^2.0.0",
++        "escape-html": "^1.0.3",
++        "etag": "^1.8.1",
++        "finalhandler": "^2.1.0",
++        "fresh": "^2.0.0",
++        "http-errors": "^2.0.0",
++        "merge-descriptors": "^2.0.0",
++        "mime-types": "^3.0.0",
++        "on-finished": "^2.4.1",
++        "once": "^1.4.0",
++        "parseurl": "^1.3.3",
++        "proxy-addr": "^2.0.7",
++        "qs": "^6.14.0",
++        "range-parser": "^1.2.1",
++        "router": "^2.2.0",
++        "send": "^1.1.0",
++        "serve-static": "^2.2.0",
++        "statuses": "^2.0.1",
++        "type-is": "^2.0.1",
++        "vary": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/fast-deep-equal": {
+       "version": "3.1.3",
+       "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+@@ -1478,6 +1852,27 @@
+         "node": ">=16.0.0"
+       }
+     },
++    "node_modules/finalhandler": {
++      "version": "2.1.1",
++      "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-2.1.1.tgz",
++      "integrity": "sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "^4.4.0",
++        "encodeurl": "^2.0.0",
++        "escape-html": "^1.0.3",
++        "on-finished": "^2.4.1",
++        "parseurl": "^1.3.3",
++        "statuses": "^2.0.1"
++      },
++      "engines": {
++        "node": ">= 18.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/find-up": {
+       "version": "5.0.0",
+       "resolved": "https://registry.npmjs.org/find-up/-/find-up-5.0.0.tgz",
+@@ -1516,6 +1911,81 @@
+       "dev": true,
+       "license": "ISC"
+     },
++    "node_modules/follow-redirects": {
++      "version": "1.16.0",
++      "resolved": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.16.0.tgz",
++      "integrity": "sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==",
++      "funding": [
++        {
++          "type": "individual",
++          "url": "https://github.com/sponsors/RubenVerborgh"
++        }
++      ],
++      "license": "MIT",
++      "engines": {
++        "node": ">=4.0"
++      },
++      "peerDependenciesMeta": {
++        "debug": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/form-data": {
++      "version": "4.0.6",
++      "resolved": "https://registry.npmjs.org/form-data/-/form-data-4.0.6.tgz",
++      "integrity": "sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==",
++      "license": "MIT",
++      "dependencies": {
++        "asynckit": "^0.4.0",
++        "combined-stream": "^1.0.8",
++        "es-set-tostringtag": "^2.1.0",
++        "hasown": "^2.0.4",
++        "mime-types": "^2.1.35"
++      },
++      "engines": {
++        "node": ">= 6"
++      }
++    },
++    "node_modules/form-data/node_modules/mime-db": {
++      "version": "1.52.0",
++      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
++      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/form-data/node_modules/mime-types": {
++      "version": "2.1.35",
++      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
++      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-db": "1.52.0"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/forwarded": {
++      "version": "0.2.0",
++      "resolved": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz",
++      "integrity": "sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/fresh": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/fresh/-/fresh-2.0.0.tgz",
++      "integrity": "sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/fsevents": {
+       "version": "2.3.3",
+       "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+@@ -1531,6 +2001,15 @@
+         "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+       }
+     },
++    "node_modules/function-bind": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
++      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/gensync": {
+       "version": "1.0.0-beta.2",
+       "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+@@ -1541,6 +2020,43 @@
+         "node": ">=6.9.0"
+       }
+     },
++    "node_modules/get-intrinsic": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
++      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "es-define-property": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "es-object-atoms": "^1.1.1",
++        "function-bind": "^1.1.2",
++        "get-proto": "^1.0.1",
++        "gopd": "^1.2.0",
++        "has-symbols": "^1.1.0",
++        "hasown": "^2.0.2",
++        "math-intrinsics": "^1.1.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/get-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
++      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
++      "license": "MIT",
++      "dependencies": {
++        "dunder-proto": "^1.0.1",
++        "es-object-atoms": "^1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
+     "node_modules/glob-parent": {
+       "version": "6.0.2",
+       "resolved": "https://registry.npmjs.org/glob-parent/-/glob-parent-6.0.2.tgz",
+@@ -1567,6 +2083,57 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/gopd": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
++      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/has-symbols": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
++      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/has-tostringtag": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
++      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
++      "license": "MIT",
++      "dependencies": {
++        "has-symbols": "^1.0.3"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/hasown": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz",
++      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
++      "license": "MIT",
++      "dependencies": {
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
+     "node_modules/hermes-estree": {
+       "version": "0.25.1",
+       "resolved": "https://registry.npmjs.org/hermes-estree/-/hermes-estree-0.25.1.tgz",
+@@ -1584,6 +2151,39 @@
+         "hermes-estree": "0.25.1"
+       }
+     },
++    "node_modules/http-errors": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
++      "integrity": "sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==",
++      "license": "MIT",
++      "dependencies": {
++        "depd": "~2.0.0",
++        "inherits": "~2.0.4",
++        "setprototypeof": "~1.2.0",
++        "statuses": "~2.0.2",
++        "toidentifier": "~1.0.1"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/https-proxy-agent": {
++      "version": "5.0.1",
++      "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz",
++      "integrity": "sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==",
++      "license": "MIT",
++      "dependencies": {
++        "agent-base": "6",
++        "debug": "4"
++      },
++      "engines": {
++        "node": ">= 6"
++      }
++    },
+     "node_modules/iceberg-js": {
+       "version": "0.8.1",
+       "resolved": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+@@ -1593,6 +2193,22 @@
+         "node": ">=20.0.0"
+       }
+     },
++    "node_modules/iconv-lite": {
++      "version": "0.7.3",
++      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.3.tgz",
++      "integrity": "sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==",
++      "license": "MIT",
++      "dependencies": {
++        "safer-buffer": ">= 2.1.2 < 3.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/ignore": {
+       "version": "5.3.2",
+       "resolved": "https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz",
+@@ -1613,6 +2229,21 @@
+         "node": ">=0.8.19"
+       }
+     },
++    "node_modules/inherits": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
++      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
++      "license": "ISC"
++    },
++    "node_modules/ipaddr.js": {
++      "version": "1.9.1",
++      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz",
++      "integrity": "sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
+     "node_modules/is-extglob": {
+       "version": "2.1.1",
+       "resolved": "https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz",
+@@ -1636,6 +2267,12 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/is-promise": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz",
++      "integrity": "sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==",
++      "license": "MIT"
++    },
+     "node_modules/isexe": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+@@ -1697,6 +2334,61 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/jsonwebtoken": {
++      "version": "9.0.3",
++      "resolved": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.3.tgz",
++      "integrity": "sha512-MT/xP0CrubFRNLNKvxJ2BYfy53Zkm++5bX9dtuPbqAeQpTVe0MQTFhao8+Cp//EmJp244xt6Drw/GVEGCUj40g==",
++      "license": "MIT",
++      "dependencies": {
++        "jws": "^4.0.1",
++        "lodash.includes": "^4.3.0",
++        "lodash.isboolean": "^3.0.3",
++        "lodash.isinteger": "^4.0.4",
++        "lodash.isnumber": "^3.0.3",
++        "lodash.isplainobject": "^4.0.6",
++        "lodash.isstring": "^4.0.1",
++        "lodash.once": "^4.0.0",
++        "ms": "^2.1.1",
++        "semver": "^7.5.4"
++      },
++      "engines": {
++        "node": ">=12",
++        "npm": ">=6"
++      }
++    },
++    "node_modules/jsonwebtoken/node_modules/semver": {
++      "version": "7.8.5",
++      "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
++      "integrity": "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==",
++      "license": "ISC",
++      "bin": {
++        "semver": "bin/semver.js"
++      },
++      "engines": {
++        "node": ">=10"
++      }
++    },
++    "node_modules/jwa": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/jwa/-/jwa-2.0.1.tgz",
++      "integrity": "sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==",
++      "license": "MIT",
++      "dependencies": {
++        "buffer-equal-constant-time": "^1.0.1",
++        "ecdsa-sig-formatter": "1.0.11",
++        "safe-buffer": "^5.0.1"
++      }
++    },
++    "node_modules/jws": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/jws/-/jws-4.0.1.tgz",
++      "integrity": "sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==",
++      "license": "MIT",
++      "dependencies": {
++        "jwa": "^2.0.1",
++        "safe-buffer": "^5.0.1"
++      }
++    },
+     "node_modules/keyv": {
+       "version": "4.5.4",
+       "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz",
+@@ -2010,6 +2702,48 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/lodash.includes": {
++      "version": "4.3.0",
++      "resolved": "https://registry.npmjs.org/lodash.includes/-/lodash.includes-4.3.0.tgz",
++      "integrity": "sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isboolean": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/lodash.isboolean/-/lodash.isboolean-3.0.3.tgz",
++      "integrity": "sha512-Bz5mupy2SVbPHURB98VAcw+aHh4vRV5IPNhILUCsOzRmsTmSQ17jIuqopAentWoehktxGd9e/hbIXq980/1QJg==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isinteger": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/lodash.isinteger/-/lodash.isinteger-4.0.4.tgz",
++      "integrity": "sha512-DBwtEWN2caHQ9/imiNeEA5ys1JoRtRfY3d7V9wkqtbycnAmTvRRmbHKDV4a0EYc678/dia0jrte4tjYwVBaZUA==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isnumber": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/lodash.isnumber/-/lodash.isnumber-3.0.3.tgz",
++      "integrity": "sha512-QYqzpfwO3/CWf3XP+Z+tkQsfaLL/EnUlXWVkIk5FUPc4sBdTehEqZONuyRt2P67PXAk+NXmTBcc97zw9t1FQrw==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isplainobject": {
++      "version": "4.0.6",
++      "resolved": "https://registry.npmjs.org/lodash.isplainobject/-/lodash.isplainobject-4.0.6.tgz",
++      "integrity": "sha512-oSXzaWypCMHkPC3NvBEaPHf0KsA5mvPrOPgQWDsbg8n7orZ290M0BmC/jgRZ4vcJ6DTAhjrsSYgdsW/F+MFOBA==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isstring": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/lodash.isstring/-/lodash.isstring-4.0.1.tgz",
++      "integrity": "sha512-0wJxfxH1wgO3GrbuP+dTTk7op+6L41QCXbGINEmD+ny/G/eCqGzxyCsh7159S+mgDDcoarnBw6PC1PS5+wUGgw==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.once": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/lodash.once/-/lodash.once-4.1.1.tgz",
++      "integrity": "sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==",
++      "license": "MIT"
++    },
+     "node_modules/lru-cache": {
+       "version": "5.1.1",
+       "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+@@ -2029,6 +2763,61 @@
+         "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+       }
+     },
++    "node_modules/math-intrinsics": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
++      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/media-typer": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-1.1.0.tgz",
++      "integrity": "sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/merge-descriptors": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-2.0.0.tgz",
++      "integrity": "sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/mime-db": {
++      "version": "1.54.0",
++      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz",
++      "integrity": "sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/mime-types": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-3.0.2.tgz",
++      "integrity": "sha512-Lbgzdk0h4juoQ9fCKXW4by0UJqj+nOOrI9MJ1sSj4nI8aI2eo1qmvQEie4VD1glsS250n15LsWsYtCugiStS5A==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-db": "^1.54.0"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/minimatch": {
+       "version": "10.2.5",
+       "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.5.tgz",
+@@ -2049,7 +2838,6 @@
+       "version": "2.1.3",
+       "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/nanoid": {
+@@ -2078,6 +2866,15 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/negotiator": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-1.0.0.tgz",
++      "integrity": "sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/node-releases": {
+       "version": "2.0.48",
+       "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.48.tgz",
+@@ -2088,6 +2885,57 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/nodemailer": {
++      "version": "9.0.3",
++      "resolved": "https://registry.npmjs.org/nodemailer/-/nodemailer-9.0.3.tgz",
++      "integrity": "sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==",
++      "license": "MIT-0",
++      "engines": {
++        "node": ">=6.0.0"
++      }
++    },
++    "node_modules/object-assign": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
++      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/object-inspect": {
++      "version": "1.13.4",
++      "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz",
++      "integrity": "sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/on-finished": {
++      "version": "2.4.1",
++      "resolved": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz",
++      "integrity": "sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==",
++      "license": "MIT",
++      "dependencies": {
++        "ee-first": "1.1.1"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/once": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
++      "integrity": "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==",
++      "license": "ISC",
++      "dependencies": {
++        "wrappy": "1"
++      }
++    },
+     "node_modules/optionator": {
+       "version": "0.9.4",
+       "resolved": "https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz",
+@@ -2138,6 +2986,15 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/parseurl": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
++      "integrity": "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/path-exists": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz",
+@@ -2158,6 +3015,16 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/path-to-regexp": {
++      "version": "8.4.2",
++      "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.4.2.tgz",
++      "integrity": "sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA==",
++      "license": "MIT",
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+@@ -2217,6 +3084,28 @@
+         "node": ">= 0.8.0"
+       }
+     },
++    "node_modules/proxy-addr": {
++      "version": "2.0.7",
++      "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
++      "integrity": "sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==",
++      "license": "MIT",
++      "dependencies": {
++        "forwarded": "0.2.0",
++        "ipaddr.js": "1.9.1"
++      },
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
++    "node_modules/proxy-from-env": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-2.1.0.tgz",
++      "integrity": "sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=10"
++      }
++    },
+     "node_modules/punycode": {
+       "version": "2.3.1",
+       "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+@@ -2227,6 +3116,50 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/qs": {
++      "version": "6.15.3",
++      "resolved": "https://registry.npmjs.org/qs/-/qs-6.15.3.tgz",
++      "integrity": "sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==",
++      "license": "BSD-3-Clause",
++      "dependencies": {
++        "es-define-property": "^1.0.1",
++        "side-channel": "^1.1.1"
++      },
++      "engines": {
++        "node": ">=0.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/range-parser": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.3.0.tgz",
++      "integrity": "sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/raw-body": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-3.0.2.tgz",
++      "integrity": "sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==",
++      "license": "MIT",
++      "dependencies": {
++        "bytes": "~3.1.2",
++        "http-errors": "~2.0.1",
++        "iconv-lite": "~0.7.0",
++        "unpipe": "~1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.2.7",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.2.7.tgz",
+@@ -2282,12 +3215,61 @@
+         "@rolldown/binding-win32-x64-msvc": "1.0.3"
+       }
+     },
++    "node_modules/router": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/router/-/router-2.2.0.tgz",
++      "integrity": "sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "^4.4.0",
++        "depd": "^2.0.0",
++        "is-promise": "^4.0.0",
++        "parseurl": "^1.3.3",
++        "path-to-regexp": "^8.0.0"
++      },
++      "engines": {
++        "node": ">= 18"
++      }
++    },
++    "node_modules/safe-buffer": {
++      "version": "5.2.1",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
++      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/feross"
++        },
++        {
++          "type": "patreon",
++          "url": "https://www.patreon.com/feross"
++        },
++        {
++          "type": "consulting",
++          "url": "https://feross.org/support"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/safer-buffer": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
++      "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==",
++      "license": "MIT"
++    },
+     "node_modules/scheduler": {
+       "version": "0.27.0",
+       "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
+       "integrity": "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==",
+       "license": "MIT"
+     },
++    "node_modules/scmp": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/scmp/-/scmp-2.1.0.tgz",
++      "integrity": "sha512-o/mRQGk9Rcer/jEEw/yw4mwo3EU/NvYvp577/Btqrym9Qy5/MdWGBqipbALgd2lrdWTJ5/gqDusxfnQBxOxT2Q==",
++      "deprecated": "Just use Node.js's crypto.timingSafeEqual()",
++      "license": "BSD-3-Clause"
++    },
+     "node_modules/semver": {
+       "version": "6.3.1",
+       "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+@@ -2298,6 +3280,57 @@
+         "semver": "bin/semver.js"
+       }
+     },
++    "node_modules/send": {
++      "version": "1.2.1",
++      "resolved": "https://registry.npmjs.org/send/-/send-1.2.1.tgz",
++      "integrity": "sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "^4.4.3",
++        "encodeurl": "^2.0.0",
++        "escape-html": "^1.0.3",
++        "etag": "^1.8.1",
++        "fresh": "^2.0.0",
++        "http-errors": "^2.0.1",
++        "mime-types": "^3.0.2",
++        "ms": "^2.1.3",
++        "on-finished": "^2.4.1",
++        "range-parser": "^1.2.1",
++        "statuses": "^2.0.2"
++      },
++      "engines": {
++        "node": ">= 18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/serve-static": {
++      "version": "2.2.1",
++      "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-2.2.1.tgz",
++      "integrity": "sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw==",
++      "license": "MIT",
++      "dependencies": {
++        "encodeurl": "^2.0.0",
++        "escape-html": "^1.0.3",
++        "parseurl": "^1.3.3",
++        "send": "^1.2.0"
++      },
++      "engines": {
++        "node": ">= 18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/setprototypeof": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz",
++      "integrity": "sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==",
++      "license": "ISC"
++    },
+     "node_modules/shebang-command": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+@@ -2321,6 +3354,78 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/side-channel": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.1.tgz",
++      "integrity": "sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "object-inspect": "^1.13.4",
++        "side-channel-list": "^1.0.1",
++        "side-channel-map": "^1.0.1",
++        "side-channel-weakmap": "^1.0.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-list": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.1.tgz",
++      "integrity": "sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "object-inspect": "^1.13.4"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-map": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz",
++      "integrity": "sha512-VCjCNfgMsby3tTdo02nbjtM/ewra6jPHmpThenkTYh8pG9ucZ/1P8So4u4FGBek/BjpOVsDCMoLA/iuBKIFXRA==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bound": "^1.0.2",
++        "es-errors": "^1.3.0",
++        "get-intrinsic": "^1.2.5",
++        "object-inspect": "^1.13.3"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-weakmap": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz",
++      "integrity": "sha512-WPS/HvHQTYnHisLo9McqBHOJk2FkHO/tlpvldyrnem4aeQp4hai3gythswg6p01oSoTl58rcpiFAjF2br2Ak2A==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bound": "^1.0.2",
++        "es-errors": "^1.3.0",
++        "get-intrinsic": "^1.2.5",
++        "object-inspect": "^1.13.3",
++        "side-channel-map": "^1.0.1"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/source-map-js": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+@@ -2331,6 +3436,15 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/statuses": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz",
++      "integrity": "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/tinyglobby": {
+       "version": "0.2.17",
+       "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz",
+@@ -2348,12 +3462,39 @@
+         "url": "https://github.com/sponsors/SuperchupuDev"
+       }
+     },
++    "node_modules/toidentifier": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz",
++      "integrity": "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.6"
++      }
++    },
+     "node_modules/tslib": {
+       "version": "2.8.1",
+       "resolved": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+       "license": "0BSD"
+     },
++    "node_modules/twilio": {
++      "version": "6.0.2",
++      "resolved": "https://registry.npmjs.org/twilio/-/twilio-6.0.2.tgz",
++      "integrity": "sha512-RN3TZxUtxLz2HBZVt62+LdZxQbrMVgYKtuzLgwmO7nqKvR+gQS5mCackD9hf4Y7MmoK/bX7tCm7kaJC8kC8zFA==",
++      "license": "MIT",
++      "dependencies": {
++        "axios": "^1.13.5",
++        "dayjs": "^1.11.9",
++        "https-proxy-agent": "^5.0.0",
++        "jsonwebtoken": "^9.0.3",
++        "qs": "^6.14.1",
++        "scmp": "^2.1.0",
++        "xmlbuilder": "^13.0.2"
++      },
++      "engines": {
++        "node": ">=20.0.0"
++      }
++    },
+     "node_modules/type-check": {
+       "version": "0.4.0",
+       "resolved": "https://registry.npmjs.org/type-check/-/type-check-0.4.0.tgz",
+@@ -2367,6 +3508,46 @@
+         "node": ">= 0.8.0"
+       }
+     },
++    "node_modules/type-is": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/type-is/-/type-is-2.1.0.tgz",
++      "integrity": "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==",
++      "license": "MIT",
++      "dependencies": {
++        "content-type": "^2.0.0",
++        "media-typer": "^1.1.0",
++        "mime-types": "^3.0.0"
++      },
++      "engines": {
++        "node": ">= 18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/type-is/node_modules/content-type": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/content-type/-/content-type-2.0.0.tgz",
++      "integrity": "sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/unpipe": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
++      "integrity": "sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/update-browserslist-db": {
+       "version": "1.2.3",
+       "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz",
+@@ -2408,6 +3589,15 @@
+         "punycode": "^2.1.0"
+       }
+     },
++    "node_modules/vary": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
++      "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/vite": {
+       "version": "8.0.16",
+       "resolved": "https://registry.npmjs.org/vite/-/vite-8.0.16.tgz",
+@@ -2512,6 +3702,21 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/wrappy": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
++      "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
++      "license": "ISC"
++    },
++    "node_modules/xmlbuilder": {
++      "version": "13.0.2",
++      "resolved": "https://registry.npmjs.org/xmlbuilder/-/xmlbuilder-13.0.2.tgz",
++      "integrity": "sha512-Eux0i2QdDYKbdbA6AM6xE4m6ZTZr4G4xF9kahI2ukSEMCzwce2eX9WlTI5J3s+NU7hpasFsr8hWIONae7LluAQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6.0"
++      }
++    },
+     "node_modules/yallist": {
+       "version": "3.1.1",
+       "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+diff --git a/package.json b/package.json
+index b21473a..82d3478 100644
+--- a/package.json
++++ b/package.json
+@@ -11,9 +11,14 @@
+   },
+   "dependencies": {
+     "@supabase/supabase-js": "^2.108.2",
++    "cors": "^2.8.6",
++    "dotenv": "^17.4.2",
++    "express": "^5.2.1",
+     "lucide-react": "^1.21.0",
++    "nodemailer": "^9.0.3",
+     "react": "^19.2.6",
+-    "react-dom": "^19.2.6"
++    "react-dom": "^19.2.6",
++    "twilio": "^6.0.2"
+   },
+   "devDependencies": {
+     "@eslint/js": "^10.0.1",
+diff --git a/server.js b/server.js
+new file mode 100644
+index 0000000..b142204
+--- /dev/null
++++ b/server.js
+@@ -0,0 +1,110 @@
++import express from 'express';
++import cors from 'cors';
++import dotenv from 'dotenv';
++import nodemailer from 'nodemailer';
++import twilio from 'twilio';
++
++dotenv.config();
++
++const app = express();
++app.use(cors());
++app.use(express.json());
++
++const PORT = process.env.PORT || 3001;
++
++const normalizePhone = (value) => {
++  if (!value) return '';
++  const digits = String(value).replace(/\D/g, '');
++  if (!digits) return '';
++  if (digits.startsWith('92')) return `+${digits}`;
++  if (digits.startsWith('0')) return `+92${digits.slice(1)}`;
++  return `+${digits}`;
++};
++
++const createEmailTransport = () => {
++  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = process.env;
++  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
++
++  return nodemailer.createTransport({
++    host: SMTP_HOST,
++    port: Number(SMTP_PORT || 587),
++    secure: SMTP_SECURE === 'true',
++    auth: {
++      user: SMTP_USER,
++      pass: SMTP_PASS,
++    },
++  });
++};
++
++const emailTransport = createEmailTransport();
++const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
++  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
++  : null;
++
++app.post('/api/send-credentials', async (req, res) => {
++  const { email, whatsapp, studentName, rollNo, password } = req.body || {};
++
++  if (!email && !whatsapp) {
++    return res.status(400).json({ error: 'Provide at least one contact method (email or WhatsApp).' });
++  }
++
++  const message = [
++    `Assalamualaikum ${studentName || 'Student'},`,
++    '',
++    'Your CMGC student portal credentials are ready.',
++    '',
++    `Student ID: ${rollNo}`,
++    `Password: ${password}`,
++    '',
++    'Please use these details to login to the CMGC portal.',
++    'Thank you.',
++  ].join('\n');
++
++  const results = [];
++
++  if (email) {
++    if (!emailTransport) {
++      return res.status(500).json({ error: 'Email service is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS in your environment.' });
++    }
++
++    try {
++      await emailTransport.sendMail({
++        from: process.env.SMTP_FROM || process.env.SMTP_USER,
++        to: email,
++        subject: 'CMGC Student Portal Credentials',
++        text: message,
++      });
++      results.push({ type: 'email', status: 'sent' });
++    } catch (error) {
++      return res.status(500).json({ error: `Email send failed: ${error.message}` });
++    }
++  }
++
++  if (whatsapp) {
++    const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM;
++    if (!twilioClient || !whatsappFrom) {
++      return res.status(500).json({ error: 'WhatsApp service is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM in your environment.' });
++    }
++
++    try {
++      await twilioClient.messages.create({
++        from: `whatsapp:${whatsappFrom}`,
++        to: `whatsapp:${normalizePhone(whatsapp)}`,
++        body: message,
++      });
++      results.push({ type: 'whatsapp', status: 'sent' });
++    } catch (error) {
++      return res.status(500).json({ error: `WhatsApp send failed: ${error.message}` });
++    }
++  }
++
++  return res.json({ success: true, results });
++});
++
++app.get('/health', (_req, res) => {
++  res.json({ ok: true });
++});
++
++app.listen(PORT, () => {
++  console.log(`Credential delivery server running on port ${PORT}`);
++});
+diff --git a/src/components/AdminOverview/AdminOverview.css b/src/components/AdminOverview/AdminOverview.css
+index bffeb59..4720908 100644
+--- a/src/components/AdminOverview/AdminOverview.css
++++ b/src/components/AdminOverview/AdminOverview.css
+@@ -4,8 +4,10 @@
+ .admin-overview__icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+ .admin-stat--blue { background: #eff6ff; color: #2563eb; }
+ .admin-stat--amber { background: #fffbeb; color: #d97706; }
++.admin-stat--green { background: #ecfdf5; color: #16a34a; }
+ .admin-stat--purple { background: #faf5ff; color: #9333ea; }
+ .admin-stat--red { background: #fef2f2; color: #dc2626; }
++.admin-stat--teal { background: #f0fdfa; color: #0f766e; }
+ .admin-overview__value { font-size: 22px; font-weight: 700; color: var(--text); }
+ .admin-overview__label { font-size: 12px; color: var(--subtext); margin-top: 2px; }
+ .admin-overview__recent { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+@@ -21,4 +23,6 @@
+ .admin-overview__badge--approved { background: #dcfce7; color: #16a34a; }
+ .admin-overview__badge--rejected { background: #fee2e2; color: #dc2626; }
+ 
+-@media (min-width: 1024px) { .admin-overview__stats { grid-template-columns: repeat(4, 1fr); } }
+\ No newline at end of file
++@media (min-width: 768px) { .admin-overview__stats { grid-template-columns: repeat(3, 1fr); } }
++
++@media (min-width: 1024px) { .admin-overview__stats { grid-template-columns: repeat(6, 1fr); } }
+\ No newline at end of file
+diff --git a/src/components/AdminOverview/AdminOverview.jsx b/src/components/AdminOverview/AdminOverview.jsx
+index bed4fbb..7709818 100644
+--- a/src/components/AdminOverview/AdminOverview.jsx
++++ b/src/components/AdminOverview/AdminOverview.jsx
+@@ -6,6 +6,8 @@ import "./AdminOverview.css";
+ export default function AdminOverview() {
+   const [stats, setStats] = useState({
+     totalStudents: 0,
++    firstYearStudents: 0,
++    secondYearStudents: 0,
+     pendingApplications: 0,
+     totalNotices: 0,
+     todayAttendance: "Not Marked",
+@@ -26,6 +28,16 @@ export default function AdminOverview() {
+       .from("students")
+       .select("*", { count: "exact", head: true });
+ 
++    const { count: firstYearCount } = await supabase
++      .from("students")
++      .select("*", { count: "exact", head: true })
++      .eq("year_of_study", "1st Year");
++
++    const { count: secondYearCount } = await supabase
++      .from("students")
++      .select("*", { count: "exact", head: true })
++      .eq("year_of_study", "2nd Year");
++
+     // Pending applications
+     const { count: pendingCount } = await supabase
+       .from("applications")
+@@ -52,6 +64,8 @@ export default function AdminOverview() {
+ 
+     setStats({
+       totalStudents: studentsCount || 0,
++      firstYearStudents: firstYearCount || 0,
++      secondYearStudents: secondYearCount || 0,
+       pendingApplications: pendingCount || 0,
+       totalNotices: noticesCount || 0,
+       todayAttendance: attendanceCount > 0 ? `${attendanceCount} Records` : "Not Marked",
+@@ -62,10 +76,12 @@ export default function AdminOverview() {
+   };
+ 
+   const statCards = [
+-    { label: "Total Students", value: loading ? "..." : stats.totalStudents, icon: Users, cls: "admin-stat--blue" },
++    { label: "Total 1st Year", value: loading ? "..." : stats.firstYearStudents, icon: Users, cls: "admin-stat--blue" },
++    { label: "Total 2nd Year", value: loading ? "..." : stats.secondYearStudents, icon: Users, cls: "admin-stat--green" },
++    { label: "Grand Total", value: loading ? "..." : stats.totalStudents, icon: Users, cls: "admin-stat--purple" },
+     { label: "Pending Applications", value: loading ? "..." : stats.pendingApplications, icon: Wallet, cls: "admin-stat--amber" },
+-    { label: "Notices Posted", value: loading ? "..." : stats.totalNotices, icon: Bell, cls: "admin-stat--purple" },
+-    { label: "Today's Attendance", value: loading ? "..." : stats.todayAttendance, icon: CalendarCheck, cls: "admin-stat--red" },
++    { label: "Notices Posted", value: loading ? "..." : stats.totalNotices, icon: Bell, cls: "admin-stat--red" },
++    { label: "Today's Attendance", value: loading ? "..." : stats.todayAttendance, icon: CalendarCheck, cls: "admin-stat--teal" },
+   ];
+ 
+   const statusColor = (status) => {
+diff --git a/src/components/AdmissionPage/AdmissionPage.jsx b/src/components/AdmissionPage/AdmissionPage.jsx
+index 182779b..1660204 100644
+--- a/src/components/AdmissionPage/AdmissionPage.jsx
++++ b/src/components/AdmissionPage/AdmissionPage.jsx
+@@ -60,13 +60,14 @@ export default function AdmissionPage({ onBack }) {
+   const [group, setGroup] = useState("");
+   const [selectedBoard, setSelectedBoard] = useState("");
+ 
++  // ✅ CHANGE 1: yearOfStudy added to form state
+   const [form, setForm] = useState({
+     name: "", father: "", dob: "", bform: "", fatherCnic: "",
+     nationality: "", religion: "", orphan: "no", fatherOccupation: "",
+     monthlyIncome: "", familyMembers: "", financialAssistance: "no",
+     phone1: "", phone2: "", whatsapp: "", email: "", address: "",
+     sscRollNo: "", sscRegNo: "", marksObtained: "", totalMarks: "",
+-    percentage: "", sscGroup: "",
++    percentage: "", sscGroup: "", yearOfStudy: "1st Year",
+   });
+   const [errors, setErrors] = useState({});
+ 
+@@ -101,8 +102,10 @@ export default function AdmissionPage({ onBack }) {
+   const handlePhoto = (e) => {
+     const f = e.target.files[0];
+     if (!f) return;
+-    if (f.size > 20 * 1024) {
+-      setPhotoError(`Too large (${(f.size / 1024).toFixed(1)}KB). Max: 20KB`);
++    const maxSize = 2 * 1024 * 1024;
++    if (f.size > maxSize) {
++      const sizeLabel = f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)}MB` : `${(f.size / 1024).toFixed(1)}KB`;
++      setPhotoError(`Too large (${sizeLabel}). Max: 2MB`);
+       return;
+     }
+     setPhotoError("");
+@@ -126,6 +129,7 @@ export default function AdmissionPage({ onBack }) {
+     if (!form.religion) e.religion = "Required";
+     if (!/^03\d{9}$/.test(form.phone1)) e.phone1 = "Format: 03XXXXXXXXX";
+     if (!/^03\d{9}$/.test(form.whatsapp)) e.whatsapp = "Format: 03XXXXXXXXX";
++    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Enter a valid email";
+     if (!form.address.trim()) e.address = "Required";
+     if (!form.marksObtained) e.marksObtained = "Required";
+     if (!form.totalMarks) e.totalMarks = "Required";
+@@ -168,6 +172,7 @@ export default function AdmissionPage({ onBack }) {
+       uploadedUrls[doc.key] = urlData.publicUrl;
+     }
+ 
++    // ✅ CHANGE 2: year_of_study added to insert
+     const { error } = await supabase.from("applications").insert({
+       student_name: form.name,
+       father_name: form.father,
+@@ -194,6 +199,7 @@ export default function AdmissionPage({ onBack }) {
+       board: selectedBoard,
+       student_group: form.sscGroup,
+       group_selected: group,
++      year_of_study: form.yearOfStudy,
+       photo_url: uploadedUrls.photo || null,
+       bform_doc_url: uploadedUrls.bformDoc || null,
+       father_id_doc_url: uploadedUrls.fatherIdDoc || null,
+@@ -214,7 +220,7 @@ export default function AdmissionPage({ onBack }) {
+           <CheckCircle className="ap-success-icon" size={52} />
+           <h2>Application Submitted ✅</h2>
+           <p>Thank you! Your admission application has been successfully received by <strong>Community Model Girls College, Rawalpindi</strong>.</p>
+-          <p className="ap-success-note">You will be informed about your admission status and confirmation via <strong>WhatsApp or Email</strong> within 3–5 working days. Please ensure your phone and email are active.</p>
++          <p className="ap-success-note">You will be informed about your admission status and confirmation via <strong>WhatsApp or Email</strong> within 3–5 working days. Please ensure your phone and email are active, because approved login credentials will be shared there.</p>
+           <button onClick={onBack} className="ap-back-btn">Back to Website</button>
+         </div>
+       </div>
+@@ -246,7 +252,7 @@ export default function AdmissionPage({ onBack }) {
+                 <div className="ap-photo-overlay"><Upload size={16} /></div>
+               </button>
+               <input type="file" accept="image/*" ref={photoRef} onChange={handlePhoto} style={{ display: "none" }} />
+-              {photoError ? <p className="ap-photo-error">{photoError}</p> : <p className="ap-photo-hint">Max 20KB</p>}
++              {photoError ? <p className="ap-photo-error">{photoError}</p> : <p className="ap-photo-hint">Max 2MB</p>}
+               {photo && !photoError && <p className="ap-photo-ok">✓ Uploaded</p>}
+               {errors.photo && <p className="ap-photo-error">{errors.photo}</p>}
+             </div>
+@@ -260,7 +266,7 @@ export default function AdmissionPage({ onBack }) {
+             <div className="ap-notice ap-notice--amber">
+               <p className="ap-notice-title">📋 Please have the following documents ready:</p>
+               <ul>
+-                <li>Student's recent passport-size photo with <strong>blue background</strong> (max 20KB)</li>
++                <li>Student's recent passport-size photo with <strong>blue background</strong> (max 2MB)</li>
+                 <li>Student's <strong>B-Form</strong> (clear scan or photo)</li>
+                 <li>Father's / Guardian's <strong>CNIC</strong> (both sides)</li>
+                 <li>Matric / SSC <strong>Marksheet</strong> (original or attested copy)</li>
+@@ -394,7 +400,7 @@ export default function AdmissionPage({ onBack }) {
+ 
+             {/* Section 4 */}
+             <section className="ap-section">
+-              <SectionHeading number="4" title="HSSC-I Admission" />
++              <SectionHeading number="4" title="HSSC-I & II Admission" />
+               <Field label="Select Group *" error={errors.group}>
+                 <div className="ap-group-btns">
+                   {Object.keys(GROUPS).map((g) => (
+@@ -410,6 +416,32 @@ export default function AdmissionPage({ onBack }) {
+                   </div>
+                 </div>
+               )}
++
++              {/* ✅ CHANGE 3: Year of Admission field */}
++              <div style={{ marginTop: "16px" }}>
++                <Field label="Year of Admission *">
++                  <div className="ap-radio-row">
++                    <label className="ap-radio">
++                      <input
++                        type="radio"
++                        name="yearOfStudy"
++                        value="1st Year"
++                        checked={form.yearOfStudy === "1st Year"}
++                        onChange={up("yearOfStudy")}
++                      /> 1st Year
++                    </label>
++                    <label className="ap-radio">
++                      <input
++                        type="radio"
++                        name="yearOfStudy"
++                        value="2nd Year"
++                        checked={form.yearOfStudy === "2nd Year"}
++                        onChange={up("yearOfStudy")}
++                      /> 2nd Year
++                    </label>
++                  </div>
++                </Field>
++              </div>
+             </section>
+ 
+             {/* Section 5 */}
+@@ -422,7 +454,7 @@ export default function AdmissionPage({ onBack }) {
+               )}
+               {!selectedBoard && (
+                 <div className="ap-notice ap-notice--blue" style={{ marginBottom: 12 }}>
+-                  <p>ℹ️ Please select your <strong>Board Name</strong> in Section 3 first — document requirements may vary.</p>
++                  <p>Please select your <strong>Board Name</strong> in Section 3 first.</p>
+                 </div>
+               )}
+               <div className="ap-docs">
+diff --git a/src/components/EnterResults/EnterResults.css b/src/components/EnterResults/EnterResults.css
+index f4f66ce..4f05f9e 100644
+--- a/src/components/EnterResults/EnterResults.css
++++ b/src/components/EnterResults/EnterResults.css
+@@ -1,5 +1,8 @@
+ .enter-results { display: flex; flex-direction: column; gap: 16px; }
+ .enter-results__toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
++.enter-results__year-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
++.enter-results__year-btn { border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--subtext); background: var(--card); }
++.enter-results__year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
+ .enter-results__field { display: flex; flex-direction: column; gap: 4px; }
+ .enter-results__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+ .enter-results__field select, .enter-results__field input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
+diff --git a/src/components/EnterResults/EnterResults.jsx b/src/components/EnterResults/EnterResults.jsx
+index 452658a..c39dfb8 100644
+--- a/src/components/EnterResults/EnterResults.jsx
++++ b/src/components/EnterResults/EnterResults.jsx
+@@ -15,6 +15,7 @@ const SUBJECTS = {
+ 
+ export default function EnterResults() {
+   const [program, setProgram] = useState("Pre-Medical");
++  const [yearFilter, setYearFilter] = useState("Both");
+   const [examName, setExamName] = useState("Mid-Term 2026");
+   const [students, setStudents] = useState([]);
+   const [selected, setSelected] = useState(null);
+@@ -27,15 +28,21 @@ export default function EnterResults() {
+ 
+   useEffect(() => {
+     fetchStudents();
+-  }, [program]);
++  }, [program, yearFilter]);
+ 
+   const fetchStudents = async () => {
+     setLoading(true);
+-    const { data } = await supabase
++    let query = supabase
+       .from("students")
+       .select("id, name, roll_no")
+       .eq("program", program)
+       .order("name");
++
++    if (yearFilter !== "Both") {
++      query = query.eq("year_of_study", yearFilter);
++    }
++
++    const { data } = await query;
+     if (data) setStudents(data);
+     setLoading(false);
+     setSelected(null);
+@@ -122,6 +129,12 @@ export default function EnterResults() {
+         </div>
+       </div>
+ 
++      <div className="enter-results__year-filters" role="group" aria-label="Filter by class year">
++        <button onClick={() => setYearFilter("1st Year")} className={"enter-results__year-btn " + (yearFilter === "1st Year" ? "enter-results__year-btn--active" : "")}>1st Year</button>
++        <button onClick={() => setYearFilter("2nd Year")} className={"enter-results__year-btn " + (yearFilter === "2nd Year" ? "enter-results__year-btn--active" : "")}>2nd Year</button>
++        <button onClick={() => setYearFilter("Both")} className={"enter-results__year-btn " + (yearFilter === "Both" ? "enter-results__year-btn--active" : "")}>Both</button>
++      </div>
++
+       <div className="enter-results__layout">
+         {/* Students List */}
+         <div className="enter-results__students">
+diff --git a/src/components/Fee/Fee.css b/src/components/Fee/Fee.css
+index 1e877d7..6881917 100644
+--- a/src/components/Fee/Fee.css
++++ b/src/components/Fee/Fee.css
+@@ -1,20 +1,39 @@
+-.fee { display: flex; flex-direction: column; gap: 20px; }
++.fee { display: flex; flex-direction: column; gap: 16px; }
++.fee__loading, .fee__empty { text-align: center; color: var(--subtext); padding: 32px; font-size: 14px; }
++.fee__success-banner { display: flex; align-items: center; gap: 8px; background: #dcfce7; border: 1px solid #86efac; color: #166534; font-size: 13px; font-weight: 500; padding: 12px 16px; border-radius: 10px; }
+ .fee__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+-.fee__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+-.fee__header h3, .fee__card h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
++.fee__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
++.fee__header h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+ .fee__badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+-.fee__badge--unpaid { background: #fee2e2; color: #dc2626; }
+ .fee__badge--paid { background: #dcfce7; color: #16a34a; }
++.fee__badge--unpaid { background: #fee2e2; color: #dc2626; }
++.fee__badge--pending { background: #fef3c7; color: #b45309; }
+ .fee__amount { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+-.fee__due { font-size: 12px; color: var(--subtext); margin-bottom: 16px; }
+-.fee__pay-btn { width: 100%; background: var(--accent); color: white; font-weight: 600; padding: 13px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+-.fee__methods { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+-.fee__method { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+-.fee__method p { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+-.fee__method-tag { font-size: 10px; padding: 2px 6px; border-radius: 999px; }
+-.fee__method-tag--auto { background: #dcfce7; color: #16a34a; }
+-.fee__method-tag--manual { background: #fef3c7; color: #b45309; }
+-.fee__working { margin-top: 12px; }
+-.fee__history-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+-.fee__history-row:last-child { border-bottom: none; }
+-.fee__muted { color: var(--subtext); }
+\ No newline at end of file
++.fee__due { font-size: 12px; color: var(--subtext); margin-bottom: 4px; }
++.fee__due--paid { color: #16a34a; }
++.fee__pay-section { margin-top: 14px; }
++.fee__pay-btn { width: 100%; background: var(--accent); color: white; font-weight: 600; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
++.fee__methods { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
++.fee__account-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
++.fee__account-header { background: var(--accent); color: white; padding: 8px 14px; font-size: 13px; font-weight: 600; }
++.fee__account-row { display: flex; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
++.fee__account-row:last-child { border-bottom: none; }
++.fee__account-label { color: var(--subtext); }
++.fee__account-value { color: var(--text); font-weight: 600; text-align: right; }
++.fee__instructions { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #92400e; }
++.fee__instructions p { font-weight: 600; margin-bottom: 6px; }
++.fee__instructions ol { padding-left: 16px; }
++.fee__instructions li { margin-bottom: 4px; }
++.fee__upload-proof-btn { width: 100%; background: var(--card); border: 2px dashed var(--accent); color: var(--accent); font-weight: 600; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
++.fee__proof-form { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
++.fee__proof-field { display: flex; flex-direction: column; gap: 4px; }
++.fee__proof-field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
++.fee__proof-field input, .fee__proof-field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--card); color: var(--text); font-family: inherit; }
++.fee__file-area { border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; }
++.fee__file-area:hover { border-color: var(--accent); }
++.fee__file-placeholder { color: var(--subtext); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
++.fee__file-name { color: #16a34a; font-size: 13px; display: flex; align-items: center; gap: 6px; justify-content: center; }
++.fee__upload-error { color: #ef4444; font-size: 12px; }
++.fee__submit-proof-btn { width: 100%; background: #16a34a; color: white; font-weight: 600; padding: 12px; border-radius: 8px; font-size: 14px; }
++.fee__submit-proof-btn:disabled { opacity: 0.6; cursor: not-allowed; }
++.fee__pending-note { margin-top: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #92400e; }
+\ No newline at end of file
+diff --git a/src/components/Fee/Fee.jsx b/src/components/Fee/Fee.jsx
+index 9a790f4..6afd3d0 100644
+--- a/src/components/Fee/Fee.jsx
++++ b/src/components/Fee/Fee.jsx
+@@ -1,57 +1,360 @@
+-import { useState } from "react";
+-import { XCircle, CheckCircle, ChevronRight } from "lucide-react";
+-import WorkingOnIt from "../WorkingOnIt/WorkingOnIt";
++import { useState, useEffect, useRef, useCallback } from "react";
++import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck } from "lucide-react";
++import { supabase } from "../../lib/supabaseClient";
+ import "./Fee.css";
+ 
+-export default function Fee() {
+-  const [showMethods, setShowMethods] = useState(false);
+-  const history = [
+-    { month: "May 2026", amount: "Rs 8,500", status: "Paid" },
+-    { month: "April 2026", amount: "Rs 8,500", status: "Paid" },
+-  ];
+-  const methods = [
+-    { label: "JazzCash / Card", auto: true },
+-    { label: "Easypaisa", auto: true },
+-    { label: "College Easypaisa Account", auto: false },
+-    { label: "Bank Al Habib Transfer", auto: false },
+-  ];
++const buildProofPath = (fileName) => `payment-proofs/${new Date().getTime()}-${fileName}`;
++
++const COLLEGE_ACCOUNTS = [
++  {
++    method: "Easypaisa",
++    icon: "💚",
++    details: [
++      { label: "Account Title", value: "Qaiser Abbas Humayun" },
++      { label: "Easypaisa Number", value: "0333-5221914" },
++    ],
++  },
++  {
++    method: "Bank Al Habib",
++    icon: "🏦",
++    details: [
++      { label: "Account Title", value: "Qaiser Abbas Humayun" },
++      { label: "Account Number", value: "0077098101228001" },
++      { label: "IBAN", value: "PK39BAHL0077098101228001" },
++      { label: "Bank", value: "Bank Al Habib" },
++    ],
++  },
++  {
++    method: "Raast ID",
++    icon: "⚡",
++    details: [
++      { label: "Raast ID", value: "0333-5221914" },
++      { label: "Account Title", value: "Qaiser Abbas Humayun" },
++    ],
++  },
++  {
++    method: "Cash in College Office",
++    icon: "💵",
++    details: [
++      { label: "Location", value: "College Office" },
++      { label: "Note", value: "Pay in cash and submit the receipt number below" },
++    ],
++  },
++];
++
++export default function Fee({ studentId }) {
++  const [fees, setFees] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const [showMethods, setShowMethods] = useState(null);
++  const [showProofForm, setShowProofForm] = useState(null);
++  const [proofFile, setProofFile] = useState(null);
++  const [refNumber, setRefNumber] = useState("");
++  const [selectedMethod, setSelectedMethod] = useState("Easypaisa");
++  const [amount, setAmount] = useState("");
++  const [uploading, setUploading] = useState(false);
++  const [uploadSuccess, setUploadSuccess] = useState(false);
++  const [uploadError, setUploadError] = useState("");
++  const fileRef = useRef();
++
++  const fetchFees = useCallback(async () => {
++    setLoading(true);
++    const { data: feesData } = await supabase
++      .from("fees")
++      .select("*")
++      .eq("student_id", studentId)
++      .order("created_at", { ascending: false });
++
++    if (feesData && feesData.length > 0) {
++      const feeIds = feesData.map((fee) => fee.id);
++      const { data: transactions } = await supabase
++        .from("payment_transactions")
++        .select("fee_id, amount, status, created_at, proof_image_url, reference_number, payment_method")
++        .in("fee_id", feeIds)
++        .eq("status", "Success");
++
++      const paidByFeeId = {};
++      const lastPaymentDateByFeeId = {};
++      const txnsByFeeId = {};
++      (transactions || []).forEach((txn) => {
++        paidByFeeId[txn.fee_id] = (paidByFeeId[txn.fee_id] || 0) + Number(txn.amount || 0);
++        txnsByFeeId[txn.fee_id] = txnsByFeeId[txn.fee_id] || [];
++        txnsByFeeId[txn.fee_id].push(txn);
++        if (txn.created_at) {
++          const txnDate = new Date(txn.created_at);
++          const existingDate = lastPaymentDateByFeeId[txn.fee_id]
++            ? new Date(lastPaymentDateByFeeId[txn.fee_id])
++            : null;
++          if (!existingDate || txnDate > existingDate) {
++            lastPaymentDateByFeeId[txn.fee_id] = txn.created_at;
++          }
++        }
++      });
++
++      const enrichedFees = feesData.map((fee) => {
++        const paidAmount = Number(paidByFeeId[fee.id] || 0);
++        const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
++        const computedStatus = remainingAmount === 0 ? "Paid" : fee.status;
++        const computedLastPaymentDate = fee.last_payment_date || lastPaymentDateByFeeId[fee.id];
++        return {
++          ...fee,
++          amount_paid: paidAmount,
++          remaining_amount: remainingAmount,
++          status: computedStatus,
++          last_payment_date: computedLastPaymentDate,
++          transactions: txnsByFeeId[fee.id] || [],
++        };
++      });
++
++      setFees(enrichedFees);
++    } else {
++      setFees([]);
++    }
++
++    setLoading(false);
++  }, [studentId]);
++
++  useEffect(() => {
++    if (!studentId) return;
++    const load = async () => {
++      await fetchFees();
++    };
++    load();
++  }, [studentId, fetchFees]);
++
++  const handleProofSubmit = async (feeId) => {
++    setUploadError("");
++    if (!proofFile) return setUploadError("Please select a screenshot or photo");
++    if (!refNumber.trim()) return setUploadError(paymentReferenceError);
++    if (!amount || isNaN(amount)) return setUploadError("Please enter amount paid");
++
++    setUploading(true);
++
++    // Upload proof to Supabase Storage
++    const path = buildProofPath(proofFile.name);
++    const { error: uploadErr } = await supabase.storage
++      .from("admission-documents")
++      .upload(path, proofFile);
++
++    if (uploadErr) {
++      setUploadError("File upload failed: " + uploadErr.message);
++      setUploading(false);
++      return;
++    }
++
++    const { data: urlData } = supabase.storage
++      .from("admission-documents")
++      .getPublicUrl(path);
++
++    // Insert payment transaction
++    const { error: txnErr } = await supabase
++      .from("payment_transactions")
++      .insert({
++        fee_id: feeId,
++        payment_method: selectedMethod,
++        amount: parseFloat(amount),
++        reference_number: refNumber,
++        proof_image_url: urlData.publicUrl,
++        status: "Pending Verification",
++      });
++
++    if (txnErr) {
++      setUploadError("Submission failed: " + txnErr.message);
++      setUploading(false);
++      return;
++    }
++
++    // Update fee status to Pending Verification
++    await supabase
++      .from("fees")
++      .update({ status: "Pending Verification" })
++      .eq("id", feeId);
++
++    setUploading(false);
++    setUploadSuccess(true);
++    setProofFile(null);
++    setRefNumber("");
++    setAmount("");
++    setShowProofForm(null);
++    setShowMethods(null);
++    fetchFees();
++  };
++
++  const statusBadge = (status, remainingAmount) => {
++    if (remainingAmount === 0) return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
++    if (status === "Paid") return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
++    if (status === "Partially Paid") return <span className="fee__badge fee__badge--pending">⚠️ Partially Paid</span>;
++    if (status === "Pending Verification") return <span className="fee__badge fee__badge--pending">⏳ Pending Verification</span>;
++    return <span className="fee__badge fee__badge--unpaid"><XCircle size={12} /> Unpaid</span>;
++  };
++
++  const isCashMethod = selectedMethod === "Cash in College Office";
++  const paymentReferenceLabel = isCashMethod ? "Receipt Number *" : "Transaction Reference Number *";
++  const paymentReferencePlaceholder = isCashMethod ? "e.g. RCPT-1001" : "e.g. TXN-123456";
++  const paymentReferenceError = isCashMethod ? "Please enter receipt number" : "Please enter transaction reference number";
++
++  if (loading) return <div className="fee"><p className="fee__loading">Loading fee records...</p></div>;
+ 
+   return (
+     <div className="fee">
+-      <div className="fee__card">
+-        <div className="fee__header">
+-          <h3>June 2026 Fee</h3>
+-          <span className="fee__badge fee__badge--unpaid"><XCircle size={12} /> Unpaid</span>
++      {uploadSuccess && (
++        <div className="fee__success-banner">
++          <CheckCircle size={16} /> Payment proof submitted successfully! Admin will verify within 24-48 hours.
+         </div>
+-        <p className="fee__amount">Rs 8,500</p>
+-        <p className="fee__due">Due Date: June 30, 2026</p>
+-        <button className="fee__pay-btn" onClick={() => setShowMethods(!showMethods)}>Pay Now <ChevronRight size={16} /></button>
+-
+-        {showMethods && (
+-          <div className="fee__methods">
+-            {methods.map((m) => (
+-              <div key={m.label} className="fee__method">
+-                <p>{m.label}</p>
+-                <span className={`fee__method-tag ${m.auto ? "fee__method-tag--auto" : "fee__method-tag--manual"}`}>
+-                  {m.auto ? "Auto-verify" : "Manual verify"}
+-                </span>
++      )}
++
++      {fees.length === 0 ? (
++        <div className="fee__card">
++          <p className="fee__empty">No fee records found</p>
++        </div>
++      ) : (
++        fees.map((f) => (
++          <div key={f.id} className="fee__card">
++            <div className="fee__header">
++              <h3>{f.program} — Fee</h3>
++              {statusBadge(f.status, Number(f.remaining_amount ?? 0))}
++            </div>
++            <p className="fee__amount">Rs {Number(f.remaining_amount ?? f.amount_due ?? 0).toLocaleString()} to pay</p>
++            {f.due_date && (
++              <p className="fee__due">Due Date: {new Date(f.due_date).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}</p>
++            )}
++            {f.last_payment_date && (
++              <p className="fee__due fee__due--paid">Paid on: {new Date(f.last_payment_date).toLocaleDateString("en-PK")}</p>
++            )}
++
++            {f.transactions && f.transactions.length > 0 && (
++              <div className="fee__payments">
++                <h4>Payments</h4>
++                {f.transactions.map((t) => (
++                  <div key={t.created_at + t.amount} className="fee__payment-row">
++                    <div className="fee__payment-info">
++                      <strong>Rs {Number(t.amount || 0).toLocaleString()}</strong>
++                      <span className="fee__payment-meta">{t.payment_method} • {t.reference_number || "—"}</span>
++                    </div>
++                    <div className="fee__payment-actions">
++                      <span className="fee__payment-date">{t.created_at ? new Date(t.created_at).toLocaleDateString("en-PK") : "—"}</span>
++                      {t.proof_image_url ? (
++                        <button onClick={() => window.open(t.proof_image_url, "_blank")} className="fee__view-receipt">View Receipt</button>
++                      ) : null}
++                    </div>
++                  </div>
++                ))}
+               </div>
+-            ))}
+-          </div>
+-        )}
+-        <div className="fee__working"><WorkingOnIt text="Payment gateway integration — pending merchant setup" /></div>
+-      </div>
+-
+-      <div className="fee__card">
+-        <h3>Payment History</h3>
+-        {history.map((h) => (
+-          <div key={h.month} className="fee__history-row">
+-            <span className="fee__muted">{h.month}</span>
+-            <span>{h.amount}</span>
+-            <span className="fee__badge fee__badge--paid"><CheckCircle size={11} /> {h.status}</span>
++            )}
++
++            {f.status !== "Paid" && Number(f.remaining_amount ?? 0) > 0 && (
++              <div className="fee__pay-section">
++                <button
++                  className="fee__pay-btn"
++                  onClick={() => { setShowMethods(showMethods === f.id ? null : f.id); setShowProofForm(null); setUploadSuccess(false); }}
++                >
++                  Pay Now {showMethods === f.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
++                </button>
++
++                {showMethods === f.id && (
++                  <div className="fee__methods">
++                    {/* College Accounts */}
++                    {COLLEGE_ACCOUNTS.map((acc) => (
++                      <div key={acc.method} className="fee__account-card">
++                        <div className="fee__account-header">
++                          <span>{acc.icon} {acc.method}</span>
++                        </div>
++                        {acc.details.map((d) => (
++                          <div key={d.label} className="fee__account-row">
++                            <span className="fee__account-label">{d.label}</span>
++                            <span className="fee__account-value">{d.value}</span>
++                          </div>
++                        ))}
++                      </div>
++                    ))}
++
++                    {/* Instructions */}
++                    <div className="fee__instructions">
++                      <p>📌 <strong>Instructions:</strong></p>
++                      <ol>
++                        <li>Transfer fee to any of the above accounts</li>
++                        <li>Take a screenshot or photo of the receipt</li>
++                        <li>Click "Upload Payment Proof" below</li>
++                        <li>Admin will verify within 24-48 hours</li>
++                      </ol>
++                    </div>
++
++                    {/* Upload Proof Button */}
++                    <button
++                      className="fee__upload-proof-btn"
++                      onClick={() => setShowProofForm(showProofForm === f.id ? null : f.id)}
++                    >
++                      <Upload size={15} /> Upload Payment Proof
++                    </button>
++
++                    {/* Proof Upload Form */}
++                    {showProofForm === f.id && (
++                      <div className="fee__proof-form">
++                        <div className="fee__proof-field">
++                          <label>Payment Method Used</label>
++                          <select value={selectedMethod} onChange={(e) => setSelectedMethod(e.target.value)}>
++                            <option>Easypaisa</option>
++                            <option>Bank Al Habib</option>
++                            <option>Raast</option>
++                            <option>Cash in College Office</option>
++                          </select>
++                        </div>
++                        <div className="fee__proof-field">
++                          <label>{paymentReferenceLabel}</label>
++                          <input
++                            placeholder={paymentReferencePlaceholder}
++                            value={refNumber}
++                            onChange={(e) => setRefNumber(e.target.value)}
++                          />
++                        </div>
++                        <div className="fee__proof-field">
++                          <label>Amount Paid (Rs) *</label>
++                          <input
++                            type="number"
++                            placeholder={`e.g. ${f.amount_due}`}
++                            value={amount}
++                            onChange={(e) => setAmount(e.target.value)}
++                          />
++                        </div>
++                        <div className="fee__proof-field">
++                          <label>Payment Screenshot / Photo *</label>
++                          <div className="fee__file-area" onClick={() => fileRef.current?.click()}>
++                            {proofFile ? (
++                              <p className="fee__file-name"><FileCheck size={14} /> {proofFile.name}</p>
++                            ) : (
++                              <p className="fee__file-placeholder"><Upload size={18} /> Click to select screenshot or photo</p>
++                            )}
++                          </div>
++                          <input
++                            type="file"
++                            accept="image/*,.pdf"
++                            ref={fileRef}
++                            onChange={(e) => setProofFile(e.target.files[0])}
++                            style={{ display: "none" }}
++                          />
++                        </div>
++                        {uploadError && <p className="fee__upload-error">{uploadError}</p>}
++                        <button
++                          onClick={() => handleProofSubmit(f.id)}
++                          disabled={uploading}
++                          className="fee__submit-proof-btn"
++                        >
++                          {uploading ? "Submitting..." : "Submit Payment Proof"}
++                        </button>
++                      </div>
++                    )}
++                  </div>
++                )}
++              </div>
++            )}
++
++            {f.status === "Pending Verification" && (
++              <div className="fee__pending-note">
++                ⏳ Your payment proof has been submitted and is under review. You will be notified once verified.
++              </div>
++            )}
+           </div>
+-        ))}
+-      </div>
++        ))
++      )}
+     </div>
+   );
+ }
+\ No newline at end of file
+diff --git a/src/components/FeeVerification/FeeVerification.css b/src/components/FeeVerification/FeeVerification.css
+index 5acd314..d90bfc7 100644
+--- a/src/components/FeeVerification/FeeVerification.css
++++ b/src/components/FeeVerification/FeeVerification.css
+@@ -1,5 +1,8 @@
+ .fee-v { display: flex; flex-direction: column; gap: 16px; }
+ .fee-v__tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
++.fee-v__year-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
++.fee-v__year-btn { border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--subtext); background: var(--card); }
++.fee-v__year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
+ .fee-v__tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); display: flex; align-items: center; justify-content: center; gap: 6px; }
+ .fee-v__tab--active { background: var(--accent); color: white; }
+ .fee-v__count { background: white; color: var(--accent); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+diff --git a/src/components/FeeVerification/FeeVerification.jsx b/src/components/FeeVerification/FeeVerification.jsx
+index 12cf90b..8bb4a29 100644
+--- a/src/components/FeeVerification/FeeVerification.jsx
++++ b/src/components/FeeVerification/FeeVerification.jsx
+@@ -1,81 +1,461 @@
+ import { useState, useEffect } from "react";
+-import { CheckCircle, XCircle, ChevronRight } from "lucide-react";
++import { Check, X, Eye } from "lucide-react";
+ import { supabase } from "../../lib/supabaseClient";
+ import "./FeeVerification.css";
+ 
+-export default function Fee({ studentId }) {
+-  const [fees, setFees] = useState([]);
++export default function FeeVerification() {
++  const [pending, setPending] = useState([]);
++  const [unpaidFees, setUnpaidFees] = useState([]);
++  const [yearFilter, setYearFilter] = useState("Both");
+   const [loading, setLoading] = useState(true);
+-  const [showMethods, setShowMethods] = useState(null);
++  const [processing, setProcessing] = useState(false);
++  const [activeTab, setActiveTab] = useState("pending");
++  const [allTransactions, setAllTransactions] = useState([]);
++  const [editingFeeId, setEditingFeeId] = useState(null);
++  const [feeAdjustmentAmount, setFeeAdjustmentAmount] = useState("");
++  const [savingAdjustment, setSavingAdjustment] = useState(false);
+ 
+-  const methods = [
+-    { label: "JazzCash / Card", auto: true },
+-    { label: "Easypaisa", auto: true },
+-    { label: "College Easypaisa Account\n03XX-XXXXXXX", auto: false },
+-    { label: "Bank Al Habib\nIBAN: PKXXBAHL XXXXXXXXXXXXXXXX", auto: false },
+-  ];
+-
+-  useEffect(() => {
+-    if (studentId) fetchFees();
+-  }, [studentId]);
+-
+-  const fetchFees = async () => {
++  const fetchPending = async () => {
+     setLoading(true);
+     const { data } = await supabase
+-      .from("fees")
++      .from("payment_transactions")
+       .select("*")
+-      .eq("student_id", studentId)
++      .eq("status", "Pending Verification")
+       .order("created_at", { ascending: false });
+-    if (data) setFees(data);
++
++    if (data) {
++      const enriched = await Promise.all(
++        data.map(async (txn) => {
++          const { data: fee } = await supabase
++            .from("fees")
++            .select("*, students(name, roll_no, program)")
++            .eq("id", txn.fee_id)
++            .single();
++          return { ...txn, fees: fee };
++        })
++      );
++      setPending(enriched);
++    }
+     setLoading(false);
+   };
+ 
++  const fetchUnpaidFees = async () => {
++    const { data: feesData } = await supabase
++      .from("fees")
++      .select("id, student_id, amount_due, amount_paid, due_date, status")
++      .order("due_date", { ascending: true });
++
++    if (feesData) {
++      const enriched = await Promise.all(
++        feesData.map(async (fee) => {
++          const { data: student } = await supabase
++            .from("students")
++            .select("id, name, roll_no, program, year_of_study")
++            .eq("id", fee.student_id)
++            .single();
++
++          const { data: transactions } = await supabase
++            .from("payment_transactions")
++            .select("amount, status")
++            .eq("fee_id", fee.id)
++            .eq("status", "Success");
++
++          const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
++          const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
++          return { ...fee, student, remaining_amount: remainingAmount };
++        })
++      );
++
++      setUnpaidFees(enriched.filter((fee) => Number(fee.remaining_amount || 0) > 0 && !["Paid"].includes(fee.status)));
++    }
++  };
++
++  const fetchAll = async () => {
++    const { data } = await supabase
++      .from("payment_transactions")
++      .select("*")
++      .order("created_at", { ascending: false })
++      .limit(20);
++
++    if (data) {
++      const enriched = await Promise.all(
++        data.map(async (txn) => {
++          const { data: fee } = await supabase
++            .from("fees")
++            .select("*, students(name, roll_no, program)")
++            .eq("id", txn.fee_id)
++            .single();
++          return { ...txn, fees: fee };
++        })
++      );
++      setAllTransactions(enriched);
++    }
++  };
++
++  useEffect(() => {
++    const loadData = async () => {
++      await fetchPending();
++      await fetchUnpaidFees();
++      await fetchAll();
++    };
++    loadData();
++  }, []);
++
++  const resolve = async (txn, newStatus) => {
++    setProcessing(true);
++    await supabase
++      .from("payment_transactions")
++      .update({ status: newStatus, verified_by: "Admin" })
++      .eq("id", txn.id);
++
++      if (newStatus === "Success") {
++      const { data: feeData, error: feeError } = await supabase
++        .from("fees")
++        .select("amount_due")
++        .eq("id", txn.fee_id)
++        .single();
++
++      const { data: successTxns, error: txnError } = await supabase
++        .from("payment_transactions")
++        .select("amount, created_at")
++        .eq("fee_id", txn.fee_id)
++        .eq("status", "Success");
++
++      if (feeError || txnError) {
++        console.error("Failed to resolve fee approval:", feeError || txnError);
++      }
++
++      const paidAmount = (successTxns || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
++      const latestPaymentDate = (successTxns || []).reduce((latest, t) => {
++        if (!t.created_at) return latest;
++        const txDate = new Date(t.created_at);
++        return !latest || txDate > latest ? txDate : latest;
++      }, null);
++      const remaining = Math.max(Number(feeData?.amount_due || 0) - paidAmount, 0);
++
++      await supabase
++        .from("fees")
++        .update({
++          status: remaining > 0 ? "Partially Paid" : "Paid",
++          amount_paid: paidAmount,
++          last_payment_date: latestPaymentDate ? latestPaymentDate.toISOString() : new Date().toISOString(),
++        })
++        .eq("id", txn.fee_id);
++    } else {
++      const { data: feeData } = await supabase
++        .from("fees")
++        .select("amount_due, amount_paid")
++        .eq("id", txn.fee_id)
++        .single();
++
++      const previousPaid = Number(feeData?.amount_paid || 0);
++      const remaining = Math.max(Number(feeData?.amount_due || 0) - previousPaid, 0);
++      await supabase
++        .from("fees")
++        .update({ status: remaining > 0 ? (previousPaid > 0 ? "Partially Paid" : "Unpaid") : "Paid" })
++        .eq("id", txn.fee_id);
++    }
++
++    setPending((p) => p.filter((t) => t.id !== txn.id));
++    setProcessing(false);
++    await fetchPending();
++    await fetchUnpaidFees();
++    await fetchAll();
++  };
++
+   const statusBadge = (status) => {
+-    if (status === "Paid") return <span className="fee__badge fee__badge--paid"><CheckCircle size={12} /> Paid</span>;
+-    if (status === "Pending Verification") return <span className="fee__badge fee__badge--pending">⏳ Pending Verification</span>;
+-    return <span className="fee__badge fee__badge--unpaid"><XCircle size={12} /> Unpaid</span>;
++    const map = {
++      "Pending Verification": "fee-v__badge--pending",
++      Success: "fee-v__badge--success",
++      Rejected: "fee-v__badge--rejected",
++      Failed: "fee-v__badge--rejected",
++    };
++    return (
++      <span className={"fee-v__badge " + (map[status] || "fee-v__badge--pending")}>
++        {status}
++      </span>
++    );
++  };
++
++  const openReceipt = (url) => {
++    window.open(url, "_blank");
++  };
++
++  const filteredUnpaidFees = unpaidFees.filter((fee) => {
++    if (yearFilter === "Both") return true;
++    return fee.student?.year_of_study === yearFilter;
++  });
++
++  const startFeeEdit = (fee) => {
++    setEditingFeeId(fee.id);
++    setFeeAdjustmentAmount(String(fee.amount_due || ""));
+   };
+ 
+-  if (loading) return <div className="fee"><p style={{ textAlign: "center", color: "var(--subtext)", padding: "32px" }}>Loading fee records...</p></div>;
++  const saveFeeAdjustment = async (fee) => {
++    if (!feeAdjustmentAmount || isNaN(feeAdjustmentAmount)) return;
++    setSavingAdjustment(true);
++
++    const { data: transactions } = await supabase
++      .from("payment_transactions")
++      .select("amount, status")
++      .eq("fee_id", fee.id)
++      .eq("status", "Success");
++
++    const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
++    const newRemainingAmount = Math.max(Number(feeAdjustmentAmount), 0);
++    const newTotalDue = paidAmount + newRemainingAmount;
++    const newStatus = newRemainingAmount > 0
++      ? (fee.status === "Pending Verification" ? "Pending Verification" : (paidAmount > 0 ? "Partially Paid" : "Unpaid"))
++      : "Paid";
++
++    const { error } = await supabase
++      .from("fees")
++      .update({
++        amount_due: newTotalDue,
++        amount_paid: paidAmount,
++        status: newStatus,
++      })
++      .eq("id", fee.id);
++
++    setSavingAdjustment(false);
++    if (error) {
++      alert("Failed to update fee amount: " + error.message);
++      return;
++    }
++    setEditingFeeId(null);
++    setFeeAdjustmentAmount("");
++    await fetchPending();
++    await fetchUnpaidFees();
++    await fetchAll();
++  };
+ 
+   return (
+-    <div className="fee">
+-      {fees.length === 0 ? (
+-        <div className="fee__card">
+-          <p style={{ textAlign: "center", color: "var(--subtext)", padding: "20px" }}>No fee records found</p>
+-        </div>
+-      ) : (
+-        fees.map((f) => (
+-          <div key={f.id} className="fee__card">
+-            <div className="fee__header">
+-              <h3>{f.program} — Fee</h3>
+-              {statusBadge(f.status)}
++    <div className="fee-v">
++      <div className="fee-v__tabs">
++        <button
++          onClick={() => setActiveTab("pending")}
++          className={"fee-v__tab " + (activeTab === "pending" ? "fee-v__tab--active" : "")}
++        >
++          Pending Verification
++          {pending.length > 0 && (
++            <span className="fee-v__count">{pending.length}</span>
++          )}
++        </button>
++        <button
++          onClick={() => setActiveTab("unpaid")}
++          className={"fee-v__tab " + (activeTab === "unpaid" ? "fee-v__tab--active" : "")}
++        >
++          Unpaid Fee
++          {unpaidFees.length > 0 && (
++            <span className="fee-v__count">{unpaidFees.length}</span>
++          )}
++        </button>
++        <button
++          onClick={() => setActiveTab("all")}
++          className={"fee-v__tab " + (activeTab === "all" ? "fee-v__tab--active" : "")}
++        >
++          All Transactions
++        </button>
++      </div>
++
++      {activeTab === "pending" && (
++        <div>
++          {loading ? (
++            <p className="fee-v__empty">Loading...</p>
++          ) : pending.length === 0 ? (
++            <div className="fee-v__empty">
++              <Check size={32} className="fee-v__empty-icon" />
++              <p>No pending verifications</p>
+             </div>
+-            <p className="fee__amount">Rs {f.amount_due?.toLocaleString()}</p>
+-            {f.due_date && <p className="fee__due">Due Date: {new Date(f.due_date).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}</p>}
+-            {f.last_payment_date && <p className="fee__due">Paid on: {new Date(f.last_payment_date).toLocaleDateString("en-PK")}</p>}
+-
+-            {f.status === "Unpaid" && (
+-              <>
+-                <button className="fee__pay-btn" onClick={() => setShowMethods(showMethods === f.id ? null : f.id)}>
+-                  Pay Now <ChevronRight size={16} />
+-                </button>
+-                {showMethods === f.id && (
+-                  <div className="fee__methods">
+-                    {methods.map((m) => (
+-                      <div key={m.label} className="fee__method">
+-                        <p>{m.label}</p>
+-                        <span className={`fee__method-tag ${m.auto ? "fee__method-tag--auto" : "fee__method-tag--manual"}`}>
+-                          {m.auto ? "Auto-verify" : "Manual verify"}
+-                        </span>
+-                      </div>
+-                    ))}
++          ) : (
++            <div className="fee-v__list">
++              {pending.map((p) => (
++                <div key={p.id} className="fee-v__card">
++                  <div className="fee-v__card-info">
++                    <p className="fee-v__student-name">
++                      {p.fees && p.fees.students ? p.fees.students.name : "Unknown"}
++                      <span>
++                        {" "}
++                        (
++                        {p.fees && p.fees.students
++                          ? p.fees.students.roll_no
++                          : "—"}
++                        )
++                      </span>
++                    </p>
++                    <p className="fee-v__meta">
++                      {p.payment_method} &bull; {p.payment_method === "Cash in College Office" ? "Receipt" : "Ref"}: {p.reference_number} &bull; Rs{" "}
++                      {p.amount ? p.amount.toLocaleString() : "—"}
++                    </p>
++                    <p className="fee-v__date">
++                      {new Date(p.created_at).toLocaleDateString("en-PK", {
++                        day: "numeric",
++                        month: "short",
++                        year: "numeric",
++                      })}
++                    </p>
+                   </div>
+-                )}
+-              </>
++                  <div className="fee-v__card-actions">
++                    {p.proof_image_url ? (
++                      <button
++                        onClick={() => openReceipt(p.proof_image_url)}
++                        className="fee-v__view"
++                      >
++                        <Eye size={14} /> Receipt
++                      </button>
++                    ) : null}
++                    <button
++                      onClick={() => resolve(p, "Success")}
++                      disabled={processing}
++                      className="fee-v__approve"
++                    >
++                      <Check size={13} /> Approve
++                    </button>
++                    <button
++                      onClick={() => resolve(p, "Rejected")}
++                      disabled={processing}
++                      className="fee-v__reject"
++                    >
++                      <X size={13} /> Reject
++                    </button>
++                  </div>
++                </div>
++              ))}
++            </div>
++          )}
++          <div className="fee-v__note">
++            <p>
++              Approving will mark fee as <strong>Paid</strong>. Rejecting will
++              keep it <strong>Unpaid</strong>.
++            </p>
++          </div>
++        </div>
++      )}
++
++      {activeTab === "unpaid" && (
++        <div>
++          <div className="fee-v__year-filters" role="group" aria-label="Filter by class year">
++            <button onClick={() => setYearFilter("1st Year")} className={"fee-v__year-btn " + (yearFilter === "1st Year" ? "fee-v__year-btn--active" : "")}>1st Year</button>
++            <button onClick={() => setYearFilter("2nd Year")} className={"fee-v__year-btn " + (yearFilter === "2nd Year" ? "fee-v__year-btn--active" : "")}>2nd Year</button>
++            <button onClick={() => setYearFilter("Both")} className={"fee-v__year-btn " + (yearFilter === "Both" ? "fee-v__year-btn--active" : "")}>Both</button>
++          </div>
++          <div className="fee-v__table-wrap">
++            {filteredUnpaidFees.length === 0 ? (
++              <p className="fee-v__empty">No unpaid fees found</p>
++            ) : (
++              <table className="fee-v__table">
++              <thead>
++                <tr>
++                  <th>Student</th>
++                  <th>Roll No</th>
++                  <th>Program</th>
++                  <th>Year</th>
++                  <th>Pending Fee</th>
++                  <th>Due Date</th>
++                  <th>Action</th>
++                </tr>
++              </thead>
++              <tbody>
++                {filteredUnpaidFees.map((fee) => (
++                  <tr key={fee.id}>
++                    <td>
++                      <p className="fee-v__student-name">
++                        {fee.student ? fee.student.name : "Unknown"}
++                      </p>
++                    </td>
++                    <td>{fee.student ? fee.student.roll_no : "—"}</td>
++                    <td>{fee.student ? fee.student.program : "—"}</td>
++                    <td>{fee.student && fee.student.year_of_study ? fee.student.year_of_study : "—"}</td>
++                    <td>Rs {fee.remaining_amount ? fee.remaining_amount.toLocaleString() : "—"}</td>
++                    <td>
++                      {fee.due_date ? new Date(fee.due_date).toLocaleDateString("en-PK", {
++                        day: "numeric",
++                        month: "short",
++                        year: "numeric",
++                      }) : "—"}
++                    </td>
++                    <td>
++                      {editingFeeId === fee.id ? (
++                        <div className="fee-v__edit-row">
++                          <input
++                            type="number"
++                            value={feeAdjustmentAmount}
++                            onChange={(e) => setFeeAdjustmentAmount(e.target.value)}
++                          />
++                          <button onClick={() => saveFeeAdjustment(fee)} disabled={savingAdjustment} className="fee-v__view">
++                            {savingAdjustment ? "Saving..." : "Save"}
++                          </button>
++                          <button onClick={() => setEditingFeeId(null)} className="fee-v__reject">Cancel</button>
++                        </div>
++                      ) : (
++                        <button onClick={() => startFeeEdit(fee)} className="fee-v__view">Edit Fee</button>
++                      )}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++              </table>
+             )}
+           </div>
+-        ))
++        </div>
++      )}
++
++      {activeTab === "all" && (
++        <div className="fee-v__table-wrap">
++          {allTransactions.length === 0 ? (
++            <p className="fee-v__empty">No transactions yet</p>
++          ) : (
++            <table className="fee-v__table">
++              <thead>
++                <tr>
++                  <th>Student</th>
++                  <th>Method</th>
++                  <th>Amount</th>
++                  <th>Reference</th>
++                  <th>Date</th>
++                  <th>Status</th>
++                  <th>Receipt</th>
++                </tr>
++              </thead>
++              <tbody>
++                {allTransactions.map((t) => (
++                  <tr key={t.id}>
++                    <td>
++                      <p className="fee-v__student-name">
++                        {t.fees && t.fees.students ? t.fees.students.name : "—"}
++                      </p>
++                      <p className="fee-v__roll">
++                        {t.fees && t.fees.students ? t.fees.students.roll_no : ""}
++                      </p>
++                    </td>
++                    <td>{t.payment_method}</td>
++                    <td>Rs {t.amount ? t.amount.toLocaleString() : "—"}</td>
++                    <td>{t.reference_number || "—"}</td>
++                    <td>
++                      {new Date(t.created_at).toLocaleDateString("en-PK", {
++                        day: "numeric",
++                        month: "short",
++                      })}
++                    </td>
++                    <td>{statusBadge(t.status)}</td>
++                    <td>
++                      {t.proof_image_url ? (
++                        <button
++                          onClick={() => openReceipt(t.proof_image_url)}
++                          className="fee-v__view"
++                        >
++                          <Eye size={14} /> View
++                        </button>
++                      ) : (
++                        "—"
++                      )}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          )}
++        </div>
+       )}
+     </div>
+   );
+diff --git a/src/components/MarkAttendance/MarkAttendance.css b/src/components/MarkAttendance/MarkAttendance.css
+index db27819..ff190a3 100644
+--- a/src/components/MarkAttendance/MarkAttendance.css
++++ b/src/components/MarkAttendance/MarkAttendance.css
+@@ -1,5 +1,8 @@
+ .mark-attendance { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+-.mark-attendance__toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
++.mark-attendance__toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
++.mark-attendance__year-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
++.mark-attendance__year-btn { border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--subtext); background: var(--card); }
++.mark-attendance__year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
+ .mark-attendance__field { display: flex; flex-direction: column; gap: 4px; }
+ .mark-attendance__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+ .mark-attendance__field select, .mark-attendance__field input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
+diff --git a/src/components/MarkAttendance/MarkAttendance.jsx b/src/components/MarkAttendance/MarkAttendance.jsx
+index 92414bb..64585bd 100644
+--- a/src/components/MarkAttendance/MarkAttendance.jsx
++++ b/src/components/MarkAttendance/MarkAttendance.jsx
+@@ -9,6 +9,7 @@ export default function MarkAttendance() {
+   const [students, setStudents] = useState([]);
+   const [records, setRecords] = useState({});
+   const [program, setProgram] = useState("Pre-Medical");
++  const [yearFilter, setYearFilter] = useState("Both");
+   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+   const [loading, setLoading] = useState(false);
+   const [saving, setSaving] = useState(false);
+@@ -17,7 +18,7 @@ export default function MarkAttendance() {
+ 
+   useEffect(() => {
+     fetchStudents();
+-  }, [program]);
++  }, [program, yearFilter]);
+ 
+   useEffect(() => {
+     if (students.length > 0) checkAlreadyMarked();
+@@ -25,11 +26,17 @@ export default function MarkAttendance() {
+ 
+   const fetchStudents = async () => {
+     setLoading(true);
+-    const { data } = await supabase
++    let query = supabase
+       .from("students")
+       .select("id, name, roll_no")
+       .eq("program", program)
+       .order("name");
++
++    if (yearFilter !== "Both") {
++      query = query.eq("year_of_study", yearFilter);
++    }
++
++    const { data } = await query;
+     if (data) {
+       setStudents(data);
+       const initial = {};
+@@ -93,6 +100,12 @@ export default function MarkAttendance() {
+         </div>
+       </div>
+ 
++      <div className="mark-attendance__year-filters" role="group" aria-label="Filter by class year">
++        <button onClick={() => setYearFilter("1st Year")} className={"mark-attendance__year-btn " + (yearFilter === "1st Year" ? "mark-attendance__year-btn--active" : "")}>1st Year</button>
++        <button onClick={() => setYearFilter("2nd Year")} className={"mark-attendance__year-btn " + (yearFilter === "2nd Year" ? "mark-attendance__year-btn--active" : "")}>2nd Year</button>
++        <button onClick={() => setYearFilter("Both")} className={"mark-attendance__year-btn " + (yearFilter === "Both" ? "mark-attendance__year-btn--active" : "")}>Both</button>
++      </div>
++
+       {alreadyMarked && !saved && (
+         <div className="mark-attendance__warning">
+           ⚠️ Attendance already marked for this date — saving will overwrite it.
+diff --git a/src/components/Overview/Overview.css b/src/components/Overview/Overview.css
+index f8c40a1..906bdef 100644
+--- a/src/components/Overview/Overview.css
++++ b/src/components/Overview/Overview.css
+@@ -1,7 +1,9 @@
+ .overview { display: flex; flex-direction: column; gap: 24px; }
+ .overview__welcome { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 12px; padding: 20px; color: white; }
++.overview__welcome-content { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+ .overview__welcome p { font-size: 13px; opacity: 0.85; }
+ .overview__welcome h2 { font-size: 20px; font-weight: 700; }
++.overview__profile-pic { width: 100px; height: 130px; object-fit: cover; border-radius: 8px; border: 3px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+ .overview__meta { font-size: 12px; margin-top: 4px; opacity: 0.85; }
+ .overview__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+ .overview__stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+diff --git a/src/components/Overview/Overview.jsx b/src/components/Overview/Overview.jsx
+index 28672b8..838073e 100644
+--- a/src/components/Overview/Overview.jsx
++++ b/src/components/Overview/Overview.jsx
+@@ -12,9 +12,16 @@ export default function Overview({ student }) {
+   return (
+     <div className="overview">
+       <div className="overview__welcome">
+-        <p>Welcome back,</p>
+-        <h2>{student?.name || "Student"}</h2>
+-        <p className="overview__meta">{student?.program} • Roll No: {student?.roll_no}</p>
++        <div className="overview__welcome-content">
++          <div>
++            <p>Welcome back,</p>
++            <h2>{student?.name || "Student"}</h2>
++            <p className="overview__meta">{student?.program} • Roll No: {student?.roll_no}</p>
++          </div>
++          {student?.profile_picture_url && (
++            <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" />
++          )}
++        </div>
+       </div>
+ 
+       <div className="overview__stats">
+diff --git a/src/components/StudentsList/StudentsList.css b/src/components/StudentsList/StudentsList.css
+index b241bf7..aac147b 100644
+--- a/src/components/StudentsList/StudentsList.css
++++ b/src/components/StudentsList/StudentsList.css
+@@ -1,17 +1,101 @@
+-.students-list__tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+-.students-list__tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); }
+-.students-list__tab--active { background: var(--accent); color: white; }
+-.students-list__add-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+-.students-list__add-form h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+-.students-list__add-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+-.students-list__add-field { display: flex; flex-direction: column; gap: 4px; }
+-.students-list__add-field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+-.students-list__add-field input, .students-list__add-field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
+-.students-list__form-error { color: #ef4444; font-size: 12px; margin-bottom: 8px; }
+-.students-list__form-success { color: #16a34a; font-size: 12px; margin-bottom: 8px; }
+-.students-list__save-btn { display: flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 8px; }
+-.students-list__save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+-.students-list__delete { display: flex; align-items: center; gap: 4px; color: #dc2626; font-size: 12px; font-weight: 500; }
+-.students-list__counts { display: flex; gap: 8px; flex-wrap: wrap; }
++.sl-wrap { display: flex; flex-direction: column; gap: 16px; }
++.sl-tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
++.sl-tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); }
++.sl-tab--active { background: var(--accent); color: white; }
++.sl-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
++.sl-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; flex: 1; max-width: 320px; color: var(--subtext); background: var(--card); }
++.sl-year-filters { display: flex; flex-wrap: wrap; gap: 6px; }
++.sl-year-btn { border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--subtext); background: var(--card); }
++.sl-year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
++.sl-search input { border: none; outline: none; font-size: 13px; width: 100%; background: transparent; color: var(--text); }
++.sl-counts { display: flex; gap: 8px; flex-wrap: wrap; }
++.sl-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
++.sl-badge--pending { background: #fef3c7; color: #b45309; }
++.sl-badge--approved { background: #dcfce7; color: #16a34a; }
++.sl-badge--rejected { background: #fee2e2; color: #dc2626; }
++.sl-empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; }
++.sl-table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
++.sl-table { width: 100%; font-size: 13px; border-collapse: collapse; }
++.sl-table thead { background: var(--bg); }
++.sl-table th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--subtext); font-weight: 600; text-transform: uppercase; }
++.sl-table td { padding: 10px 12px; border-top: 1px solid var(--border); color: var(--text); }
++.sl-name { font-weight: 500; }
++.sl-view-btn { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; font-weight: 500; }
++.sl-add-btn { display: flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 8px; }
++.sl-fee-btn { display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-size: 12px; font-weight: 500; border: 1px solid #86efac; padding: 4px 8px; border-radius: 6px; background: #f0fdf4; }
++.sl-picture-btn { display: inline-flex; align-items: center; gap: 4px; color: #2563eb; font-size: 12px; font-weight: 500; border: 1px solid #93c5fd; padding: 4px 8px; border-radius: 6px; background: #eff6ff; margin-left: 4px; }
+ 
+-@media (min-width: 640px) { .students-list__add-grid { grid-template-columns: 1fr 1fr; } }
+\ No newline at end of file
++/* Add Form */
++.sl-add-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
++.sl-add-form h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
++.sl-add-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
++.sl-add-field { display: flex; flex-direction: column; gap: 4px; }
++.sl-add-field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
++.sl-add-field input, .sl-add-field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; }
++.sl-form-error { color: #ef4444; font-size: 12px; margin-bottom: 8px; }
++.sl-form-success { color: #16a34a; font-size: 12px; margin-bottom: 8px; }
++.sl-save-btn { display: flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 8px; }
++.sl-save-btn:disabled { opacity: 0.6; }
++
++/* Detail Page */
++.sl-detail-page { display: flex; flex-direction: column; gap: 16px; }
++.sl-back-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 14px; font-weight: 500; }
++.sl-detail-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
++.sl-detail-header { background: linear-gradient(135deg, var(--accent), var(--accent-hover)); padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; }
++.sl-detail-header h2 { color: white; font-size: 18px; font-weight: 700; }
++.sl-detail-header p { color: rgba(255,255,255,0.8); font-size: 13px; margin-top: 3px; }
++.sl-detail-date { font-size: 12px; color: rgba(255,255,255,0.6); }
++.sl-detail-sections { display: grid; grid-template-columns: 1fr; }
++.sl-detail-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
++.sl-detail-section h3 { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
++.sl-detail-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
++.sl-detail-row:last-child { border-bottom: none; }
++.sl-detail-label { font-size: 13px; color: var(--subtext); }
++.sl-detail-value { font-size: 13px; color: var(--text); font-weight: 500; text-align: right; max-width: 60%; }
++.sl-doc-link { display: block; color: var(--accent); font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
++.sl-doc-link:last-child { border-bottom: none; }
++.sl-no-docs { color: var(--subtext); font-size: 13px; }
++.sl-detail-actions { padding: 16px 20px; border-top: 1px solid var(--border); }
++.sl-fee-notice { display: flex; align-items: center; gap: 8px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: #92400e; }
++.sl-action-btns { display: flex; gap: 10px; }
++.sl-approve-btn { flex: 1; background: #16a34a; color: white; font-weight: 600; font-size: 14px; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
++.sl-approve-btn:disabled { opacity: 0.6; }
++.sl-reject-btn { flex: 1; background: #fee2e2; color: #dc2626; font-weight: 600; font-size: 14px; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
++.sl-already-approved { display: flex; align-items: center; gap: 8px; background: #dcfce7; color: #16a34a; font-size: 13px; font-weight: 500; padding: 14px 20px; }
++.sl-already-rejected { display: flex; align-items: center; gap: 8px; background: #fee2e2; color: #dc2626; font-size: 13px; font-weight: 500; padding: 14px 20px; }
++
++/* Modal */
++.sl-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
++.sl-modal { background: var(--card); border-radius: 12px; padding: 24px; width: 100%; max-width: 440px; }
++.sl-modal h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
++.sl-modal-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
++.sl-modal-info { font-size: 14px; color: var(--subtext); margin-bottom: 8px; }
++.sl-modal-fee-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0; font-size: 14px; color: var(--text); line-height: 1.8; }
++.sl-modal-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); margin: 12px 0; cursor: pointer; line-height: 1.5; }
++.sl-modal-field { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
++.sl-modal-field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
++.sl-modal-field input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--bg); color: var(--text); font-family: inherit; }
++.sl-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
++.sl-modal-cancel { flex: 1; border: 1px solid var(--border); color: var(--subtext); font-size: 14px; padding: 10px; border-radius: 8px; background: var(--bg); }
++.sl-modal-save { flex: 1; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
++.sl-modal-save:disabled { opacity: 0.6; cursor: not-allowed; }
++
++@media (min-width: 640px) {
++  .sl-add-grid { grid-template-columns: 1fr 1fr; }
++  .sl-detail-sections { grid-template-columns: 1fr 1fr; }
++}
++
++/* Image Upload Section */
++.sl-add-image-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
++.sl-image-label { font-size: 12px; color: var(--subtext); font-weight: 500; display: block; margin-bottom: 8px; }
++.sl-image-upload { display: flex; flex-direction: column; gap: 10px; }
++.sl-image-upload-btn { display: flex; align-items: center; gap: 8px; background: var(--card); border: 2px dashed var(--border); border-radius: 8px; padding: 12px; font-size: 13px; color: var(--accent); font-weight: 500; cursor: pointer; transition: all 0.2s; }
++.sl-image-upload-btn:hover { border-color: var(--accent); background: var(--bg); }
++.sl-image-preview { position: relative; display: inline-block; }
++.sl-image-preview img { width: 120px; height: 140px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
++.sl-image-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: #ef4444; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
++
++/* Student Picture in Table */
++.sl-pic-cell { width: 50px; text-align: center; }
++.sl-student-pic { width: 40px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
++.sl-pic-placeholder { display: flex; align-items: center; justify-content: center; width: 40px; height: 50px; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); color: var(--subtext); font-size: 12px; }
+\ No newline at end of file
+diff --git a/src/components/StudentsList/StudentsList.jsx b/src/components/StudentsList/StudentsList.jsx
+index de62e84..433551b 100644
+--- a/src/components/StudentsList/StudentsList.jsx
++++ b/src/components/StudentsList/StudentsList.jsx
+@@ -1,9 +1,76 @@
+ import { useState, useEffect } from "react";
+-import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save } from "lucide-react";
++import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Image as ImageIcon } from "lucide-react";
+ import { supabase } from "../../lib/supabaseClient";
+ import "./StudentsList.css";
+ 
+ const PROGRAMS = ["Pre-Engineering", "Pre-Medical", "ICS", "General Science", "Humanities"];
++const ADMISSION_FEE = 12500;
++const FEE_AMOUNTS = {
++  "Pre-Engineering": 3000,
++  "Pre-Medical": 3000,
++  "ICS": 3000,
++  "General Science": 3000,
++  "Humanities": 2500,
++};
++
++const normalizeWhatsAppNumber = (value) => {
++  if (!value) return "";
++  const digits = String(value).replace(/\D/g, "");
++  if (!digits) return "";
++  if (digits.startsWith("92")) return `+${digits}`;
++  if (digits.startsWith("0")) return `+92${digits.slice(1)}`;
++  return `+${digits}`;
++};
++
++const buildCredentialsMessage = (studentName, rollNo, password) => {
++  return [
++    `Assalamualaikum ${studentName},`,
++    "",
++    "Your CMGC student portal credentials are ready.",
++    "",
++    `Student ID: ${rollNo}`,
++    `Password: ${password}`,
++    "",
++    "Please use these details to login to the CMGC portal.",
++    "Thank you.",
++  ].join("\n");
++};
++
++const shareCredentials = (application, rollNo, password) => {
++  let email = (application?.email || "").trim();
++  let whatsapp = (application?.whatsapp || "").trim();
++
++  if (!email && !whatsapp) {
++    const enteredEmail = window.prompt("Student email is missing. Enter an email address to receive the credentials:", "");
++    if (enteredEmail && enteredEmail.trim()) {
++      email = enteredEmail.trim();
++    }
++    const enteredWhatsApp = window.prompt("Student WhatsApp number is missing. Enter a WhatsApp number (03XXXXXXXXX):", "");
++    if (enteredWhatsApp && enteredWhatsApp.trim()) {
++      whatsapp = enteredWhatsApp.trim();
++    }
++  }
++
++  if (!email && !whatsapp) {
++    alert("Please provide at least one contact detail (email or WhatsApp) before sending credentials.");
++    return false;
++  }
++
++  const body = encodeURIComponent(buildCredentialsMessage(application?.student_name || "Student", rollNo, password));
++
++  if (email) {
++    const mailto = `mailto:${email}?subject=${encodeURIComponent("CMGC Student Portal Credentials")}&body=${body}`;
++    window.open(mailto, "_blank", "noopener,noreferrer");
++  }
++
++  if (whatsapp) {
++    const normalized = normalizeWhatsAppNumber(whatsapp);
++    const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
++    window.open(waUrl, "_blank", "noopener,noreferrer");
++  }
++
++  return true;
++};
+ 
+ export default function StudentsList() {
+   const [applications, setApplications] = useState([]);
+@@ -12,17 +79,35 @@ export default function StudentsList() {
+   const [search, setSearch] = useState("");
+   const [selected, setSelected] = useState(null);
+   const [activeTab, setActiveTab] = useState("applications");
++  const [yearFilter, setYearFilter] = useState("Both");
+   const [showAddForm, setShowAddForm] = useState(false);
+   const [saving, setSaving] = useState(false);
+   const [saved, setSaved] = useState(false);
+   const [form, setForm] = useState({
+-    roll_no: "", name: "", father_name: "", program: "Pre-Medical", phone: "", password: "",
++    roll_no: "", name: "", father_name: "", program: "Pre-Medical",
++    phone: "", password: "", year_of_study: "1st Year",
+   });
++  const [profileImage, setProfileImage] = useState(null);
++  const [profileImagePreview, setProfileImagePreview] = useState(null);
+   const [formError, setFormError] = useState("");
++  const [showFeeModal, setShowFeeModal] = useState(null);
++  const [feeAmount, setFeeAmount] = useState("");
++  const [feeDueDate, setFeeDueDate] = useState("");
++  const [showPictureModal, setShowPictureModal] = useState(null);
++  const [uploadingPicture, setUploadingPicture] = useState(false);
++  const [pictureTempImage, setPictureTempImage] = useState(null);
++  const [pictureTempPreview, setPictureTempPreview] = useState(null);
++  const [allocating, setAllocating] = useState(false);
++  const [approving, setApproving] = useState(false);
++  const [showAdmissionFeeModal, setShowAdmissionFeeModal] = useState(false);
++  const [admissionFeeConfirmed, setAdmissionFeeConfirmed] = useState(false);
+ 
+   useEffect(() => {
+     fetchApplications();
+     fetchStudents();
++    const now = new Date();
++    const due = new Date(now.getFullYear(), now.getMonth() + 1, 28);
++    setFeeDueDate(due.toISOString().split("T")[0]);
+   }, []);
+ 
+   const fetchApplications = async () => {
+@@ -43,10 +128,108 @@ export default function StudentsList() {
+     if (data) setStudents(data);
+   };
+ 
+-  const updateStatus = async (id, status) => {
+-    await supabase.from("applications").update({ status }).eq("id", id);
+-    setApplications((prev) => prev.map((a) => a.id === id ? { ...a, status } : a));
+-    if (selected?.id === id) setSelected((p) => ({ ...p, status }));
++  const handleApprove = () => {
++    setAdmissionFeeConfirmed(false);
++    setShowAdmissionFeeModal(true);
++  };
++
++  const doApprove = async () => {
++    if (!selected) return;
++    setApproving(true);
++    setShowAdmissionFeeModal(false);
++
++    const { error: appError } = await supabase
++      .from("applications")
++      .update({ status: "Approved" })
++      .eq("id", selected.id);
++
++    if (appError) {
++      alert("Failed to update application: " + appError.message);
++      setApproving(false);
++      return;
++    }
++
++    const { count } = await supabase
++      .from("students")
++      .select("*", { count: "exact", head: true });
++    const year = new Date().getFullYear();
++    const rollNo = "CMGC-" + year + "-" + String(Date.now()).slice(-5);
++    const defaultPassword = selected.bform
++      ? selected.bform.replace(/-/g, "").slice(-6)
++      : "cmgc123";
++
++    const { data: newStudent, error: studentError } = await supabase
++      .from("students")
++      .insert({
++        roll_no: rollNo,
++        name: selected.student_name,
++        father_name: selected.father_name,
++        program: selected.group_selected || selected.program,
++        phone: selected.phone1,
++        password: defaultPassword,
++        cnic: selected.bform,
++        year_of_study: selected.year_of_study || "1st Year",
++        profile_picture_url: selected.photo_url || null,
++      })
++      .select()
++      .single();
++
++    if (studentError) {
++      alert("Student enroll failed: " + studentError.message);
++      setApproving(false);
++      return;
++    }
++
++    if (newStudent) {
++      const admDue = new Date();
++      admDue.setDate(admDue.getDate() + 7);
++      const { error: feeError } = await supabase.from("fees").insert({
++        student_id: newStudent.id,
++        program: selected.group_selected || selected.program,
++        amount_due: ADMISSION_FEE,
++        due_date: admDue.toISOString().split("T")[0],
++        status: "Unpaid",
++      });
++      if (feeError) alert("Fee allocation failed: " + feeError.message);
++
++      const credentialsShared = shareCredentials(selected, rollNo, defaultPassword);
++      if (!credentialsShared) {
++        setApproving(false);
++        setAdmissionFeeConfirmed(false);
++        return;
++      }
++
++      const updatedApp = { ...selected, status: "Approved" };
++      setApplications((prev) => prev.map((a) => a.id === selected.id ? updatedApp : a));
++      setSelected(updatedApp);
++      await fetchStudents();
++
++      alert(
++        "Student Enrolled Successfully!\n\n" +
++        "Name: " + selected.student_name + "\n" +
++        "Roll No: " + rollNo + "\n" +
++        "Year: " + (selected.year_of_study || "1st Year") + "\n" +
++        "Password: " + defaultPassword + "\n" +
++        "Admission Fee Due: Rs " + ADMISSION_FEE.toLocaleString() + "\n\n" +
++        "The login credentials were prepared for delivery via email or WhatsApp."
++      );
++    }
++
++    setApproving(false);
++    setAdmissionFeeConfirmed(false);
++  };
++
++  const handleReject = async () => {
++    if (!selected) return;
++    if (!window.confirm("Are you sure you want to reject this application?")) return;
++    const { error } = await supabase
++      .from("applications")
++      .update({ status: "Rejected" })
++      .eq("id", selected.id);
++    if (error) { alert("Error: " + error.message); return; }
++    const updatedApp = { ...selected, status: "Rejected" };
++    setApplications((prev) => prev.map((a) => a.id === selected.id ? updatedApp : a));
++    setSelected(updatedApp);
+   };
+ 
+   const addStudent = async () => {
+@@ -55,8 +238,46 @@ export default function StudentsList() {
+     if (!form.name.trim()) return setFormError("Name is required");
+     if (!form.password.trim()) return setFormError("Password is required");
+     if (form.password.length < 6) return setFormError("Password must be at least 6 characters");
+-
+     setSaving(true);
++
++    let profileImageUrl = null;
++
++    // Upload image to Supabase Storage if provided
++    if (profileImage) {
++      try {
++        const fileExt = profileImage.name.split('.').pop().toLowerCase();
++        const fileName = `${form.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
++
++        // Try upload with upsert option
++        const { error: uploadError } = await supabase.storage
++          .from('student-profiles')
++          .upload(fileName, profileImage, {
++            cacheControl: '3600',
++            upsert: true
++          });
++
++        if (uploadError) {
++          console.error("Upload detailed error:", uploadError);
++          throw new Error(uploadError.message || "Upload failed");
++        }
++
++        // Get public URL
++        const { data: publicUrlData } = supabase.storage
++          .from('student-profiles')
++          .getPublicUrl(fileName);
++        
++        profileImageUrl = publicUrlData?.publicUrl || null;
++        
++        if (!profileImageUrl) {
++          throw new Error("Could not generate public URL");
++        }
++      } catch (error) {
++        setSaving(false);
++        setFormError("Image upload failed: " + (error?.message || "Unknown error"));
++        return;
++      }
++    }
++
+     const { error } = await supabase.from("students").insert({
+       roll_no: form.roll_no,
+       name: form.name,
+@@ -64,104 +285,316 @@ export default function StudentsList() {
+       program: form.program,
+       phone: form.phone,
+       password: form.password,
++      year_of_study: form.year_of_study,
++      profile_picture_url: profileImageUrl,
+     });
+     setSaving(false);
+-
+     if (error) {
+       if (error.code === "23505") setFormError("Roll number already exists");
+-      else setFormError("Error saving student: " + error.message);
++      else setFormError("Error: " + error.message);
+       return;
+     }
+-
+     setSaved(true);
+-    setForm({ roll_no: "", name: "", father_name: "", program: "Pre-Medical", phone: "", password: "" });
++    setForm({ roll_no: "", name: "", father_name: "", program: "Pre-Medical", phone: "", password: "", year_of_study: "1st Year" });
++    setProfileImage(null);
++    setProfileImagePreview(null);
+     fetchStudents();
+     setTimeout(() => setSaved(false), 3000);
+   };
+ 
+-  const deleteStudent = async (id) => {
+-    if (!window.confirm("Are you sure you want to delete this student?")) return;
+-    await supabase.from("students").delete().eq("id", id);
+-    setStudents((p) => p.filter((s) => s.id !== id));
++  const handleImageSelect = (e) => {
++    const file = e.target.files?.[0];
++    if (file) {
++      // Validate file type
++      if (!file.type.startsWith('image/')) {
++        setFormError("Please select a valid image file");
++        return;
++      }
++      // Validate file size (max 5MB)
++      if (file.size > 5 * 1024 * 1024) {
++        setFormError("Image must be less than 5MB");
++        return;
++      }
++      setProfileImage(file);
++      const reader = new FileReader();
++      reader.onload = (e) => setProfileImagePreview(e.target?.result);
++      reader.readAsDataURL(file);
++      setFormError("");
++    }
++  };
++
++  const handlePictureImageSelect = (e) => {
++    const file = e.target.files?.[0];
++    if (file) {
++      if (!file.type.startsWith('image/')) {
++        alert("Please select a valid image file");
++        return;
++      }
++      if (file.size > 5 * 1024 * 1024) {
++        alert("Image must be less than 5MB");
++        return;
++      }
++      setPictureTempImage(file);
++      const reader = new FileReader();
++      reader.onload = (e) => setPictureTempPreview(e.target?.result);
++      reader.readAsDataURL(file);
++    }
++  };
++
++  const uploadStudentPicture = async () => {
++    if (!showPictureModal || !pictureTempImage) return;
++    setUploadingPicture(true);
++
++    try {
++      const fileExt = pictureTempImage.name.split('.').pop().toLowerCase();
++      const fileName = `${showPictureModal.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
++
++      const { error: uploadError } = await supabase.storage
++        .from('student-profiles')
++        .upload(fileName, pictureTempImage, {
++          cacheControl: '3600',
++          upsert: true
++        });
++
++      if (uploadError) throw uploadError;
++
++      const { data: publicUrlData } = supabase.storage
++        .from('student-profiles')
++        .getPublicUrl(fileName);
++
++      const pictureUrl = publicUrlData?.publicUrl;
++      if (!pictureUrl) throw new Error("Could not generate public URL");
++
++      // Update student record
++      const { error: updateError } = await supabase
++        .from('students')
++        .update({ profile_picture_url: pictureUrl })
++        .eq('id', showPictureModal.id);
++
++      if (updateError) throw updateError;
++
++      // Update local state
++      setStudents((prev) =>
++        prev.map((s) =>
++          s.id === showPictureModal.id ? { ...s, profile_picture_url: pictureUrl } : s
++        )
++      );
++
++      alert("Picture uploaded successfully!");
++      setShowPictureModal(null);
++      setPictureTempImage(null);
++      setPictureTempPreview(null);
++    } catch (error) {
++      alert("Picture upload failed: " + (error?.message || "Unknown error"));
++    } finally {
++      setUploadingPicture(false);
++    }
++  };
++
++  const openFeeModal = (student) => {
++    setShowFeeModal(student);
++    setFeeAmount(String(FEE_AMOUNTS[student.program] || 3000));
++    const now = new Date();
++    const due = new Date(now.getFullYear(), now.getMonth() + 1, 28);
++    setFeeDueDate(due.toISOString().split("T")[0]);
++  };
++
++  const allocateFee = async () => {
++    if (!feeAmount || !feeDueDate) return alert("Please fill all fee fields");
++    setAllocating(true);
++    const { error } = await supabase.from("fees").insert({
++      student_id: showFeeModal.id,
++      program: showFeeModal.program,
++      amount_due: parseFloat(feeAmount),
++      due_date: feeDueDate,
++      status: "Unpaid",
++    });
++    setAllocating(false);
++    if (error) alert("Error: " + error.message);
++    else { alert("Fee allocated for " + showFeeModal.name); setShowFeeModal(null); }
++  };
++
++  const changeYear = async (student, newYear) => {
++    const confirmed = window.confirm(
++      "Confirm year change for " + student.name + "?\n" +
++      "Current: " + (student.year_of_study || "1st Year") + "\n" +
++      "New: " + newYear
++    );
++    if (!confirmed) return;
++    const { error } = await supabase
++      .from("students")
++      .update({ year_of_study: newYear })
++      .eq("id", student.id);
++    if (error) { alert("Error: " + error.message); return; }
++    setStudents((prev) =>
++      prev.map((s) => s.id === student.id ? { ...s, year_of_study: newYear } : s)
++    );
+   };
+ 
+   const statusBadge = (status) => {
+-    if (status === "Approved") return <span className="students-list__badge students-list__badge--approved"><CheckCircle size={11} /> Approved</span>;
+-    if (status === "Rejected") return <span className="students-list__badge students-list__badge--rejected"><XCircle size={11} /> Rejected</span>;
+-    return <span className="students-list__badge students-list__badge--pending"><Clock size={11} /> Pending</span>;
++    if (status === "Approved") return <span className="sl-badge sl-badge--approved"><CheckCircle size={12} /> Approved</span>;
++    if (status === "Rejected") return <span className="sl-badge sl-badge--rejected"><XCircle size={12} /> Rejected</span>;
++    return <span className="sl-badge sl-badge--pending"><Clock size={12} /> Pending</span>;
+   };
+ 
+-  const filteredApps = applications.filter((a) =>
+-    a.student_name?.toLowerCase().includes(search.toLowerCase()) ||
+-    a.program?.toLowerCase().includes(search.toLowerCase())
++  const Row = ({ label, value }) => (
++    <div className="sl-detail-row">
++      <span className="sl-detail-label">{label}</span>
++      <span className="sl-detail-value">{value || "—"}</span>
++    </div>
+   );
+ 
+-  const filteredStudents = students.filter((s) =>
+-    s.name?.toLowerCase().includes(search.toLowerCase()) ||
+-    s.roll_no?.includes(search) ||
+-    s.program?.toLowerCase().includes(search.toLowerCase())
++  const ApproveSection = () => (
++    <div className="sl-detail-actions">
++      <div className="sl-fee-notice">
++        <DollarSign size={16} />
++        <p>Admission fee of <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong> must be collected before approving.</p>
++      </div>
++      <div className="sl-action-btns">
++        <button onClick={handleReject} className="sl-reject-btn">
++          <XCircle size={16} /> Reject Application
++        </button>
++        <button onClick={handleApprove} disabled={approving} className="sl-approve-btn">
++          <CheckCircle size={16} /> {approving ? "Processing..." : "Approve & Enroll"}
++        </button>
++      </div>
++    </div>
+   );
+ 
++  const normalizedYear = (value) => value || "1st Year";
++
++  const filteredApps = applications.filter((a) => {
++    const matchesSearch =
++      a.student_name?.toLowerCase().includes(search.toLowerCase()) ||
++      a.program?.toLowerCase().includes(search.toLowerCase()) ||
++      a.phone1?.includes(search);
++    const matchesYear = yearFilter === "Both" || normalizedYear(a.year_of_study) === yearFilter;
++    return matchesSearch && matchesYear;
++  });
++
++  const filteredStudents = students.filter((s) => {
++    const matchesSearch =
++      s.name?.toLowerCase().includes(search.toLowerCase()) ||
++      s.roll_no?.includes(search) ||
++      s.program?.toLowerCase().includes(search.toLowerCase());
++    const matchesYear = yearFilter === "Both" || normalizedYear(s.year_of_study) === yearFilter;
++    return matchesSearch && matchesYear;
++  });
++
+   // Application Detail View
+   if (selected) {
+     return (
+-      <div className="students-list">
+-        <button onClick={() => setSelected(null)} className="students-list__back">← Back to List</button>
+-        <div className="students-list__detail">
+-          <div className="students-list__detail-header">
++      <div className="sl-detail-page">
++        {showAdmissionFeeModal && (
++          <div className="sl-modal-overlay">
++            <div className="sl-modal">
++              <h3>Confirm Admission Fee Receipt</h3>
++              <div className="sl-modal-fee-box">
++                <p>Student: <strong>{selected.student_name}</strong></p>
++                <p>Year: <strong>{selected.year_of_study || "1st Year"}</strong></p>
++                <p>Admission Fee: <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong></p>
++              </div>
++              <label className="sl-modal-check">
++                <input
++                  type="checkbox"
++                  checked={admissionFeeConfirmed}
++                  onChange={(e) => setAdmissionFeeConfirmed(e.target.checked)}
++                />
++                I confirm that Rs {ADMISSION_FEE.toLocaleString()} admission fee has been received.
++              </label>
++              <div className="sl-modal-actions">
++                <button onClick={() => { setShowAdmissionFeeModal(false); setAdmissionFeeConfirmed(false); }} className="sl-modal-cancel">Cancel</button>
++                <button onClick={doApprove} disabled={!admissionFeeConfirmed || approving} className="sl-modal-save">
++                  <CheckCircle size={14} /> {approving ? "Enrolling..." : "Approve & Enroll"}
++                </button>
++              </div>
++            </div>
++          </div>
++        )}
++
++        <button onClick={() => setSelected(null)} className="sl-back-btn">
++          <ArrowLeft size={16} /> Back to Applications
++        </button>
++
++        <div className="sl-detail-card">
++          <div className="sl-detail-header">
+             <div>
+               <h2>{selected.student_name}</h2>
+-              <p>{selected.program} — {selected.group_selected}</p>
++              <p>{selected.group_selected || selected.program} — {selected.year_of_study || "1st Year"}</p>
++              <p className="sl-detail-date">
++                Applied: {new Date(selected.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}
++              </p>
+             </div>
+             {statusBadge(selected.status)}
+           </div>
+-          <div className="students-list__detail-grid">
+-            <div className="students-list__detail-section">
++
++          <div className="sl-detail-sections">
++            <div className="sl-detail-section">
+               <h3>Personal Information</h3>
+-              <p><span>Father's Name</span><strong>{selected.father_name}</strong></p>
+-              <p><span>Date of Birth</span><strong>{selected.dob}</strong></p>
+-              <p><span>B-Form</span><strong>{selected.bform}</strong></p>
+-              <p><span>Father's NIC</span><strong>{selected.father_cnic}</strong></p>
+-              <p><span>Nationality</span><strong>{selected.nationality}</strong></p>
+-              <p><span>Religion</span><strong>{selected.religion}</strong></p>
+-              <p><span>Orphan</span><strong>{selected.orphan ? "Yes" : "No"}</strong></p>
+-              <p><span>Father's Occupation</span><strong>{selected.father_occupation}</strong></p>
+-              <p><span>Monthly Income</span><strong>Rs {selected.monthly_income}</strong></p>
+-              <p><span>Family Members</span><strong>{selected.family_members}</strong></p>
+-              <p><span>Financial Assistance</span><strong>{selected.financial_assistance ? "Yes" : "No"}</strong></p>
++              <Row label="Student Name" value={selected.student_name} />
++              <Row label="Father's Name" value={selected.father_name} />
++              <Row label="Date of Birth" value={selected.dob} />
++              <Row label="B-Form No." value={selected.bform} />
++              <Row label="Father's NIC" value={selected.father_cnic} />
++              <Row label="Nationality" value={selected.nationality} />
++              <Row label="Religion" value={selected.religion} />
++              <Row label="Orphan" value={selected.orphan ? "Yes" : "No"} />
++              <Row label="Father's Occupation" value={selected.father_occupation} />
++              <Row label="Monthly Income" value={selected.monthly_income ? "Rs " + selected.monthly_income : null} />
++              <Row label="Family Members" value={selected.family_members} />
++              <Row label="Financial Assistance" value={selected.financial_assistance ? "Required" : "Not Required"} />
+             </div>
+-            <div className="students-list__detail-section">
++            <div className="sl-detail-section">
+               <h3>Contact Information</h3>
+-              <p><span>Phone 1</span><strong>{selected.phone1}</strong></p>
+-              <p><span>Phone 2</span><strong>{selected.phone2}</strong></p>
+-              <p><span>WhatsApp</span><strong>{selected.whatsapp}</strong></p>
+-              <p><span>Email</span><strong>{selected.email}</strong></p>
+-              <p><span>Address</span><strong>{selected.address}</strong></p>
++              <Row label="Phone 1" value={selected.phone1} />
++              <Row label="Phone 2" value={selected.phone2} />
++              <Row label="WhatsApp" value={selected.whatsapp} />
++              <Row label="Email" value={selected.email} />
++              <Row label="Address" value={selected.address} />
+             </div>
+-            <div className="students-list__detail-section">
+-              <h3>SSC Information</h3>
+-              <p><span>Roll No</span><strong>{selected.ssc_roll_no}</strong></p>
+-              <p><span>Reg No</span><strong>{selected.ssc_registration_no}</strong></p>
+-              <p><span>Marks Obtained</span><strong>{selected.matric_marks_obtained}</strong></p>
+-              <p><span>Total Marks</span><strong>{selected.matric_total_marks}</strong></p>
+-              <p><span>Percentage</span><strong>{selected.matric_percentage}%</strong></p>
+-              <p><span>Board</span><strong>{selected.board}</strong></p>
+-              <p><span>Group</span><strong>{selected.student_group}</strong></p>
++            <div className="sl-detail-section">
++              <h3>SSC (Matric) Information</h3>
++              <Row label="Roll No." value={selected.ssc_roll_no} />
++              <Row label="Registration No." value={selected.ssc_registration_no} />
++              <Row label="Marks Obtained" value={selected.matric_marks_obtained} />
++              <Row label="Total Marks" value={selected.matric_total_marks} />
++              <Row label="Percentage" value={selected.matric_percentage ? selected.matric_percentage + "%" : null} />
++              <Row label="Board" value={selected.board} />
++              <Row label="Group" value={selected.student_group} />
+             </div>
+-            <div className="students-list__detail-section">
+-              <h3>Documents</h3>
+-              {selected.photo_url && <a href={selected.photo_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📷 Student Photo</a>}
+-              {selected.bform_doc_url && <a href={selected.bform_doc_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📄 B-Form</a>}
+-              {selected.father_id_doc_url && <a href={selected.father_id_doc_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📄 Father's NIC</a>}
+-              {selected.marksheet_url && <a href={selected.marksheet_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📄 Marksheet</a>}
+-              {selected.noc_url && <a href={selected.noc_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📄 NOC</a>}
+-              {selected.verified_marksheet_url && <a href={selected.verified_marksheet_url} target="_blank" rel="noopener noreferrer" className="students-list__doc-link">📄 Verified Marksheet</a>}
++            <div className="sl-detail-section">
++              <h3>HSSC-I Admission</h3>
++              <Row label="Program" value={selected.program} />
++              <Row label="Group Selected" value={selected.group_selected} />
++              <Row label="Year of Admission" value={selected.year_of_study || "1st Year"} />
++              
++            </div>
++            <div className="sl-detail-section">
++              <h3>Uploaded Documents</h3>
++              {selected.photo_url && <a href={selected.photo_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📷 Student Photo</a>}
++              {selected.bform_doc_url && <a href={selected.bform_doc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 B-Form</a>}
++              {selected.father_id_doc_url && <a href={selected.father_id_doc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Father NIC</a>}
++              {selected.marksheet_url && <a href={selected.marksheet_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Matric Marksheet</a>}
++              {selected.noc_url && <a href={selected.noc_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 NOC</a>}
++              {selected.verified_marksheet_url && <a href={selected.verified_marksheet_url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 Verified Marksheet</a>}
++              {!selected.photo_url && !selected.bform_doc_url && !selected.father_id_doc_url && !selected.marksheet_url && (
++                <p className="sl-no-docs">No documents uploaded</p>
++              )}
+             </div>
+           </div>
+-          {selected.status === "Pending" && (
+-            <div className="students-list__actions">
+-              <button onClick={() => updateStatus(selected.id, "Approved")} className="students-list__approve">✓ Approve Application</button>
+-              <button onClick={() => updateStatus(selected.id, "Rejected")} className="students-list__reject">✗ Reject Application</button>
++
++          {selected.status === "Pending" && <ApproveSection />}
++          {selected.status === "Approved" && (
++            <div className="sl-already-approved">
++              <CheckCircle size={18} /> Student has been enrolled successfully.
++            </div>
++          )}
++          {selected.status === "Rejected" && (
++            <div>
++              <div className="sl-already-rejected">
++                <XCircle size={18} /> This application was rejected.
++              </div>
++              <ApproveSection />
+             </div>
+           )}
+         </div>
+@@ -170,138 +603,217 @@ export default function StudentsList() {
+   }
+ 
+   return (
+-    <div className="students-list">
++    <div className="sl-wrap">
++      {/* Fee Allocation Modal */}
++      {showFeeModal && (
++        <div className="sl-modal-overlay">
++          <div className="sl-modal">
++            <div className="sl-modal-header-row">
++              <h3>Allocate Monthly Fee</h3>
++              <button onClick={() => setShowFeeModal(null)}><X size={18} /></button>
++            </div>
++            <p className="sl-modal-info">Student: <strong>{showFeeModal.name}</strong> ({showFeeModal.roll_no})</p>
++            <p className="sl-modal-info">Program: <strong>{showFeeModal.program}</strong></p>
++            <p className="sl-modal-info">Year: <strong>{showFeeModal.year_of_study || "1st Year"}</strong></p>
++            <div className="sl-modal-field">
++              <label>Fee Amount (Rs) *</label>
++              <input type="number" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} />
++            </div>
++            <div className="sl-modal-field">
++              <label>Due Date *</label>
++              <input type="date" value={feeDueDate} onChange={(e) => setFeeDueDate(e.target.value)} />
++            </div>
++            <div className="sl-modal-actions">
++              <button onClick={() => setShowFeeModal(null)} className="sl-modal-cancel">Cancel</button>
++              <button onClick={allocateFee} disabled={allocating} className="sl-modal-save">
++                <DollarSign size={14} /> {allocating ? "Allocating..." : "Allocate Fee"}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
++      {/* Picture Upload Modal */}
++      {showPictureModal && (
++        <div className="sl-modal-overlay">
++          <div className="sl-modal">
++            <div className="sl-modal-header-row">
++              <h3>Upload Student Picture</h3>
++              <button onClick={() => { setShowPictureModal(null); setPictureTempImage(null); setPictureTempPreview(null); }}><X size={18} /></button>
++            </div>
++            <p className="sl-modal-info">Student: <strong>{showPictureModal.name}</strong> ({showPictureModal.roll_no})</p>
++            <div className="sl-modal-field">
++              <label>Select Picture *</label>
++              <input type="file" id="picture-upload-input" accept="image/*" onChange={handlePictureImageSelect} style={{ display: 'none' }} />
++              <button type="button" onClick={() => document.getElementById('picture-upload-input').click()} className="sl-image-upload-btn">
++                <ImageIcon size={18} /> Choose Picture
++              </button>
++              {pictureTempPreview && (
++                <div className="sl-image-preview">
++                  <img src={pictureTempPreview} alt="Preview" />
++                  <button type="button" onClick={() => { setPictureTempImage(null); setPictureTempPreview(null); }} className="sl-image-remove"><X size={14} /></button>
++                </div>
++              )}
++            </div>
++            <div className="sl-modal-actions">
++              <button onClick={() => { setShowPictureModal(null); setPictureTempImage(null); setPictureTempPreview(null); }} className="sl-modal-cancel">Cancel</button>
++              <button onClick={uploadStudentPicture} disabled={!pictureTempImage || uploadingPicture} className="sl-modal-save">
++                <ImageIcon size={14} /> {uploadingPicture ? "Uploading..." : "Upload Picture"}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
+       {/* Tabs */}
+-      <div className="students-list__tabs">
+-        <button onClick={() => setActiveTab("applications")} className={`students-list__tab ${activeTab === "applications" ? "students-list__tab--active" : ""}`}>
++      <div className="sl-tabs">
++        <button onClick={() => setActiveTab("applications")} className={"sl-tab " + (activeTab === "applications" ? "sl-tab--active" : "")}>
+           Applications ({applications.length})
+         </button>
+-        <button onClick={() => setActiveTab("students")} className={`students-list__tab ${activeTab === "students" ? "students-list__tab--active" : ""}`}>
++        <button onClick={() => setActiveTab("students")} className={"sl-tab " + (activeTab === "students" ? "sl-tab--active" : "")}>
+           Enrolled Students ({students.length})
+         </button>
+       </div>
+ 
++      {/* Toolbar */}
++      <div className="sl-toolbar">
++        <div className="sl-search">
++          <Search size={15} />
++          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." />
++        </div>
++        <div className="sl-year-filters" role="group" aria-label="Filter by class year">
++          <button onClick={() => setYearFilter("1st Year")} className={"sl-year-btn " + (yearFilter === "1st Year" ? "sl-year-btn--active" : "")}>1st Year</button>
++          <button onClick={() => setYearFilter("2nd Year")} className={"sl-year-btn " + (yearFilter === "2nd Year" ? "sl-year-btn--active" : "")}>2nd Year</button>
++          <button onClick={() => setYearFilter("Both")} className={"sl-year-btn " + (yearFilter === "Both" ? "sl-year-btn--active" : "")}>Both</button>
++        </div>
++        {activeTab === "applications" && (
++          <div className="sl-counts">
++            <span className="sl-badge sl-badge--pending"><Clock size={11} /> {applications.filter(a => a.status === "Pending").length} Pending</span>
++            <span className="sl-badge sl-badge--approved"><CheckCircle size={11} /> {applications.filter(a => a.status === "Approved").length} Approved</span>
++            <span className="sl-badge sl-badge--rejected"><XCircle size={11} /> {applications.filter(a => a.status === "Rejected").length} Rejected</span>
++          </div>
++        )}
++        {activeTab === "students" && (
++          <button onClick={() => setShowAddForm(!showAddForm)} className="sl-add-btn">
++            {showAddForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Student</>}
++          </button>
++        )}
++      </div>
++
+       {/* Applications Tab */}
+       {activeTab === "applications" && (
+-        <div className="students-list">
+-          <div className="students-list__toolbar">
+-            <div className="students-list__search">
+-              <Search size={15} />
+-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or program..." />
+-            </div>
+-            <div className="students-list__counts">
+-              <span className="students-list__badge students-list__badge--pending"><Clock size={11} /> {applications.filter(a => a.status === "Pending").length} Pending</span>
+-              <span className="students-list__badge students-list__badge--approved"><CheckCircle size={11} /> {applications.filter(a => a.status === "Approved").length} Approved</span>
+-              <span className="students-list__badge students-list__badge--rejected"><XCircle size={11} /> {applications.filter(a => a.status === "Rejected").length} Rejected</span>
+-            </div>
+-          </div>
+-          {loading ? (
+-            <div className="students-list__loading">Loading applications...</div>
+-          ) : filteredApps.length === 0 ? (
+-            <div className="students-list__empty">No applications found</div>
+-          ) : (
+-            <div className="students-list__table-wrap">
+-              <table className="students-list__table">
+-                <thead>
+-                  <tr><th>Name</th><th>Program</th><th>Group</th><th>Board</th><th>Phone</th><th>Date</th><th>Status</th><th></th></tr>
+-                </thead>
+-                <tbody>
+-                  {filteredApps.map((a) => (
+-                    <tr key={a.id}>
+-                      <td className="students-list__name">{a.student_name}</td>
+-                      <td>{a.program}</td>
+-                      <td>{a.group_selected}</td>
+-                      <td>{a.board}</td>
+-                      <td>{a.phone1}</td>
+-                      <td>{new Date(a.created_at).toLocaleDateString()}</td>
+-                      <td>{statusBadge(a.status)}</td>
+-                      <td>
+-                        <button onClick={() => setSelected(a)} className="students-list__view">
+-                          <Eye size={14} /> View
+-                        </button>
+-                      </td>
+-                    </tr>
+-                  ))}
+-                </tbody>
+-              </table>
+-            </div>
+-          )}
++        loading ? <p className="sl-empty">Loading...</p> :
++        filteredApps.length === 0 ? <p className="sl-empty">No applications found</p> :
++        <div className="sl-table-wrap">
++          <table className="sl-table">
++            <thead>
++              <tr><th>Name</th><th>Group</th><th>Year</th><th>Board</th><th>Phone</th><th>Date</th><th>Status</th><th></th></tr>
++            </thead>
++            <tbody>
++              {filteredApps.map((a) => (
++                <tr key={a.id}>
++                  <td className="sl-name">{a.student_name}</td>
++                  <td>{a.group_selected}</td>
++                  <td>{a.year_of_study || "1st Year"}</td>
++                  <td>{a.board}</td>
++                  <td>{a.phone1}</td>
++                  <td>{new Date(a.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}</td>
++                  <td>{statusBadge(a.status)}</td>
++                  <td><button onClick={() => { setSearch(""); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button></td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
+         </div>
+       )}
+ 
+-      {/* Enrolled Students Tab */}
++      {/* Students Tab */}
+       {activeTab === "students" && (
+-        <div className="students-list">
+-          <div className="students-list__toolbar">
+-            <div className="students-list__search">
+-              <Search size={15} />
+-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, roll no, program..." />
+-            </div>
+-            <button onClick={() => setShowAddForm(!showAddForm)} className="students-list__add">
+-              {showAddForm ? <><X size={15} /> Cancel</> : <><Plus size={15} /> Add Student</>}
+-            </button>
+-          </div>
+-
+-          {/* Add Student Form */}
++        <div>
+           {showAddForm && (
+-            <div className="students-list__add-form">
++            <div className="sl-add-form">
+               <h3>Add New Student</h3>
+-              <div className="students-list__add-grid">
+-                <div className="students-list__add-field">
+-                  <label>Roll Number *</label>
+-                  <input placeholder="e.g. CMGC-2026-001" value={form.roll_no} onChange={(e) => setForm({ ...form, roll_no: e.target.value })} />
+-                </div>
+-                <div className="students-list__add-field">
+-                  <label>Student Name *</label>
+-                  <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+-                </div>
+-                <div className="students-list__add-field">
+-                  <label>Father's Name</label>
+-                  <input placeholder="Father's name" value={form.father_name} onChange={(e) => setForm({ ...form, father_name: e.target.value })} />
+-                </div>
+-                <div className="students-list__add-field">
++              <div className="sl-add-grid">
++                <div className="sl-add-field"><label>Roll Number *</label><input placeholder="e.g. CMGC-2026-001" value={form.roll_no} onChange={(e) => setForm({ ...form, roll_no: e.target.value })} /></div>
++                <div className="sl-add-field"><label>Student Name *</label><input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
++                <div className="sl-add-field"><label>Father's Name</label><input placeholder="Father's name" value={form.father_name} onChange={(e) => setForm({ ...form, father_name: e.target.value })} /></div>
++                <div className="sl-add-field">
+                   <label>Program *</label>
+                   <select value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
+                     {PROGRAMS.map((p) => <option key={p}>{p}</option>)}
+                   </select>
+                 </div>
+-                <div className="students-list__add-field">
+-                  <label>Phone</label>
+-                  <input placeholder="03XXXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
++                <div className="sl-add-field"><label>Phone</label><input placeholder="03XXXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
++                <div className="sl-add-field"><label>Login Password *</label><input type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
++                <div className="sl-add-field">
++                  <label>Year of Study *</label>
++                  <select value={form.year_of_study} onChange={(e) => setForm({ ...form, year_of_study: e.target.value })}>
++                    <option>1st Year</option>
++                    <option>2nd Year</option>
++                  </select>
+                 </div>
+-                <div className="students-list__add-field">
+-                  <label>Login Password *</label>
+-                  <input type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
++              </div>
++              <div className="sl-add-image-section">
++                <label className="sl-image-label">Profile Picture (Optional)</label>
++                <div className="sl-image-upload">
++                  <input type="file" id="profile-image-input" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
++                  <button type="button" onClick={() => document.getElementById('profile-image-input').click()} className="sl-image-upload-btn">
++                    <ImageIcon size={18} /> {profileImagePreview ? 'Change Picture' : 'Upload Picture'}
++                  </button>
++                  {profileImagePreview && (
++                    <div className="sl-image-preview">
++                      <img src={profileImagePreview} alt="Preview" />
++                      <button type="button" onClick={() => { setProfileImage(null); setProfileImagePreview(null); }} className="sl-image-remove"><X size={14} /></button>
++                    </div>
++                  )}
+                 </div>
+               </div>
+-              {formError && <p className="students-list__form-error">{formError}</p>}
+-              {saved && <p className="students-list__form-success">✓ Student added successfully!</p>}
+-              <button onClick={addStudent} disabled={saving} className="students-list__save-btn">
+-                <Save size={15} /> {saving ? "Saving..." : "Save Student"}
++              {formError && <p className="sl-form-error">{formError}</p>}
++              {saved && <p className="sl-form-success">Student added successfully!</p>}
++              <button onClick={addStudent} disabled={saving} className="sl-save-btn">
++                <Save size={14} /> {saving ? "Saving..." : "Save Student"}
+               </button>
+             </div>
+           )}
+ 
+-          {/* Students Table */}
+-          {filteredStudents.length === 0 ? (
+-            <div className="students-list__empty">No enrolled students found</div>
+-          ) : (
+-            <div className="students-list__table-wrap">
+-              <table className="students-list__table">
++          {filteredStudents.length === 0 ?
++            <p className="sl-empty">No enrolled students found</p> :
++            <div className="sl-table-wrap">
++              <table className="sl-table">
+                 <thead>
+-                  <tr><th>Roll No</th><th>Name</th><th>Father's Name</th><th>Program</th><th>Phone</th><th></th></tr>
++                  <tr><th></th><th>Roll No</th><th>Name</th><th>Father</th><th>Program</th><th>Year</th><th>Phone</th><th>Actions</th></tr>
+                 </thead>
+                 <tbody>
+                   {filteredStudents.map((s) => (
+                     <tr key={s.id}>
++                      <td className="sl-pic-cell">
++                        {s.profile_picture_url ? (
++                          <img src={s.profile_picture_url} alt={s.name} className="sl-student-pic" />
++                        ) : (
++                          <div className="sl-student-pic sl-pic-placeholder">—</div>
++                        )}
++                      </td>
+                       <td>{s.roll_no}</td>
+-                      <td className="students-list__name">{s.name}</td>
++                      <td className="sl-name">{s.name}</td>
+                       <td>{s.father_name}</td>
+                       <td>{s.program}</td>
++                      <td>
++                        <select
++                          value={s.year_of_study || "1st Year"}
++                          onChange={(e) => changeYear(s, e.target.value)}
++                          className="sl-year-select"
++                        >
++                          <option>1st Year</option>
++                          <option>2nd Year</option>
++                        </select>
++                      </td>
+                       <td>{s.phone}</td>
+                       <td>
+-                        <button onClick={() => deleteStudent(s.id)} className="students-list__delete">
+-                          <X size={14} /> Delete
++                        <button onClick={() => openFeeModal(s)} className="sl-fee-btn">
++                          <DollarSign size={13} /> Fee
++                        </button>
++                        <button onClick={() => setShowPictureModal(s)} className="sl-picture-btn">
++                          <ImageIcon size={13} /> Picture
+                         </button>
+                       </td>
+                     </tr>
+@@ -309,7 +821,7 @@ export default function StudentsList() {
+                 </tbody>
+               </table>
+             </div>
+-          )}
++          }
+         </div>
+       )}
+     </div>
+diff --git a/src/styles/themes.css b/src/styles/themes.css
+index a5b6a03..cd1386c 100644
+--- a/src/styles/themes.css
++++ b/src/styles/themes.css
+@@ -12,6 +12,27 @@
+   --nav-bg: rgba(15,23,42,0.95);
+   --hero-from: #0f172a; --hero-to: #172554;
+ }
++[root], :root {
++  /* Responsive breakpoints */
++  --bp-sm: 640px;
++  --bp-md: 768px;
++  --bp-lg: 1024px;
++  --bp-xl: 1280px;
++  /* Container widths */
++  --container-sm: 640px;
++  --container-md: 768px;
++  --container-lg: 1024px;
++}
++
++/* Utility container for centered content */
++.container {
++  width: 100%;
++  max-width: var(--container-lg);
++  margin-left: auto;
++  margin-right: auto;
++  padding-left: 16px;
++  padding-right: 16px;
++}
+ [data-theme="soft"] {
+   --bg: #fdf2f8; --text: #374151; --subtext: #6b7280;
+   --card: #ffffff; --border: #fbcfe8;

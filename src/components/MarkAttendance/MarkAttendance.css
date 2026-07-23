@@ -23,13 +23,19 @@
 .mark-attendance__count--unmarked { background: #e5e7eb; color: #374151; }
 .mark-attendance__row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .mark-attendance__row:last-of-type { border-bottom: none; }
-.mark-attendance__name { font-size: 14px; font-weight: 500; color: var(--text); }
+.mark-attendance__name { font-size: 14px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.mark-attendance__program-tag { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
 .mark-attendance__roll { font-size: 12px; color: var(--subtext); }
 .mark-attendance__buttons { display: flex; gap: 6px; }
 .mark-attendance__btn { font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
 .mark-attendance__btn--active.mark-attendance__btn--present { background: #f0fdf4; border-color: #4ade80; color: #15803d; }
 .mark-attendance__btn--active.mark-attendance__btn--absent { background: #fef2f2; border-color: #f87171; color: #b91c1c; }
 .mark-attendance__btn--active.mark-attendance__btn--leave { background: #fffbeb; border-color: #fbbf24; color: #b45309; }
+.mark-attendance__whatsapp-btn { display: inline-flex; align-items: center; justify-content: center; color: #16a34a; border: 1px solid #86efac; padding: 6px 8px; border-radius: 8px; background: #f0fdf4; }
+.mark-attendance__whatsapp-btn:hover { background: #dcfce7; }
+.mark-attendance__notify-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; color: #16a34a; border: 1px solid #86efac; background: #f0fdf4; }
+.mark-attendance__notify-btn:hover:not(:disabled) { background: #dcfce7; }
+.mark-attendance__notify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .mark-attendance__save { width: 100%; margin-top: 16px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
 .mark-attendance__save:disabled { opacity: 0.6; cursor: not-allowed; }
 .mark-attendance__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }

@@ -31,6 +31,14 @@
 .ap-notice ul { padding-left: 16px; margin-top: 4px; }
 .ap-notice li { margin-bottom: 2px; }
 
+.ap-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.ap-modal { background: white; border-radius: 12px; padding: 24px; width: 100%; max-width: 460px; max-height: 80vh; overflow-y: auto; }
+.ap-modal h3 { font-size: 16px; font-weight: 700; color: #b91c1c; margin-bottom: 8px; }
+.ap-modal-intro { font-size: 13px; color: #374151; margin-bottom: 10px; }
+.ap-modal-reasons { list-style: disc; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.ap-modal-reasons li { font-size: 13px; color: #b91c1c; line-height: 1.5; }
+.ap-modal-close { width: 100%; background: #1d4ed8; color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
+
 .ap-form { padding: 20px 24px; display: flex; flex-direction: column; gap: 0; }
 .ap-section { margin-bottom: 28px; }
 .ap-section-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #eff6ff; }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, Wallet, Bell, CalendarCheck } from "lucide-react";
+import { Users, Wallet, Bell, CalendarCheck, UserCheck, UserX, UserMinus } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import "./AdminOverview.css";
 
@@ -11,6 +11,9 @@ export default function AdminOverview() {
     pendingApplications: 0,
     totalNotices: 0,
     todayAttendance: "Not Marked",
+    presentToday: 0,
+    absentToday: 0,
+    leaveToday: 0,
   });
   const [loading, setLoading] = useState(true);
   const [recentApplications, setRecentApplications] = useState([]);
@@ -55,6 +58,24 @@ export default function AdminOverview() {
       .select("*", { count: "exact", head: true })
       .eq("date", today);
 
+    const { count: presentCount } = await supabase
+      .from("attendance")
+      .select("*", { count: "exact", head: true })
+      .eq("date", today)
+      .eq("status", "Present");
+
+    const { count: absentCount } = await supabase
+      .from("attendance")
+      .select("*", { count: "exact", head: true })
+      .eq("date", today)
+      .eq("status", "Absent");
+
+    const { count: leaveCount } = await supabase
+      .from("attendance")
+      .select("*", { count: "exact", head: true })
+      .eq("date", today)
+      .eq("status", "Leave");
+
     // Recent applications (last 5)
     const { data: recentApps } = await supabase
       .from("applications")
@@ -69,6 +90,9 @@ export default function AdminOverview() {
       pendingApplications: pendingCount || 0,
       totalNotices: noticesCount || 0,
       todayAttendance: attendanceCount > 0 ? `${attendanceCount} Records` : "Not Marked",
+      presentToday: presentCount || 0,
+      absentToday: absentCount || 0,
+      leaveToday: leaveCount || 0,
     });
 
     if (recentApps) setRecentApplications(recentApps);
@@ -82,6 +106,9 @@ export default function AdminOverview() {
     { label: "Pending Applications", value: loading ? "..." : stats.pendingApplications, icon: Wallet, cls: "admin-stat--amber" },
     { label: "Notices Posted", value: loading ? "..." : stats.totalNotices, icon: Bell, cls: "admin-stat--red" },
     { label: "Today's Attendance", value: loading ? "..." : stats.todayAttendance, icon: CalendarCheck, cls: "admin-stat--teal" },
+    { label: "Present Today", value: loading ? "..." : stats.presentToday, icon: UserCheck, cls: "admin-stat--green" },
+    { label: "Absent Today", value: loading ? "..." : stats.absentToday, icon: UserX, cls: "admin-stat--red" },
+    { label: "Leave Today", value: loading ? "..." : stats.leaveToday, icon: UserMinus, cls: "admin-stat--amber" },
   ];
 
   const statusColor = (status) => {

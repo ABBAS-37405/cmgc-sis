@@ -29,6 +29,31 @@ const BOARDS = [
 const RELIGIONS = ["Islam", "Christianity", "Hinduism", "Other"];
 const NATIONALITIES = ["Pakistani", "Other"];
 
+const FIELD_LABELS = {
+  name: "Student Full Name",
+  father: "Father's Full Name",
+  dob: "Date of Birth",
+  bform: "Student B-Form No.",
+  fatherCnic: "Father's NIC",
+  nationality: "Nationality",
+  religion: "Religion",
+  phone1: "Phone No. 1",
+  whatsapp: "WhatsApp No.",
+  email: "Email Address",
+  address: "Full Address",
+  marksObtained: "Marks Obtained",
+  totalMarks: "Total Marks",
+  board: "Board Name",
+  sscGroup: "Subjects Group",
+  group: "Select Group (Section 4)",
+  photo: "Student Photo",
+  bformDoc: "B-Form Document",
+  fatherIdDoc: "Father's ID Card Document",
+  marksheet: "Matric Marksheet Document",
+  noc: "NOC from Board Document",
+  verifiedMarksheet: "Verified Marksheet Document",
+};
+
 function SectionHeading({ number, title }) {
   return (
     <div className="ap-section-heading">
@@ -56,7 +81,7 @@ export default function AdmissionPage({ onBack }) {
   const [activeDoc, setActiveDoc] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+  const [errorModal, setErrorModal] = useState(null);
   const [group, setGroup] = useState("");
   const [selectedBoard, setSelectedBoard] = useState("");
 
@@ -148,16 +173,23 @@ export default function AdmissionPage({ onBack }) {
     setErrors(e);
     if (Object.keys(e).length > 0) {
       window.scrollTo({ top: 0, behavior: "smooth" });
+      setErrorModal({
+        title: "Application Not Submitted",
+        reasons: Object.keys(e).map((key) => `${FIELD_LABELS[key] || key}: ${e[key]}`),
+      });
       return;
     }
     setLoading(true);
-    setSubmitError("");
 
     const uploadedUrls = {};
     if (photo) {
       const path = `photos/${Date.now()}-photo-${photo.name}`;
       const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, photo);
-      if (upErr) { setSubmitError(`Photo upload failed: ${upErr.message}`); setLoading(false); return; }
+      if (upErr) {
+        setLoading(false);
+        setErrorModal({ title: "Application Not Submitted", reasons: [`Photo upload failed: ${upErr.message}`] });
+        return;
+      }
       const { data: urlData } = supabase.storage.from("admission-documents").getPublicUrl(path);
       uploadedUrls.photo = urlData.publicUrl;
     }
@@ -167,7 +199,11 @@ export default function AdmissionPage({ onBack }) {
       if (!file) continue;
       const path = `docs/${Date.now()}-${doc.key}-${file.name}`;
       const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, file);
-      if (upErr) { setSubmitError(`Upload failed (${doc.label}): ${upErr.message}`); setLoading(false); return; }
+      if (upErr) {
+        setLoading(false);
+        setErrorModal({ title: "Application Not Submitted", reasons: [`Upload failed (${doc.label}): ${upErr.message}`] });
+        return;
+      }
       const { data: urlData } = supabase.storage.from("admission-documents").getPublicUrl(path);
       uploadedUrls[doc.key] = urlData.publicUrl;
     }
@@ -209,7 +245,13 @@ export default function AdmissionPage({ onBack }) {
     });
 
     setLoading(false);
-    if (error) { setSubmitError("Submission failed. Please try again or contact the office."); return; }
+    if (error) {
+      setErrorModal({
+        title: "Application Not Submitted",
+        reasons: [`Submission failed: ${error.message || "Please try again or contact the office."}`],
+      });
+      return;
+    }
     setSubmitted(true);
   };
 
@@ -481,14 +523,25 @@ export default function AdmissionPage({ onBack }) {
               </div>
             </section>
 
-            {submitError && <div className="ap-notice ap-notice--red"><p>{submitError}</p></div>}
-
             <button onClick={handleSubmit} disabled={loading} className="ap-submit">
               {loading ? "Submitting..." : "Submit Application"}
             </button>
           </div>
         </div>
       </div>
+
+      {errorModal && (
+        <div className="ap-modal-overlay" onClick={() => setErrorModal(null)}>
+          <div className="ap-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>⚠️ {errorModal.title}</h3>
+            <p className="ap-modal-intro">Please correct the following and submit again:</p>
+            <ul className="ap-modal-reasons">
+              {errorModal.reasons.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+            <button onClick={() => setErrorModal(null)} className="ap-modal-close">OK, Let Me Fix It</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

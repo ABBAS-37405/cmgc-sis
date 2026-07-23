@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import "./EnterResults.css";
 
 const PROGRAMS = ["Pre-Engineering", "Pre-Medical", "ICS", "General Science", "Humanities"];
+const ALL_PROGRAMS = "All Programs";
 
 const SUBJECTS = {
   "Pre-Engineering": ["Physics", "Chemistry", "Mathematics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
@@ -13,10 +14,39 @@ const SUBJECTS = {
   "Humanities": ["Education", "Sociology", "Civics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
 };
 
+const EXAM_TYPES = ["Class Test", "Monthly Test", "Bi-Monthly", "Send-Up Exam", "Pre-Board Exam"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const EXAM_SELECTION_KEY = "cmgc_admin_exam_selection";
+
+const todayStr = () => new Date().toISOString().split("T")[0];
+const currentMonthName = () => MONTHS[new Date().getMonth()];
+
+const loadStoredExamSelection = () => {
+  try {
+    const raw = localStorage.getItem(EXAM_SELECTION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildExamName = (examType, examDate, examMonth) => {
+  if (examType === "Monthly Test") {
+    return `Monthly Test - ${examMonth} ${new Date().getFullYear()}`;
+  }
+  if (!examDate) return examType;
+  const formattedDate = new Date(examDate).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
+  return `${examType} - ${formattedDate}`;
+};
+
 export default function EnterResults() {
   const [program, setProgram] = useState("Pre-Medical");
   const [yearFilter, setYearFilter] = useState("Both");
-  const [examName, setExamName] = useState("Mid-Term 2026");
+  const storedExam = loadStoredExamSelection();
+  const [examType, setExamType] = useState(storedExam?.examType || EXAM_TYPES[0]);
+  const [examDate, setExamDate] = useState(storedExam?.examDate || todayStr());
+  const [examMonth, setExamMonth] = useState(storedExam?.examMonth || currentMonthName());
+  const examName = buildExamName(examType, examDate, examMonth);
   const [students, setStudents] = useState([]);
   const [selected, setSelected] = useState(null);
   const [marks, setMarks] = useState({});
@@ -30,13 +60,28 @@ export default function EnterResults() {
     fetchStudents();
   }, [program, yearFilter]);
 
+  useEffect(() => {
+    localStorage.setItem(EXAM_SELECTION_KEY, JSON.stringify({ examType, examDate, examMonth }));
+  }, [examType, examDate, examMonth]);
+
+  // Re-load marks for the currently selected student whenever the exam
+  // changes, so marks typed under one exam never get saved under another.
+  useEffect(() => {
+    if (selected) selectStudent(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examName]);
+
   const fetchStudents = async () => {
     setLoading(true);
     let query = supabase
       .from("students")
-      .select("id, name, roll_no")
-      .eq("program", program)
+      .select("id, name, roll_no, program")
+      .order("program")
       .order("name");
+
+    if (program !== ALL_PROGRAMS) {
+      query = query.eq("program", program);
+    }
 
     if (yearFilter !== "Both") {
       query = query.eq("year_of_study", yearFilter);
@@ -73,7 +118,7 @@ export default function EnterResults() {
     } else {
       const emptyMarks = {};
       const emptyTotal = {};
-      SUBJECTS[program].forEach((s) => {
+      SUBJECTS[student.program].forEach((s) => {
         emptyMarks[s] = "";
         emptyTotal[s] = "100";
       });
@@ -92,7 +137,7 @@ export default function EnterResults() {
       .eq("exam_name", examName);
 
     // Insert new results
-    const rows = SUBJECTS[program].map((subject) => ({
+    const rows = SUBJECTS[selected.program].map((subject) => ({
       student_id: selected.id,
       exam_name: examName,
       subject,
@@ -120,13 +165,29 @@ export default function EnterResults() {
         <div className="enter-results__field">
           <label>Program</label>
           <select value={program} onChange={(e) => setProgram(e.target.value)}>
+            <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>
             {PROGRAMS.map((p) => <option key={p}>{p}</option>)}
           </select>
         </div>
         <div className="enter-results__field">
-          <label>Exam Name</label>
-          <input value={examName} onChange={(e) => setExamName(e.target.value)} placeholder="e.g. Mid-Term 2026" />
+          <label>Exam Type</label>
+          <select value={examType} onChange={(e) => setExamType(e.target.value)}>
+            {EXAM_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
         </div>
+        {examType === "Monthly Test" ? (
+          <div className="enter-results__field">
+            <label>Month</label>
+            <select value={examMonth} onChange={(e) => setExamMonth(e.target.value)}>
+              {MONTHS.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div className="enter-results__field">
+            <label>Held Date</label>
+            <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} />
+          </div>
+        )}
       </div>
 
       <div className="enter-results__year-filters" role="group" aria-label="Filter by class year">
@@ -149,7 +210,12 @@ export default function EnterResults() {
           ) : (
             filtered.map((s) => (
               <button key={s.id} onClick={() => selectStudent(s)} className={`enter-results__student-btn ${selected?.id === s.id ? "enter-results__student-btn--active" : ""}`}>
-                <p className="enter-results__student-name">{s.name}</p>
+                <p className="enter-results__student-name">
+                  {s.name}
+                  {program === ALL_PROGRAMS && (
+                    <span className="enter-results__program-tag">{s.program}</span>
+                  )}
+                </p>
                 <p className="enter-results__student-roll">{s.roll_no}</p>
               </button>
             ))
@@ -181,7 +247,7 @@ export default function EnterResults() {
                   <span>Obtained</span>
                   <span>Total</span>
                 </div>
-                {SUBJECTS[program].map((subject) => (
+                {SUBJECTS[selected.program].map((subject) => (
                   <div key={subject} className="enter-results__subject-row">
                     <span>{subject}</span>
                     <input

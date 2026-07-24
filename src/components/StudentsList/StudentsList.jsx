@@ -156,7 +156,10 @@ const shareCredentials = (application, rollNo, password, waWindowRef) => {
   return true;
 };
 
-export default function StudentsList() {
+export default function StudentsList({ allowedPrograms = [] }) {
+  const isRestricted = allowedPrograms.length > 0;
+  const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+
   const [applications, setApplications] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +171,7 @@ export default function StudentsList() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({
-    roll_no: "", name: "", father_name: "", program: "Pre-Medical",
+    roll_no: "", name: "", father_name: "", program: isRestricted ? (visiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
     phone: "", password: "", year_of_study: "1st Year",
   });
   const [profileImage, setProfileImage] = useState(null);
@@ -915,7 +918,7 @@ export default function StudentsList() {
                 <div className="sl-add-field">
                   <label>Program *</label>
                   <select value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
-                    {PROGRAMS.map((p) => <option key={p}>{p}</option>)}
+                    {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="sl-add-field"><label>Phone</label><input placeholder="03XXXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
@@ -11,6 +12,30 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
+
+const supabaseAdmin = (process.env.VITE_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+  : null;
+
+// Verifies the caller's Supabase access token and confirms they are a super admin.
+// Returns the caller's auth user id on success, or null if unauthorized.
+const requireSuperAdmin = async (accessToken) => {
+  if (!supabaseAdmin || !accessToken) return null;
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
+  if (userError || !userData?.user) return null;
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('admin_profiles')
+    .select('is_super_admin')
+    .eq('user_id', userData.user.id)
+    .single();
+
+  if (profileError || !profile?.is_super_admin) return null;
+  return userData.user.id;
+};
 
 const normalizePhone = (value) => {
   if (!value) return '';
@@ -99,6 +124,78 @@ app.post('/api/send-credentials', async (req, res) => {
   }
 
   return res.json({ success: true, results });
+});
+
+app.post('/api/admin/create', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Admin management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, email, password, name, permissions, allowedPrograms } = req.body || {};
+
+  const callerId = await requireSuperAdmin(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'Only a super admin can create sub-admin accounts.' });
+  }
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+
+  if (createError || !created?.user) {
+    return res.status(500).json({ error: createError?.message || 'Failed to create admin account.' });
+  }
+
+  const { error: profileError } = await supabaseAdmin.from('admin_profiles').insert({
+    user_id: created.user.id,
+    email,
+    name: name || null,
+    is_super_admin: false,
+    permissions: Array.isArray(permissions) ? permissions : [],
+    allowed_programs: Array.isArray(allowedPrograms) ? allowedPrograms : [],
+    created_by: callerId,
+  });
+
+  if (profileError) {
+    await supabaseAdmin.auth.admin.deleteUser(created.user.id);
+    return res.status(500).json({ error: `Failed to save admin permissions: ${profileError.message}` });
+  }
+
+  return res.json({ success: true, userId: created.user.id });
+});
+
+app.post('/api/admin/delete', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Admin management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, targetUserId } = req.body || {};
+
+  const callerId = await requireSuperAdmin(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'Only a super admin can remove admin accounts.' });
+  }
+
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'targetUserId is required.' });
+  }
+
+  if (targetUserId === callerId) {
+    return res.status(400).json({ error: 'You cannot delete your own account.' });
+  }
+
+  const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId);
+  if (deleteError) {
+    return res.status(500).json({ error: deleteError.message });
+  }
+
+  return res.json({ success: true });
 });
 
 app.get('/health', (_req, res) => {

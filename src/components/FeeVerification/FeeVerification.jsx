@@ -3,6 +3,8 @@ import { Check, X, Eye } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import "./FeeVerification.css";
 
+const PAYMENT_METHODS = ["Easypaisa", "Bank Al Habib", "Raast", "Cash in College Office"];
+
 const normalizeWhatsAppNumber = (value) => {
   if (!value) return "";
   const digits = String(value).replace(/\D/g, "");
@@ -68,6 +70,10 @@ export default function FeeVerification() {
   const [editingFeeId, setEditingFeeId] = useState(null);
   const [feeAdjustmentAmount, setFeeAdjustmentAmount] = useState("");
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [paymentMethodByFee, setPaymentMethodByFee] = useState({});
+  const [paymentDateByFee, setPaymentDateByFee] = useState({});
+  const [paymentAmountByFee, setPaymentAmountByFee] = useState({});
+  const [markingPaidId, setMarkingPaidId] = useState(null);
 
   const fetchPending = async () => {
     setLoading(true);
@@ -283,6 +289,78 @@ export default function FeeVerification() {
     await fetchAll();
   };
 
+  const todayStr = () => new Date().toISOString().split("T")[0];
+  const getPaymentMethod = (feeId) => paymentMethodByFee[feeId] || PAYMENT_METHODS[0];
+  const getPaymentDate = (feeId) => paymentDateByFee[feeId] || todayStr();
+  const getPaymentAmount = (fee) => {
+    const stored = paymentAmountByFee[fee.id];
+    return stored !== undefined ? stored : String(fee.remaining_amount || "");
+  };
+
+  const markFeePaid = async (fee) => {
+    const method = getPaymentMethod(fee.id);
+    const date = getPaymentDate(fee.id);
+    const amountToRecord = Number(getPaymentAmount(fee));
+    const remainingAmount = Number(fee.remaining_amount || 0);
+
+    if (!amountToRecord || isNaN(amountToRecord) || amountToRecord <= 0) {
+      alert("Please enter a valid amount paid.");
+      return;
+    }
+    if (amountToRecord > remainingAmount) {
+      alert(`Amount paid cannot exceed the pending amount (Rs ${remainingAmount.toLocaleString()}).`);
+      return;
+    }
+
+    const newRemaining = remainingAmount - amountToRecord;
+    const newStatus = newRemaining <= 0 ? "Paid" : "Partially Paid";
+
+    const confirmMark = window.confirm(
+      `Mark Rs ${amountToRecord.toLocaleString()} as paid for ${fee.student?.name || "this student"} via ${method} on ${date}?` +
+      (newRemaining > 0 ? ` Rs ${newRemaining.toLocaleString()} will remain pending.` : " This fully settles the fee.")
+    );
+    if (!confirmMark) return;
+
+    setMarkingPaidId(fee.id);
+    const paidAtIso = new Date(date).toISOString();
+    const previousPaid = Number(fee.amount_due || 0) - remainingAmount;
+
+    const { error: txnError } = await supabase.from("payment_transactions").insert({
+      fee_id: fee.id,
+      payment_method: method,
+      amount: amountToRecord,
+      status: "Success",
+      verified_by: "Admin",
+      recorded_by: "admin",
+      created_at: paidAtIso,
+    });
+
+    if (txnError) {
+      setMarkingPaidId(null);
+      alert("Failed to record payment: " + txnError.message);
+      return;
+    }
+
+    await supabase
+      .from("fees")
+      .update({
+        status: newStatus,
+        amount_paid: previousPaid + amountToRecord,
+        last_payment_date: paidAtIso,
+      })
+      .eq("id", fee.id);
+
+    setMarkingPaidId(null);
+    setPaymentAmountByFee((p) => {
+      const next = { ...p };
+      delete next[fee.id];
+      return next;
+    });
+    await fetchPending();
+    await fetchUnpaidFees();
+    await fetchAll();
+  };
+
   return (
     <div className="fee-v">
       <div className="fee-v__tabs">
@@ -407,6 +485,7 @@ export default function FeeVerification() {
                   <th>Pending Fee</th>
                   <th>Due Date</th>
                   <th>Action</th>
+                  <th>Record Payment</th>
                 </tr>
               </thead>
               <tbody>
@@ -458,6 +537,37 @@ export default function FeeVerification() {
                         </div>
                       )}
                     </td>
+                    <td>
+                      <div className="fee-v__record-payment">
+                        <input
+                          type="number"
+                          min="0"
+                          max={fee.remaining_amount}
+                          placeholder="Amount paid"
+                          className="fee-v__amount-input"
+                          value={getPaymentAmount(fee)}
+                          onChange={(e) => setPaymentAmountByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+                        />
+                        <select
+                          value={getPaymentMethod(fee.id)}
+                          onChange={(e) => setPaymentMethodByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+                        >
+                          {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
+                        </select>
+                        <input
+                          type="date"
+                          value={getPaymentDate(fee.id)}
+                          onChange={(e) => setPaymentDateByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+                        />
+                        <button
+                          onClick={() => markFeePaid(fee)}
+                          disabled={markingPaidId === fee.id}
+                          className="fee-v__mark-paid"
+                        >
+                          {markingPaidId === fee.id ? "Saving..." : "Mark Paid"}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -495,7 +605,10 @@ export default function FeeVerification() {
                         {t.fees && t.fees.students ? t.fees.students.roll_no : ""}
                       </p>
                     </td>
-                    <td>{t.payment_method}</td>
+                    <td>
+                      {t.payment_method}
+                      {t.recorded_by === "admin" && <span className="fee-v__admin-tag">Admin Entry</span>}
+                    </td>
                     <td>Rs {t.amount ? t.amount.toLocaleString() : "—"}</td>
                     <td>{t.reference_number || "—"}</td>
                     <td>

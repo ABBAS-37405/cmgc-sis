@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck } from "lucide-react";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck, Wallet, Calendar } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import "./Fee.css";
 
@@ -68,7 +68,7 @@ export default function Fee({ studentId }) {
       const feeIds = feesData.map((fee) => fee.id);
       const { data: transactions } = await supabase
         .from("payment_transactions")
-        .select("fee_id, amount, status, created_at, proof_image_url, reference_number, payment_method")
+        .select("fee_id, amount, status, created_at, proof_image_url, reference_number, payment_method, recorded_by")
         .in("fee_id", feeIds)
         .eq("status", "Success");
 
@@ -194,6 +194,9 @@ export default function Fee({ studentId }) {
 
   if (loading) return <div className="fee"><p className="fee__loading">Loading fee records...</p></div>;
 
+  const totalPending = fees.reduce((sum, f) => sum + Number(f.remaining_amount ?? 0), 0);
+  const pendingCount = fees.filter((f) => Number(f.remaining_amount ?? 0) > 0).length;
+
   return (
     <div className="fee">
       {uploadSuccess && (
@@ -207,153 +210,223 @@ export default function Fee({ studentId }) {
           <p className="fee__empty">No fee records found</p>
         </div>
       ) : (
-        fees.map((f) => (
-          <div key={f.id} className="fee__card">
-            <div className="fee__header">
-              <h3>{f.program} — Fee</h3>
-              {statusBadge(f.status, Number(f.remaining_amount ?? 0))}
-            </div>
-            <p className="fee__amount">Rs {Number(f.remaining_amount ?? f.amount_due ?? 0).toLocaleString()} to pay</p>
-            {f.due_date && (
-              <p className="fee__due">Due Date: {new Date(f.due_date).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}</p>
-            )}
-            {f.last_payment_date && (
-              <p className="fee__due fee__due--paid">Paid on: {new Date(f.last_payment_date).toLocaleDateString("en-PK")}</p>
-            )}
-
-            {f.transactions && f.transactions.length > 0 && (
-              <div className="fee__payments">
-                <h4>Payments</h4>
-                {f.transactions.map((t) => (
-                  <div key={t.created_at + t.amount} className="fee__payment-row">
-                    <div className="fee__payment-info">
-                      <strong>Rs {Number(t.amount || 0).toLocaleString()}</strong>
-                      <span className="fee__payment-meta">{t.payment_method} • {t.reference_number || "—"}</span>
-                    </div>
-                    <div className="fee__payment-actions">
-                      <span className="fee__payment-date">{t.created_at ? new Date(t.created_at).toLocaleDateString("en-PK") : "—"}</span>
-                      {t.proof_image_url ? (
-                        <button onClick={() => window.open(t.proof_image_url, "_blank")} className="fee__view-receipt">View Receipt</button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
+        <>
+          {fees.length > 1 && pendingCount > 0 && (
+            <div className="fee__summary">
+              <div className="fee__summary-icon"><Wallet size={20} /></div>
+              <div className="fee__summary-text">
+                <p className="fee__summary-label">Total Pending Across All Fees</p>
+                <p className="fee__summary-value">Rs {totalPending.toLocaleString()}</p>
               </div>
-            )}
+              <span className="fee__summary-badge">{pendingCount} pending</span>
+            </div>
+          )}
 
-            {f.status !== "Paid" && Number(f.remaining_amount ?? 0) > 0 && (
-              <div className="fee__pay-section">
-                <button
-                  className="fee__pay-btn"
-                  onClick={() => { setShowMethods(showMethods === f.id ? null : f.id); setShowProofForm(null); setUploadSuccess(false); }}
-                >
-                  Pay Now {showMethods === f.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
+          <div className="fee__list">
+            {fees.map((f) => {
+              const remaining = Number(f.remaining_amount ?? 0);
+              const due = Number(f.amount_due || 0);
+              const paidSoFar = Math.max(due - remaining, 0);
+              const paidPercent = due > 0 ? Math.min(100, Math.round((paidSoFar / due) * 100)) : 0;
+              const isPaid = f.status === "Paid" || remaining === 0;
 
-                {showMethods === f.id && (
-                  <div className="fee__methods">
-                    {/* College Accounts */}
-                    {COLLEGE_ACCOUNTS.map((acc) => (
-                      <div key={acc.method} className="fee__account-card">
-                        <div className="fee__account-header">
-                          <span>{acc.icon} {acc.method}</span>
-                        </div>
-                        {acc.details.map((d) => (
-                          <div key={d.label} className="fee__account-row">
-                            <span className="fee__account-label">{d.label}</span>
-                            <span className="fee__account-value">{d.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-
-                    {/* Instructions */}
-                    <div className="fee__instructions">
-                      <p>📌 <strong>Instructions:</strong></p>
-                      <ol>
-                        <li>Transfer fee to any of the above accounts</li>
-                        <li>Take a screenshot or photo of the receipt</li>
-                        <li>Click "Upload Payment Proof" below</li>
-                        <li>Admin will verify within 24-48 hours</li>
-                      </ol>
+              return (
+                <div key={f.id} className="fee__card">
+                  <div className="fee__header">
+                    <div className="fee__title">
+                      <span className="fee__title-icon"><Wallet size={16} /></span>
+                      <h3>{f.program}</h3>
                     </div>
+                    {statusBadge(f.status, remaining)}
+                  </div>
 
-                    {/* Upload Proof Button */}
-                    <button
-                      className="fee__upload-proof-btn"
-                      onClick={() => setShowProofForm(showProofForm === f.id ? null : f.id)}
-                    >
-                      <Upload size={15} /> Upload Payment Proof
-                    </button>
+                  <div className={"fee__amount-block" + (isPaid ? " fee__amount-block--paid" : "")}>
+                    <p className="fee__amount-value">Rs {remaining.toLocaleString()}</p>
+                    <p className="fee__amount-caption">{isPaid ? "Fully paid — thank you!" : "amount due"}</p>
+                  </div>
 
-                    {/* Proof Upload Form */}
-                    {showProofForm === f.id && (
-                      <div className="fee__proof-form">
-                        <div className="fee__proof-field">
-                          <label>Payment Method Used</label>
-                          <select value={selectedMethod} onChange={(e) => setSelectedMethod(e.target.value)}>
-                            <option>Easypaisa</option>
-                            <option>Bank Al Habib</option>
-                            <option>Raast</option>
-                            <option>Cash in College Office</option>
-                          </select>
-                        </div>
-                        <div className="fee__proof-field">
-                          <label>{paymentReferenceLabel}</label>
-                          <input
-                            placeholder={paymentReferencePlaceholder}
-                            value={refNumber}
-                            onChange={(e) => setRefNumber(e.target.value)}
-                          />
-                        </div>
-                        <div className="fee__proof-field">
-                          <label>Amount Paid (Rs) *</label>
-                          <input
-                            type="number"
-                            placeholder={`e.g. ${f.amount_due}`}
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                          />
-                        </div>
-                        <div className="fee__proof-field">
-                          <label>Payment Screenshot / Photo *</label>
-                          <div className="fee__file-area" onClick={() => fileRef.current?.click()}>
-                            {proofFile ? (
-                              <p className="fee__file-name"><FileCheck size={14} /> {proofFile.name}</p>
-                            ) : (
-                              <p className="fee__file-placeholder"><Upload size={18} /> Click to select screenshot or photo</p>
-                            )}
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/*,.pdf"
-                            ref={fileRef}
-                            onChange={(e) => setProofFile(e.target.files[0])}
-                            style={{ display: "none" }}
-                          />
-                        </div>
-                        {uploadError && <p className="fee__upload-error">{uploadError}</p>}
-                        <button
-                          onClick={() => handleProofSubmit(f.id)}
-                          disabled={uploading}
-                          className="fee__submit-proof-btn"
-                        >
-                          {uploading ? "Submitting..." : "Submit Payment Proof"}
-                        </button>
+                  {!isPaid && paidSoFar > 0 && (
+                    <div className="fee__progress">
+                      <div className="fee__progress-track">
+                        <div className="fee__progress-fill" style={{ width: `${paidPercent}%` }} />
                       </div>
+                      <p className="fee__progress-label">
+                        Rs {paidSoFar.toLocaleString()} paid of Rs {due.toLocaleString()} ({paidPercent}%)
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="fee__meta-row">
+                    {f.due_date && (
+                      <span className="fee__meta-chip">
+                        <Calendar size={12} />
+                        Due {new Date(f.due_date).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    )}
+                    {f.last_payment_date && (
+                      <span className="fee__meta-chip fee__meta-chip--paid">
+                        <CheckCircle size={12} />
+                        Paid on {new Date(f.last_payment_date).toLocaleDateString("en-PK")}
+                      </span>
                     )}
                   </div>
-                )}
-              </div>
-            )}
 
-            {f.status === "Pending Verification" && (
-              <div className="fee__pending-note">
-                ⏳ Your payment proof has been submitted and is under review. You will be notified once verified.
-              </div>
-            )}
+                  {f.transactions && f.transactions.length > 0 && (
+                    <div className="fee__payments">
+                      <h4>Payment History</h4>
+                      <div className="fee__payments-table-wrap">
+                        <table className="fee__payments-table">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Amount</th>
+                              <th>Method</th>
+                              <th>Reference</th>
+                              <th>Verified</th>
+                              <th>Receipt</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {f.transactions.map((t) => (
+                              <tr key={t.created_at + t.amount}>
+                                <td>{t.created_at ? new Date(t.created_at).toLocaleDateString("en-PK") : "—"}</td>
+                                <td className="fee__payments-table-amount">Rs {Number(t.amount || 0).toLocaleString()}</td>
+                                <td>{t.payment_method}</td>
+                                <td>{t.reference_number || "—"}</td>
+                                <td>
+                                  {t.recorded_by === "admin" ? (
+                                    <span className="fee__verified-tag"><CheckCircle size={11} /> By Admin</span>
+                                  ) : "—"}
+                                </td>
+                                <td>
+                                  {t.proof_image_url ? (
+                                    <button onClick={() => window.open(t.proof_image_url, "_blank")} className="fee__view-receipt">View</button>
+                                  ) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isPaid && (
+                    <div className="fee__pay-section">
+                      <button
+                        className="fee__pay-btn"
+                        onClick={() => { setShowMethods(showMethods === f.id ? null : f.id); setShowProofForm(null); setUploadSuccess(false); }}
+                      >
+                        Pay Now {showMethods === f.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+
+                      {showMethods === f.id && (
+                        <div className="fee__methods">
+                          <div className="fee__accounts-grid">
+                            {COLLEGE_ACCOUNTS.map((acc) => (
+                              <div key={acc.method} className="fee__account-card">
+                                <div className="fee__account-header">
+                                  <span>{acc.icon} {acc.method}</span>
+                                </div>
+                                {acc.details.map((d) => (
+                                  <div key={d.label} className="fee__account-row">
+                                    <span className="fee__account-label">{d.label}</span>
+                                    <span className="fee__account-value">{d.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="fee__instructions">
+                            <p>📌 <strong>Instructions:</strong></p>
+                            <ol>
+                              <li>Transfer fee to any of the above accounts</li>
+                              <li>Take a screenshot or photo of the receipt</li>
+                              <li>Click "Upload Payment Proof" below</li>
+                              <li>Admin will verify within 24-48 hours</li>
+                            </ol>
+                          </div>
+
+                          <button
+                            className="fee__upload-proof-btn"
+                            onClick={() => setShowProofForm(showProofForm === f.id ? null : f.id)}
+                          >
+                            <Upload size={15} /> Upload Payment Proof
+                          </button>
+
+                          {showProofForm === f.id && (
+                            <div className="fee__proof-form">
+                              <div className="fee__proof-grid">
+                                <div className="fee__proof-field">
+                                  <label>Payment Method Used</label>
+                                  <select value={selectedMethod} onChange={(e) => setSelectedMethod(e.target.value)}>
+                                    <option>Easypaisa</option>
+                                    <option>Bank Al Habib</option>
+                                    <option>Raast</option>
+                                    <option>Cash in College Office</option>
+                                  </select>
+                                </div>
+                                <div className="fee__proof-field">
+                                  <label>{paymentReferenceLabel}</label>
+                                  <input
+                                    placeholder={paymentReferencePlaceholder}
+                                    value={refNumber}
+                                    onChange={(e) => setRefNumber(e.target.value)}
+                                  />
+                                </div>
+                                <div className="fee__proof-field">
+                                  <label>Amount Paid (Rs) *</label>
+                                  <input
+                                    type="number"
+                                    placeholder={`e.g. ${f.amount_due}`}
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <div className="fee__proof-field">
+                                <label>Payment Screenshot / Photo *</label>
+                                <div className="fee__file-area" onClick={() => fileRef.current?.click()}>
+                                  {proofFile ? (
+                                    <p className="fee__file-name"><FileCheck size={14} /> {proofFile.name}</p>
+                                  ) : (
+                                    <p className="fee__file-placeholder"><Upload size={18} /> Click to select screenshot or photo</p>
+                                  )}
+                                </div>
+                                <input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  ref={fileRef}
+                                  onChange={(e) => setProofFile(e.target.files[0])}
+                                  style={{ display: "none" }}
+                                />
+                              </div>
+                              {uploadError && <p className="fee__upload-error">{uploadError}</p>}
+                              <button
+                                onClick={() => handleProofSubmit(f.id)}
+                                disabled={uploading}
+                                className="fee__submit-proof-btn"
+                              >
+                                {uploading ? "Submitting..." : "Submit Payment Proof"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {f.status === "Pending Verification" && (
+                    <div className="fee__pending-note">
+                      ⏳ Your payment proof has been submitted and is under review. You will be notified once verified.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        ))
+        </>
       )}
     </div>
   );

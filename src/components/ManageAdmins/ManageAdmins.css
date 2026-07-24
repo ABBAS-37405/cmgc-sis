@@ -1,0 +1,38 @@
+.manage-admins { display: flex; flex-direction: column; gap: 16px; }
+.manage-admins__section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.manage-admins__heading { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+.manage-admins__form { display: flex; flex-direction: column; gap: 10px; }
+.manage-admins__form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.manage-admins__form-row input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+.manage-admins__password-wrap { position: relative; display: flex; align-items: center; }
+.manage-admins__password-wrap input { padding-right: 34px; }
+.manage-admins__eye { position: absolute; right: 8px; color: var(--subtext); background: none; }
+.manage-admins__field-label { font-size: 12px; font-weight: 600; color: var(--subtext); margin-top: 4px; }
+.manage-admins__chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.manage-admins__chip { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
+.manage-admins__chip--active { background: var(--accent); color: white; border-color: var(--accent); }
+.manage-admins__error { color: #dc2626; font-size: 13px; }
+.manage-admins__submit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; align-self: flex-start; background: var(--accent); color: white; font-weight: 600; font-size: 13px; padding: 9px 16px; border-radius: 8px; }
+.manage-admins__submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.manage-admins__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 24px 0; }
+.manage-admins__list { display: flex; flex-direction: column; gap: 10px; }
+.manage-admins__card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--bg); flex-wrap: wrap; }
+.manage-admins__card-info { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+.manage-admins__name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.manage-admins__email { font-size: 12px; color: var(--subtext); }
+.manage-admins__super-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--card); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 8px; }
+.manage-admins__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.manage-admins__tag { font-size: 11px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; text-transform: capitalize; }
+.manage-admins__tag--muted { color: var(--subtext); }
+.manage-admins__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.manage-admins__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
+.manage-admins__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+.manage-admins__edit-block { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.manage-admins__edit-actions { display: flex; gap: 8px; margin-top: 4px; }
+.manage-admins__save-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; background: var(--accent); color: white; }
+.manage-admins__save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.manage-admins__cancel-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+
+@media (max-width: 640px) {
+  .manage-admins__form-row { grid-template-columns: 1fr; }
+}

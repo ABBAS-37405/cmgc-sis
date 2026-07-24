@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GraduationCap, User, Users, Shield, Lock, Eye, EyeOff, ArrowLeft, AlertCircle } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAdminProfile } from "../../lib/adminAuth";
 import "./LoginPage.css";
 
 const ROLES = [
@@ -27,13 +28,26 @@ export default function LoginPage({ onLogin, onBack }) {
     setLoading(true);
 
     if (role === "admin") {
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: id,
         password,
       });
+      if (authError) {
+        setLoading(false);
+        setError("Invalid email or password");
+        return;
+      }
+
+      const profile = await fetchAdminProfile(authData.user.id);
       setLoading(false);
-      if (authError) { setError("Invalid email or password"); return; }
-      onLogin("admin", id, null);
+
+      if (!profile) {
+        setError("Your account has not been granted any admin permissions yet. Contact the super admin.");
+        await supabase.auth.signOut();
+        return;
+      }
+
+      onLogin("admin", id, profile);
       return;
     }
 

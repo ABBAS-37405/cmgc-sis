@@ -39,8 +39,11 @@ const buildExamName = (examType, examDate, examMonth) => {
   return `${examType} - ${formattedDate}`;
 };
 
-export default function EnterResults() {
-  const [program, setProgram] = useState("Pre-Medical");
+export default function EnterResults({ allowedPrograms = [] }) {
+  const isRestricted = allowedPrograms.length > 0;
+  const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+
+  const [program, setProgram] = useState(isRestricted ? (visiblePrograms[0] || ALL_PROGRAMS) : "Pre-Medical");
   const [yearFilter, setYearFilter] = useState("Both");
   const storedExam = loadStoredExamSelection();
   const [examType, setExamType] = useState(storedExam?.examType || EXAM_TYPES[0]);
@@ -165,8 +168,8 @@ export default function EnterResults() {
         <div className="enter-results__field">
           <label>Program</label>
           <select value={program} onChange={(e) => setProgram(e.target.value)}>
-            <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>
-            {PROGRAMS.map((p) => <option key={p}>{p}</option>)}
+            {!isRestricted && <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>}
+            {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
           </select>
         </div>
         <div className="enter-results__field">

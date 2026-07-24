@@ -34,5 +34,11 @@
 .fee-v__edit-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fee-v__whatsapp { display: inline-flex; align-items: center; justify-content: center; color: #16a34a; border: 1px solid #86efac; padding: 6px 8px; border-radius: 8px; background: #f0fdf4; }
 .fee-v__whatsapp:hover { background: #dcfce7; }
+.fee-v__record-payment { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fee-v__record-payment select, .fee-v__record-payment input { font-size: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--text); font-family: inherit; }
+.fee-v__amount-input { width: 90px; }
+.fee-v__mark-paid { font-size: 12px; font-weight: 600; background: #16a34a; color: white; padding: 6px 12px; border-radius: 8px; white-space: nowrap; }
+.fee-v__mark-paid:disabled { opacity: 0.6; cursor: not-allowed; }
+.fee-v__admin-tag { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--bg); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px; }
 
 @media (min-width: 640px) { .fee-v__card { flex-direction: row; align-items: center; justify-content: space-between; } }

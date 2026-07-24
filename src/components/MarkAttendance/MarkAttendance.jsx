@@ -52,10 +52,13 @@ const sendAbsenceWhatsApp = (student, status, date) => {
   return true;
 };
 
-export default function MarkAttendance() {
+export default function MarkAttendance({ allowedPrograms = [] }) {
+  const isRestricted = allowedPrograms.length > 0;
+  const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+
   const [students, setStudents] = useState([]);
   const [records, setRecords] = useState({});
-  const [program, setProgram] = useState("Pre-Medical");
+  const [program, setProgram] = useState(isRestricted ? (visiblePrograms[0] || ALL_PROGRAMS) : "Pre-Medical");
   const [yearFilter, setYearFilter] = useState("Both");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(false);
@@ -207,8 +210,8 @@ export default function MarkAttendance() {
         <div className="mark-attendance__field">
           <label>Program</label>
           <select value={program} onChange={(e) => { setProgram(e.target.value); setSaved(false); }}>
-            <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>
-            {PROGRAMS.map((p) => <option key={p}>{p}</option>)}
+            {!isRestricted && <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>}
+            {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
           </select>
         </div>
         <div className="mark-attendance__field">

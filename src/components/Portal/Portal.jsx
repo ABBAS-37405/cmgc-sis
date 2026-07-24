@@ -14,10 +14,15 @@ export default function Portal({ onExit }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [role, setRole] = useState("student");
   const [studentData, setStudentData] = useState(null);
+  const [adminProfile, setAdminProfile] = useState(null);
 
   const handleLogin = (r, id, data) => {
     setRole(r);
-    setStudentData(data);
+    if (r === "admin") {
+      setAdminProfile(data);
+    } else {
+      setStudentData(data);
+    }
     setLoggedIn(true);
   };
 
@@ -26,11 +31,12 @@ export default function Portal({ onExit }) {
     setLoggedIn(false);
     setActiveTab("overview");
     setStudentData(null);
+    setAdminProfile(null);
     onExit && onExit();
   };
 
   if (!loggedIn) return <LoginPage onLogin={handleLogin} onBack={onExit} />;
-  if (role === "admin") return <AdminPortal onExit={handleLogout} />;
+  if (role === "admin") return <AdminPortal adminProfile={adminProfile} onExit={handleLogout} />;
 
   return (
     <div className="portal">

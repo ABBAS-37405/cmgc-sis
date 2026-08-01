@@ -17,6 +17,16 @@ const MARGIN = 14;
 const PAGE_W = 210;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
+/**
+ * The page currently being drawn on, not the document's default.
+ *
+ * A combined download mixes a landscape summary with portrait reports, so
+ * anything spanning the full width — the header band, the footer rule — has to
+ * ask rather than assume 210mm.
+ */
+const pageW = (doc) => doc.internal.pageSize.getWidth();
+const pageH = (doc) => doc.internal.pageSize.getHeight();
+
 let pdfLib = null;
 async function loadPdfLib() {
   if (!pdfLib) {
@@ -78,27 +88,43 @@ const tableTheme = (extra = {}) => ({
  * as a direct download. Producing it twice would be wasteful and could produce
  * two different files.
  */
-export async function buildReportPdf(report) {
+export async function buildReportPdf(report, { sections } = {}) {
   const { jsPDF, autoTable } = await loadPdfLib();
   const logo = await loadLogo();
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-  renderReport(doc, autoTable, report, logo);
+  renderReport(doc, autoTable, report, logo, sections);
   drawFooter(doc);
 
   return doc.output("blob");
 }
 
-/** One student's report onto whatever page the doc is currently on. */
-function renderReport(doc, autoTable, report, logo) {
+/**
+ * One student's report onto whatever page the doc is currently on.
+ *
+ * A section the admin unticked is not drawn at all — not drawn empty, not drawn
+ * with a "not included" note. The parent should see a document about the things
+ * it covers, with no holes in it.
+ */
+function renderReport(doc, autoTable, report, logo, sections) {
+  const on = withSections(sections);
+
   let y = drawHeader(doc, report, logo);
   y = drawStudentBlock(doc, autoTable, report, y);
-  y = drawAttendance(doc, autoTable, report, y);
-  y = drawTests(doc, autoTable, report, y);
-  y = drawAssignments(doc, autoTable, report, y);
-  y = drawResult(doc, autoTable, report, y);
-  drawFee(doc, autoTable, report, y);
+  if (on.attendance) y = drawAttendance(doc, autoTable, report, y);
+  if (on.tests) y = drawTests(doc, autoTable, report, y);
+  if (on.assignments) y = drawAssignments(doc, autoTable, report, y);
+  if (on.result) y = drawResult(doc, autoTable, report, y);
+  if (on.fee) drawFee(doc, autoTable, report, y);
 }
+
+/**
+ * Defaults live here as well as in monthlyReport.js on purpose: this module
+ * imports nothing that reaches supabaseClient, and it is not worth breaking that
+ * for five booleans. Callers normally pass a already-normalised object anyway.
+ */
+const ALL_SECTIONS = { attendance: true, tests: true, assignments: true, result: true, fee: true };
+const withSections = (sections) => ({ ...ALL_SECTIONS, ...(sections || {}) });
 
 export function reportFileName(report) {
   const safe = (report.student.roll_no || report.student.name || "student").replace(/[^\w-]/g, "-");
@@ -133,16 +159,21 @@ export function saveBlob(blob, fileName) {
  * button looks broken. The await inside the loop yields to the browser so the
  * counter actually repaints instead of freezing until the end.
  */
-export async function buildAllReportsPdf(reports, { onProgress } = {}) {
+export async function buildAllReportsPdf(reports, { sections, onProgress } = {}) {
   const { jsPDF, autoTable } = await loadPdfLib();
   const logo = await loadLogo();
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-  drawClassSummary(doc, autoTable, reports, logo);
+  // The summary sheet is landscape and the individual reports are portrait.
+  // With every column ticked the summary needs about 195mm of table, which does
+  // not fit A4 portrait — autotable silently squeezes it and warns. The document
+  // therefore starts landscape and each student's page is added as portrait.
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+
+  drawClassSummary(doc, autoTable, reports, logo, sections);
 
   for (let i = 0; i < reports.length; i += 1) {
-    doc.addPage();
-    renderReport(doc, autoTable, reports[i], logo);
+    doc.addPage("a4", "portrait");
+    renderReport(doc, autoTable, reports[i], logo, sections);
     if (onProgress) onProgress(i + 1, reports.length);
     await Promise.resolve();
   }
@@ -152,12 +183,12 @@ export async function buildAllReportsPdf(reports, { onProgress } = {}) {
 }
 
 /** The same reports as separate PDFs inside one ZIP, named by roll number. */
-export async function buildReportsZip(reports, { onProgress } = {}) {
+export async function buildReportsZip(reports, { sections, onProgress } = {}) {
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
 
   for (let i = 0; i < reports.length; i += 1) {
-    const blob = await buildReportPdf(reports[i]);
+    const blob = await buildReportPdf(reports[i], { sections });
     // An ArrayBuffer, not the Blob itself: JSZip only recognises Blob in a
     // browser, and handing it one anywhere else fails with "Can't read the data".
     zip.file(reportFileName(reports[i]), await blob.arrayBuffer());
@@ -167,75 +198,100 @@ export async function buildReportsZip(reports, { onProgress } = {}) {
   return zip.generateAsync({ type: "blob" });
 }
 
-/** The at-a-glance sheet: one line per girl, so a whole class reads on one page. */
-function drawClassSummary(doc, autoTable, reports, logo) {
+/**
+ * The at-a-glance sheet: one line per girl, so a whole class reads on one page.
+ *
+ * Columns follow the same ticks as the individual reports, so the sheet never
+ * summarises something the reports behind it do not contain. They are described
+ * rather than written out because dropping one has to shift every style and
+ * every conditional colour with it.
+ */
+function drawClassSummary(doc, autoTable, reports, logo, sections) {
+  const on = withSections(sections);
   const first = reports[0];
+
   drawBandHeader(doc, {
     title: "Community Model Girls College",
-    subtitle: "Monthly Performance — Class Summary",
+    subtitle: "Performance — Class Summary",
     right: first ? first.monthLabel : "",
     logo,
+  });
+
+  const columns = [
+    { header: "#", width: 8, align: "center", value: (r, i) => i + 1 },
+    { header: "Roll No.", width: 30, value: (r) => r.student.roll_no || "—" },
+    { header: "Name", value: (r) => r.student.name || "—" },
+    { header: "Group / Class", width: 32, size: 8, value: (r) => `${r.student.program || "—"} · ${r.student.year_of_study || "—"}` },
+    on.attendance && {
+      header: "Attendance", width: 26, align: "center",
+      value: (r) => (r.attendance.marked > 0 ? `${r.attendance.present}/${r.attendance.marked} (${pctText(r.attendance.percent)})` : "—"),
+      warn: (r) => r.attendance.percent !== null && r.attendance.percent < 75,
+    },
+    on.tests && {
+      header: "Class Tests", width: 26, align: "center",
+      value: (r) => (r.tests.percent !== null ? `${r.tests.obtained}/${r.tests.total} (${pctText(r.tests.percent)})` : "—"),
+    },
+    on.result && {
+      header: "Exam", width: 26, align: "center",
+      value: (r) => (r.result && r.result.percent !== null ? `${r.result.obtained}/${r.result.total} (${pctText(r.result.percent)})` : "—"),
+    },
+    on.assignments && {
+      header: "Assignments", width: 22, align: "center",
+      value: (r) => (r.assignments.set > 0 ? `${r.assignments.submitted}/${r.assignments.set}` : "—"),
+      warn: (r) => r.assignments.missing > 0,
+    },
+    on.fee && {
+      header: "Fee Balance", width: 24, align: "right",
+      value: (r) => (r.fee.balance > 0 ? money(r.fee.balance) : "Clear"),
+      warn: (r) => r.fee.balance > 0,
+    },
+  ].filter(Boolean);
+
+  const columnStyles = {};
+  columns.forEach((c, i) => {
+    const style = {};
+    if (c.width) style.cellWidth = c.width;
+    if (c.align) style.halign = c.align;
+    if (c.size) style.fontSize = c.size;
+    if (Object.keys(style).length) columnStyles[i] = style;
   });
 
   autoTable(doc, {
     ...tableTheme(),
     startY: 38,
-    head: [["#", "Roll No.", "Name", "Group / Class", "Attendance", "Class Tests", "Assignments", "Fee Balance"]],
-    body: reports.map((r, i) => [
-      i + 1,
-      r.student.roll_no || "—",
-      r.student.name || "—",
-      `${r.student.program || "—"} · ${r.student.year_of_study || "—"}`,
-      r.attendance.marked > 0 ? `${r.attendance.present}/${r.attendance.marked} (${pctText(r.attendance.percent)})` : "—",
-      r.tests.percent !== null ? `${r.tests.obtained}/${r.tests.total} (${pctText(r.tests.percent)})` : "—",
-      r.assignments.set > 0 ? `${r.assignments.submitted}/${r.assignments.set}` : "—",
-      r.fee.balance > 0 ? money(r.fee.balance) : "Clear",
-    ]),
-    columnStyles: {
-      0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: 30 },
-      3: { cellWidth: 32, fontSize: 8 },
-      4: { cellWidth: 26, halign: "center" },
-      5: { cellWidth: 26, halign: "center" },
-      6: { cellWidth: 20, halign: "center" },
-      7: { cellWidth: 24, halign: "right" },
-    },
-    // Below 75% attendance and any outstanding fee are the two things the office
-    // acts on, so they are coloured rather than left to be scanned for.
+    head: [columns.map((c) => c.header)],
+    body: reports.map((r, i) => columns.map((c) => c.value(r, i))),
+    columnStyles,
+    // Below 75% attendance, missing assignments and any outstanding fee are what
+    // the office acts on, so they are coloured rather than left to be scanned for.
     didParseCell: (data) => {
       if (data.section !== "body") return;
-      const r = reports[data.row.index];
-      if (data.column.index === 4 && r.attendance.percent !== null && r.attendance.percent < 75) {
+      const column = columns[data.column.index];
+      if (column?.warn?.(reports[data.row.index])) {
         data.cell.styles.textColor = [153, 27, 27];
         data.cell.styles.fontStyle = "bold";
-      }
-      if (data.column.index === 7 && r.fee.balance > 0) {
-        data.cell.styles.textColor = [153, 27, 27];
       }
     },
   });
 
   const y = doc.lastAutoTable.finalY + 6;
-  const withAtt = reports.filter((r) => r.attendance.percent !== null);
-  const avgAtt = withAtt.length
-    ? withAtt.reduce((a, r) => a + r.attendance.percent, 0) / withAtt.length
-    : null;
-  const below75 = withAtt.filter((r) => r.attendance.percent < 75).length;
-  const owing = reports.filter((r) => r.fee.balance > 0);
+  const parts = [`Students: ${reports.length}`];
+
+  if (on.attendance) {
+    const withAtt = reports.filter((r) => r.attendance.percent !== null);
+    const avgAtt = withAtt.length ? withAtt.reduce((a, r) => a + r.attendance.percent, 0) / withAtt.length : null;
+    parts.push(`Average attendance: ${pctText(avgAtt)}`);
+    parts.push(`Below 75%: ${withAtt.filter((r) => r.attendance.percent < 75).length}`);
+  }
+  if (on.fee) {
+    const owing = reports.filter((r) => r.fee.balance > 0);
+    parts.push(`Fee outstanding: ${owing.length} student(s), ${money(owing.reduce((a, r) => a + r.fee.balance, 0))}`);
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
-  doc.text(
-    [
-      `Students: ${reports.length}`,
-      `Average attendance: ${pctText(avgAtt)}`,
-      `Below 75%: ${below75}`,
-      `Fee outstanding: ${owing.length} student(s), ${money(owing.reduce((a, r) => a + r.fee.balance, 0))}`,
-    ].join("     ·     "),
-    MARGIN,
-    y
-  );
+  doc.text(parts.join("     ·     "), MARGIN, y);
 }
 
 /* -------------------------------------------------------- test result sheet */
@@ -472,8 +528,9 @@ function drawTestSlip(doc, autoTable, report, row, logo) {
 
 /** The accent band every document opens with. Returns the y to carry on from. */
 function drawBandHeader(doc, { title, subtitle, right, logo }) {
+  const width = pageW(doc);
   doc.setFillColor(...ACCENT);
-  doc.rect(0, 0, PAGE_W, 30, "F");
+  doc.rect(0, 0, width, 30, "F");
 
   if (logo) {
     // The generated logo is square; 16mm keeps it inside the band.
@@ -497,7 +554,7 @@ function drawBandHeader(doc, { title, subtitle, right, logo }) {
   if (right) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.text(right, PAGE_W - MARGIN, 20.5, { align: "right" });
+    doc.text(right, width - MARGIN, 20.5, { align: "right" });
   }
 
   return 38;
@@ -525,8 +582,9 @@ function sectionTitle(doc, title, y) {
 
 /** Starts a new page when the next section would not fit. */
 function ensureSpace(doc, y, needed) {
-  if (y + needed > 275) {
-    doc.addPage();
+  // 22mm below the page keeps the footer rule clear.
+  if (y + needed > pageH(doc) - 22) {
+    doc.addPage("a4", "portrait");
     return 20;
   }
   return y;
@@ -789,14 +847,19 @@ function drawFooter(doc) {
 
   for (let i = 1; i <= pages; i += 1) {
     doc.setPage(i);
+    // Read after setPage: in a combined download page 1 is landscape and the
+    // rest are portrait, so these differ from page to page.
+    const width = pageW(doc);
+    const height = pageH(doc);
+
     doc.setDrawColor(...LINE);
     doc.setLineWidth(0.3);
-    doc.line(MARGIN, 283, PAGE_W - MARGIN, 283);
+    doc.line(MARGIN, height - 14, width - MARGIN, height - 14);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...MUTED);
-    doc.text(`Generated on ${printed} · This is a computer-generated report and needs no signature.`, MARGIN, 288);
-    doc.text(`Page ${i} of ${pages}`, PAGE_W - MARGIN, 288, { align: "right" });
+    doc.text(`Generated on ${printed} · This is a computer-generated report and needs no signature.`, MARGIN, height - 9);
+    doc.text(`Page ${i} of ${pages}`, width - MARGIN, height - 9, { align: "right" });
   }
 }

@@ -122,7 +122,12 @@ A test can span groups: picking `"All Programs"` stores that literal in `class_t
 
 The `reports` tab holds two screens, both gated by the `reports` permission and scoped by `allowed_programs` like every other admin screen.
 
-**Monthly Reports** — one PDF per girl per month: attendance, class tests, assignments, the term result if one was recorded, and her fee position. Sent to the parent over WhatsApp, or downloaded for the whole class at once (one combined PDF, or a ZIP of separate files).
+**Monthly Reports** — one PDF per girl per month: attendance, class tests, assignments, an examination result, and her fee position. Sent to the parent over WhatsApp, or downloaded for the whole class at once (one combined PDF, or a ZIP of separate files).
+
+Two controls decide what a report actually says, and both flow through every path — the individual PDF, the bulk PDF, the ZIP and the WhatsApp text:
+
+- **The exam selector.** `EXAM_CLASS_TESTS` (the default) means no examination section at all; `EXAM_AUTO_MONTH` means whatever exam was entered during the report month; anything else is matched against `results.exam_name` verbatim, **with no date filter** — a Pre-Board sat in December is exactly what an admin wants to send out in January, and scoping it to the report month would silently return nothing. The dropdown is built from `fetchExamNames()`, i.e. what is actually in the table, because exam names are free text assembled by `EnterResults` ("Pre-Board Exam - 15 August 2026") and there is no list of them anywhere else.
+- **The section ticks** (`DEFAULT_SECTIONS`, all on). An unticked section is not drawn at all — not drawn empty, not drawn with a "not included" note. `buildReportMessage()` honours the same object, so the WhatsApp text never quotes a figure the PDF behind it does not contain. The class summary sheet drops the matching column and the matching footer statistic too.
 
 **Test Reports** — one class test across a class: a result sheet with positions, grades and class statistics, followed by a page per girl to send home. `src/lib/testReport.js` owns it.
 
@@ -133,6 +138,8 @@ Files: `src/lib/monthlyReport.js` and `src/lib/testReport.js` aggregate, `src/li
 Two rules the test-report maths follows, both easy to get wrong: **positions are dense-ranked with gaps** (equal marks share a position and the next is skipped — 1, 2, 2, 4), and **a girl with no mark row is not a zero.** She is `notMarked`, keeps `obtained: null`, is excluded from the average, the positions and the pass count, and gets no page of her own. Printing 0 for "not yet marked" would be a lie that reaches a parent.
 
 The ZIP path hands JSZip an `ArrayBuffer`, never the Blob jsPDF returns — JSZip only recognises Blob inside a browser and fails with "Can't read the data" anywhere else.
+
+**A combined download mixes orientations**: the summary sheet is landscape (with every column ticked it needs ~195mm of table, which A4 portrait cannot hold — autotable squeezes it and warns), each student's report is portrait. So nothing spanning the page width may assume 210mm: `drawBandHeader`, `drawFooter` and `ensureSpace` all read `pageW(doc)` / `pageH(doc)`, and `drawFooter` reads them *after* `setPage(i)` because they differ page to page.
 
 **A link is not a design choice, it is the only option.** Click-to-chat cannot attach a file (see the WhatsApp section below), so the PDF is uploaded to the public `reports` bucket and the message carries its URL. The path is `monthly/<YYYY-MM>/<student uuid>.pdf`: the UUID is what makes it unguessable, and `upsert: true` means regenerating a month replaces the file so links already sent keep working. The trade — anyone the message is forwarded to can also open it — is written up at the bottom of `supabase_monthly_reports.sql`, along with the signed-URL alternative.
 

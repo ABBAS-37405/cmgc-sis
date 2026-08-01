@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileDown, Send, RefreshCw, CheckCircle2, AlertCircle, CalendarRange, FileArchive, Files } from "lucide-react";
+import { FileDown, Send, RefreshCw, CheckCircle2, AlertCircle, CalendarRange, FileArchive, Files, GraduationCap } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, YEARS } from "../../lib/academics";
 import {
@@ -10,6 +10,12 @@ import {
   uploadReportPdf,
   logReportSent,
   fetchReportLog,
+  fetchExamNames,
+  normaliseSections,
+  DEFAULT_SECTIONS,
+  SECTION_LABELS,
+  EXAM_CLASS_TESTS,
+  EXAM_AUTO_MONTH,
 } from "../../lib/monthlyReport";
 import {
   buildReportPdf,
@@ -44,6 +50,10 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
   const [program, setProgram] = useState(isRestricted ? visiblePrograms[0] || ALL_PROGRAMS : ALL_PROGRAMS);
   const [yearFilter, setYearFilter] = useState("Both");
   const [search, setSearch] = useState("");
+  // Which examination the report speaks about, and which sections it carries.
+  const [examName, setExamName] = useState(EXAM_CLASS_TESTS);
+  const [exams, setExams] = useState([]);
+  const [sections, setSections] = useState(DEFAULT_SECTIONS);
 
   const [reports, setReports] = useState([]);
   const [sentLog, setSentLog] = useState({});
@@ -88,10 +98,15 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
       return;
     }
 
+    const ids = (students || []).map((s) => s.id);
+
     try {
-      const built = await buildMonthlyReports(students || [], month);
-      setReports(built);
-      setSentLog(await fetchReportLog((students || []).map((s) => s.id), month));
+      setReports(await buildMonthlyReports(students || [], month, { examName }));
+      // Both are about this roster, so they are loaded with it rather than on
+      // their own effects — one fewer round trip and no half-loaded screen.
+      const [log, examList] = await Promise.all([fetchReportLog(ids, month), fetchExamNames(ids)]);
+      setSentLog(log);
+      setExams(examList);
     } catch (e) {
       setError(e.message || "Could not build the reports.");
     }
@@ -101,11 +116,13 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program, yearFilter, month]);
+  }, [program, yearFilter, month, examName]);
+
+  const toggleSection = (id) => setSections((prev) => ({ ...prev, [id]: !normaliseSections(prev)[id] }));
 
   /** PDF + upload, shared by download and send. */
   const generate = async (report) => {
-    const blob = await buildReportPdf(report);
+    const blob = await buildReportPdf(report, { sections });
     return { blob, url: await uploadReportPdf(report, blob) };
   };
 
@@ -113,7 +130,7 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
     setBusyId(report.student.id);
     setError("");
     try {
-      saveBlob(await buildReportPdf(report), reportFileName(report));
+      saveBlob(await buildReportPdf(report, { sections }), reportFileName(report));
     } catch (e) {
       setError(e.message || "Could not build the PDF.");
     }
@@ -138,9 +155,9 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
 
     try {
       if (mode === "zip") {
-        saveBlob(await buildReportsZip(filtered, { onProgress }), `CMGC-reports-${monthName}.zip`);
+        saveBlob(await buildReportsZip(filtered, { sections, onProgress }), `CMGC-reports-${monthName}.zip`);
       } else {
-        saveBlob(await buildAllReportsPdf(filtered, { onProgress }), `CMGC-reports-${monthName}.pdf`);
+        saveBlob(await buildAllReportsPdf(filtered, { sections, onProgress }), `CMGC-reports-${monthName}.pdf`);
       }
       setNote(`${filtered.length} report${filtered.length === 1 ? "" : "s"} downloaded.`);
     } catch (e) {
@@ -172,7 +189,7 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
     setError("");
     try {
       const { url } = await generate(report);
-      openWhatsApp(number, buildReportMessage(report, url), windowRef);
+      openWhatsApp(number, buildReportMessage(report, url, sections), windowRef);
       await logReportSent({ report, url, sentBy: adminProfile?.user_id || null });
       setSentLog((prev) => ({
         ...prev,
@@ -229,6 +246,10 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
   });
 
   const sentCount = filtered.filter((r) => sentLog[r.student.id]).length;
+  const showExamColumn = examName !== EXAM_CLASS_TESTS && !!normaliseSections(sections).result;
+  // How many girls actually have marks for the exam that was picked — sending a
+  // "Pre-Board result" to a class where nobody has one is the mistake to catch.
+  const withResult = filtered.filter((r) => r.result).length;
 
   return (
     <div className="mrep">
@@ -295,6 +316,19 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
           </select>
         </label>
 
+        <label className="mrep__field">
+          <span><GraduationCap size={13} /> Exam</span>
+          <select value={examName} onChange={(e) => setExamName(e.target.value)}>
+            <option value={EXAM_CLASS_TESTS}>Class Tests only</option>
+            <option value={EXAM_AUTO_MONTH}>Any exam entered this month</option>
+            {exams.length > 0 && (
+              <optgroup label="Recorded exams">
+                {exams.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
+              </optgroup>
+            )}
+          </select>
+        </label>
+
         <label className="mrep__field mrep__field--grow">
           <span>Search</span>
           <input
@@ -304,6 +338,32 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
+      </div>
+
+      <div className="mrep__include">
+        <span className="mrep__include-label">Include in the report</span>
+        <div className="mrep__include-boxes">
+          {SECTION_LABELS.map((s) => {
+            // The exam section has nothing to draw unless an exam is selected,
+            // so its tick is disabled rather than silently producing nothing.
+            const noExam = s.id === "result" && examName === EXAM_CLASS_TESTS;
+            return (
+              <label
+                key={s.id}
+                className={`mrep__check ${noExam ? "mrep__check--off" : ""}`}
+                title={noExam ? "Pick an exam above to include a result section" : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={!noExam && !!normaliseSections(sections)[s.id]}
+                  disabled={noExam}
+                  onChange={() => toggleSection(s.id)}
+                />
+                {s.label}
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       {error && <p className="mrep__error"><AlertCircle size={14} /> {error}</p>}
@@ -333,7 +393,10 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
       ) : (
         <>
           <div className="mrep__bar">
-            <span>{filtered.length} student{filtered.length === 1 ? "" : "s"} · {sentCount} already sent this month</span>
+            <span>
+              {filtered.length} student{filtered.length === 1 ? "" : "s"} · {sentCount} already sent this month
+              {showExamColumn && ` · ${withResult} with marks for this exam`}
+            </span>
             <div className="mrep__bar-actions">
               <button className="mrep__btn" onClick={() => downloadAll("pdf")} disabled={!!bulk}>
                 <Files size={14} /> {bulk ? bulk : "Download all — one PDF"}
@@ -357,6 +420,7 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
                   <th>Group / Class</th>
                   <th>Attendance</th>
                   <th>Class Tests</th>
+                  {showExamColumn && <th>Exam</th>}
                   <th>Assignments</th>
                   <th>Fee Balance</th>
                   <th>Report</th>
@@ -394,6 +458,20 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
                         </span>
                         <span className="mrep__detail">{r.tests.count} test{r.tests.count === 1 ? "" : "s"}</span>
                       </td>
+                      {showExamColumn && (
+                        <td>
+                          {r.result ? (
+                            <>
+                              <span className={`mrep__pct ${pctTone(r.result.percent, 50)}`}>
+                                {pctText(r.result.percent)}
+                              </span>
+                              <span className="mrep__detail">{r.result.obtained}/{r.result.total}</span>
+                            </>
+                          ) : (
+                            <span className="mrep__detail">Not recorded</span>
+                          )}
+                        </td>
+                      )}
                       <td>
                         <span className="mrep__detail mrep__detail--strong">
                           {r.assignments.submitted}/{r.assignments.set} submitted

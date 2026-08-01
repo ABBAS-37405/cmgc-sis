@@ -52,6 +52,70 @@ export function recentMonths(count = 18) {
 const pct = (obtained, total) => (total > 0 ? (obtained / total) * 100 : null);
 const num = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
 
+/* --------------------------------------------------------- what to include */
+
+/**
+ * Which examination the report speaks about.
+ *
+ * The default is class tests alone, because that is what most months actually
+ * hold. The two sentinels are not exam names — anything else in this field is
+ * matched against `results.exam_name` verbatim.
+ */
+export const EXAM_CLASS_TESTS = "__class_tests__"; // no examination section at all
+export const EXAM_AUTO_MONTH = "__auto_month__";   // whatever exam was entered this month
+
+/** Every section is on unless the admin turns it off. */
+export const DEFAULT_SECTIONS = {
+  attendance: true,
+  tests: true,
+  assignments: true,
+  result: true,
+  fee: true,
+};
+
+export const SECTION_LABELS = [
+  { id: "attendance", label: "Attendance" },
+  { id: "tests", label: "Class Tests" },
+  { id: "assignments", label: "Assignments" },
+  { id: "result", label: "Exam Result" },
+  { id: "fee", label: "Fee Position" },
+];
+
+export function normaliseSections(sections) {
+  return { ...DEFAULT_SECTIONS, ...(sections || {}) };
+}
+
+/**
+ * The exams these students actually have marks for, newest first.
+ *
+ * Names are free text built by EnterResults ("Pre-Board Exam - 15 August 2026"),
+ * so the only honest source for the dropdown is what is already in the table.
+ * Deliberately not limited to the report month: picking an exam is how an admin
+ * sends out a Pre-Board result, and that exam rarely sits in the month she is
+ * reporting on.
+ */
+export async function fetchExamNames(studentIds) {
+  if (!studentIds || studentIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("results")
+    .select("exam_name, created_at")
+    .in("student_id", studentIds);
+
+  if (error) return [];
+
+  const latest = new Map();
+  (data || []).forEach((r) => {
+    if (!r.exam_name) return;
+    const seen = latest.get(r.exam_name);
+    if (!seen || new Date(r.created_at) > new Date(seen)) latest.set(r.exam_name, r.created_at);
+  });
+
+  return [...latest.entries()]
+    .sort((a, b) => new Date(b[1]) - new Date(a[1]))
+    .map(([name, enteredAt]) => ({ name, enteredAt }));
+}
+
 /**
  * Builds every student's report for one month in one pass.
  *
@@ -59,7 +123,7 @@ const num = (v) => (v === null || v === undefined || v === "" ? null : Number(v)
  * the sub-admin's allowed_programs are decided in one place, not repeated here).
  * Returns one report object per student, in the same order.
  */
-export async function buildMonthlyReports(students, month) {
+export async function buildMonthlyReports(students, month, { examName = EXAM_CLASS_TESTS } = {}) {
   const range = monthRange(month);
   const ids = students.map((s) => s.id);
   if (ids.length === 0) return [];
@@ -93,14 +157,7 @@ export async function buildMonthlyReports(students, month) {
       .gte("due_date", range.from)
       .lte("due_date", range.to),
 
-    // `results` has no exam date of its own, so "this month's result" means the
-    // marks were entered this month.
-    supabase
-      .from("results")
-      .select("student_id, exam_name, subject, marks_obtained, total_marks, created_at")
-      .in("student_id", ids)
-      .gte("created_at", `${range.from}T00:00:00`)
-      .lte("created_at", `${range.to}T23:59:59`),
+    examResultsQuery(ids, range, examName),
 
     // Fee position as it stood at month end: every charge already due by then.
     supabase
@@ -150,6 +207,35 @@ export async function buildMonthlyReports(students, month) {
       fees: feesBy.get(student.id) || [],
     })
   );
+}
+
+/**
+ * Which `results` rows the examination section is built from.
+ *
+ * A named exam is fetched whole, with no date filter — a Pre-Board sat in
+ * December is exactly the thing an admin wants to send out in January, and
+ * scoping it to the report month would silently return nothing. Only the
+ * automatic mode looks at the month, and it looks at `created_at` because
+ * `results` carries no exam date of its own.
+ */
+function examResultsQuery(ids, range, examName) {
+  const columns = "student_id, exam_name, subject, marks_obtained, total_marks, created_at";
+
+  if (examName === EXAM_CLASS_TESTS) {
+    // Nothing to fetch: the report has no examination section in this mode.
+    return Promise.resolve({ data: [], error: null });
+  }
+
+  if (examName === EXAM_AUTO_MONTH) {
+    return supabase
+      .from("results")
+      .select(columns)
+      .in("student_id", ids)
+      .gte("created_at", `${range.from}T00:00:00`)
+      .lte("created_at", `${range.to}T23:59:59`);
+  }
+
+  return supabase.from("results").select(columns).in("student_id", ids).eq("exam_name", examName);
 }
 
 function assembleReport({ student, range, month, attendance, testMarks, assignments, submissions, results, fees }) {
@@ -403,22 +489,28 @@ export async function fetchReportLog(studentIds, month) {
  * Deliberately short: WhatsApp truncates long prefilled messages behind a "read
  * more", and the link is the part that must stay visible.
  */
-export function buildReportMessage(report, url) {
-  const { student, attendance, tests } = report;
+export function buildReportMessage(report, url, sections) {
+  const on = normaliseSections(sections);
+  const { student, attendance, tests, result } = report;
   const lines = [
     "Assalamualaikum,",
     "",
-    `${student.name} (Roll No: ${student.roll_no}) ki ${report.monthLabel} ki monthly performance report tayyar hai.`,
+    `${student.name} (Roll No: ${student.roll_no}) ki ${report.monthLabel} ki performance report tayyar hai.`,
     "",
   ];
 
-  if (attendance.marked > 0) {
+  // Only ever quote a figure the PDF actually contains — a summary line for a
+  // section the admin switched off would send the parent looking for it.
+  if (on.attendance && attendance.marked > 0) {
     lines.push(`Attendance: ${attendance.present}/${attendance.marked} din (${attendance.percent.toFixed(0)}%)`);
   }
-  if (tests.percent !== null) {
+  if (on.tests && tests.percent !== null) {
     lines.push(`Class Tests: ${tests.obtained}/${tests.total} (${tests.percent.toFixed(0)}%)`);
   }
-  if (report.fee.balance > 0) {
+  if (on.result && result && result.percent !== null) {
+    lines.push(`${result.examName}: ${result.obtained}/${result.total} (${result.percent.toFixed(0)}%)`);
+  }
+  if (on.fee && report.fee.balance > 0) {
     lines.push(`Fee baqaya: Rs. ${report.fee.balance.toLocaleString("en-PK")}`);
   }
 

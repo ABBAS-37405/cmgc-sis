@@ -1,0 +1,52 @@
+# ============================================================
+# Supabase Keep-Alive Workflow
+# ============================================================
+# Maqsad: Supabase free tier project ko 7-din inactivity ke
+# baad "auto-pause" hone se bachana. Ye workflow har hafte
+# automatically Supabase project ko ek halka API request
+# bhejta hai taake project "active" mana jaye.
+#
+# INSTALLATION STEPS:
+# 1. Is file ko apne cmgc-sis GitHub repo mein yahan save karein:
+#       .github/workflows/supabase-keepalive.yml
+#
+# 2. GitHub repo ke Settings > Secrets and variables > Actions
+#    mein 2 secrets add karein:
+#       SUPABASE_URL       -> e.g. https://xxxxx.supabase.co
+#       SUPABASE_ANON_KEY  -> aapki Supabase project ki anon/public key
+#    (Ye dono values aapko Supabase Dashboard > Project Settings > API mein milengi)
+#
+# 3. Commit + push kar dein. Bas — ye har Sunday raat automatic chalega.
+#    Chahein to "Actions" tab mein ja kar manually bhi "Run workflow" 
+#    button se turant test kar sakte hain.
+# ============================================================
+
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Har Sunday raat 11:00 PM UTC (~4:00 AM Pakistan time, Monday)
+    - cron: '0 23 * * 0'
+  workflow_dispatch: {} # Manual "Run workflow" button ke liye
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API (keep project active)
+        run: |
+          echo "Pinging Supabase project to prevent auto-pause..."
+          
+          http_status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          
+          echo "Response status: $http_status"
+          
+          if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 500 ]; then
+            echo "✅ Supabase project is alive and responded."
+          else
+            echo "⚠️ Unexpected response. Check your Supabase URL/key secrets."
+            exit 1
+          fi

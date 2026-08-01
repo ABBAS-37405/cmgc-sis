@@ -8,6 +8,7 @@ export const PERMISSION_KEYS = [
   { id: "notices", label: "Notices" },
   { id: "lms", label: "Course Material (LMS)" },
   { id: "teachers", label: "Teachers" },
+  { id: "reports", label: "Monthly Reports" },
 ];
 
 // Re-exported so every existing `import { PROGRAMS } from "adminAuth"` keeps

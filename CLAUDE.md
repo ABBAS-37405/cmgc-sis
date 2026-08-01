@@ -37,7 +37,7 @@ There is no router. `src/App.jsx` early-returns `<Portal>` or `<AdmissionPage>` 
 
 ### Admin permissions model
 
-`src/lib/adminAuth.js` owns `PERMISSION_KEYS` (`students`, `attendance`, `results`, `fee`, `notices`, `lms`, `teachers`). It re-exports `PROGRAMS`, which is **derived from `src/lib/academics.js`** — see below. These string values must match the DB and RLS policies exactly.
+`src/lib/adminAuth.js` owns `PERMISSION_KEYS` (`students`, `attendance`, `results`, `fee`, `notices`, `lms`, `teachers`, `reports`). It re-exports `PROGRAMS`, which is **derived from `src/lib/academics.js`** — see below. These string values must match the DB and RLS policies exactly.
 
 - `is_super_admin: true` → everything, plus the "Manage Admins" tab.
 - Otherwise `permissions[]` gates which tabs render (`AdminSidebar` filters nav, `AdminPortal` guards the render), and `allowed_programs[]` scopes which students they can touch. **Empty `allowed_programs` means all programs, not none** — `allowedProgramsFor()` returns `[]` for super admins too, and components treat `[]` as unrestricted.
@@ -66,9 +66,10 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_profile_edit_requests.sql` — `profile_edit_requests`, plus the only write path students have. See "Student self-service edits" below; the column-level `grant update (...) on students to anon` in there is the hard ceiling on what a student can ever change, and `STUDENT_EDITABLE` in `src/lib/profileEdit.js` must mirror it.
 - `supabase_bform_unique.sql` — partial unique indexes making one B-Form mean one girl: `applications_bform_unique` (exempts soft-deleted and `Rejected` rows so a rejected applicant may re-apply) and `students_cnic_unique`. Both index `regexp_replace(…, '[^0-9]', '', 'g')`, so a number typed with or without dashes is the same number.
 - `supabase_student_details.sql` — the 25 columns that bring `students` up to parity with `applications` (`whatsapp`, contact, personal, family/finance, matric record, and the five document URLs), plus a backfill joining `applications a` on `a.bform = s.cnic` with `coalesce` so nothing already set is overwritten, and a `whatsapp = phone` fallback.
+- `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
-Tables in use: `students`, `admin_profiles`, `teachers`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `fees`, `payment_transactions`, `notices`. Storage buckets: `student-profiles`, `admission-documents` (both public).
+Tables in use: `students`, `admin_profiles`, `teachers`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
 
 ### Fee flow
 
@@ -116,6 +117,24 @@ Class tests are two tables on purpose: `class_tests` is one row per test conduct
 A test can span groups: picking `"All Programs"` stores that literal in `class_tests.program` and the concrete groups it covered in `class_tests.programs[]`. Always build the roster from `programs[]`, falling back to `[program]` — reading `program` alone silently returns nobody for a combined test.
 
 `ClassTestEntry` is shared: pass a `teacher` and it locks to her subjects/programs and stamps her id on new tests; pass `teacher={null}` plus `teacherOptions` and it becomes the admin's full-range view.
+
+### Monthly reports
+
+One PDF per girl per month — attendance, class tests, assignments, the term result if one was recorded, and her fee position — sent to the parent over WhatsApp. Gated by the `reports` permission, and scoped by `allowed_programs` like every other admin screen.
+
+Three files: `src/lib/monthlyReport.js` aggregates, `src/lib/reportPdf.js` renders, `MonthlyReports.jsx` is the screen. Nothing is stored that could be recomputed — the report is assembled from existing tables every time it is opened.
+
+**A link is not a design choice, it is the only option.** Click-to-chat cannot attach a file (see the WhatsApp section below), so the PDF is uploaded to the public `reports` bucket and the message carries its URL. The path is `monthly/<YYYY-MM>/<student uuid>.pdf`: the UUID is what makes it unguessable, and `upsert: true` means regenerating a month replaces the file so links already sent keep working. The trade — anyone the message is forwarded to can also open it — is written up at the bottom of `supabase_monthly_reports.sql`, along with the signed-URL alternative.
+
+Three things here are easy to break:
+
+- **`buildMonthlyReports()` takes the whole roster at once**, not one student. Six queries serve a class of any size; calling it per student inside a `.map()` is exactly the pattern the Performance section forbids. The class-test query needs `class_tests!inner(...)` because `class_test_marks` carries no date of its own — the `test_date` filter has to reach the parent row.
+- **jsPDF is imported dynamically inside `loadPdfLib()`.** It and its optional deps are ~800 kB; a static import would fold the PDF engine into the admin chunk for every admin who never opens the tab. The landing bundle must stay at 419 kB.
+- **Sending is a queue, and the popup window is reserved before the `await`.** PDF generation and upload both take time, and a `window.open` fired after them is blocked — `send()` therefore takes a `windowRef` the caller opened inside the click gesture, the same trick `StudentsList.doApprove()` uses.
+
+`report_log` is one row per student per month, upserted on `(student_id, month)`, purely so the list can show "Sent 3 Aug" and nobody gets messaged twice. It snapshots the two percentages that were actually sent, which is not necessarily what the tables would produce later if a mark is corrected. Logging is best effort: `fetchReportLog()` swallows its error and returns `{}` so a portal running before the migration still works.
+
+`results` has no exam date, so "this month's result" means the marks were **entered** this month (`created_at`) — a term exam sat in March but typed in May lands in May's report.
 
 ### WhatsApp
 

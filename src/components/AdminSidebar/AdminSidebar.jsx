@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut, FileBarChart } from "lucide-react";
 import Logo from "../Logo/Logo";
 import { hasPermission } from "../../lib/adminAuth";
 import "./AdminSidebar.css";
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { id: "notices", label: "Notices", icon: Bell, permission: "notices" },
   { id: "lms", label: "LMS", icon: BookOpen, permission: "lms" },
   { id: "teachers", label: "Teachers", icon: BookOpen, permission: "teachers" },
+  { id: "reports", label: "Monthly Reports", icon: FileBarChart, permission: "reports" },
   { id: "admins", label: "Manage Admins", icon: ShieldCheck, permission: "__super_admin_only__" },
 ];
 

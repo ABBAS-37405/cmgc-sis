@@ -8,6 +8,7 @@ import FeeVerification from "../FeeVerification/FeeVerification";
 import Notices from "../Notices/Notices";
 import LmsManage from "../LmsManage/LmsManage";
 import Teachers from "../Teachers/Teachers";
+import MonthlyReports from "../MonthlyReports/MonthlyReports";
 import ManageAdmins from "../ManageAdmins/ManageAdmins";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
 import "./AdminPortal.css";
@@ -30,6 +31,7 @@ export default function AdminPortal({ adminProfile, onExit }) {
             groups offer, rather than one teacher's own list. */}
         {active === "lms" && hasPermission(adminProfile, "lms") && <LmsManage teacher={null} allowedPrograms={allowedPrograms} />}
         {active === "teachers" && hasPermission(adminProfile, "teachers") && <Teachers allowedPrograms={allowedPrograms} />}
+        {active === "reports" && hasPermission(adminProfile, "reports") && <MonthlyReports allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "admins" && adminProfile?.is_super_admin && <ManageAdmins adminProfile={adminProfile} />}
       </main>
     </div>

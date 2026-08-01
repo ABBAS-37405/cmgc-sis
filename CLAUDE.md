@@ -10,6 +10,7 @@ npm run build      # production build to dist/
 npm run preview    # serve the built dist/
 npm run lint       # eslint .
 npm run optimize:images   # regenerate public/images/gallery from _original-photos/
+npm run optimize:logo     # regenerate public/logo.png + favicon.png from _original-photos/
 node server.js     # Express API on :3001 — must run separately, no npm script for it
 ```
 
@@ -128,9 +129,18 @@ Click-to-chat can only pre-fill — a human must press Send. Actual automated de
 
 ### Campus photos
 
-`public/images/gallery/` is **generated output, not source** — never edit or add files there by hand. The camera originals live in `_original-photos/` (gitignored, ~93 MB) and `npm run optimize:images` derives two sets from them: 1600px `g<N>.jpg` for the featured photo, lightbox and hero rails, plus 320px `thumbs/g<N>.jpg` for the gallery strip. That takes the served weight from 93 MB to ~5.4 MB, and normalises the originals' mixed `.jpg`/`.JPG` casing — which Windows tolerates but a case-sensitive host does not.
+`public/images/gallery/` is **generated output, not source** — never edit or add files there by hand. The camera originals live in `_original-photos/` (gitignored, ~93 MB) and `npm run optimize:images` derives, per photo, WebP at 320/640/1200/1600 plus one 1200px JPEG.
 
-`src/lib/galleryImages.js` builds both URL lists from a single `COUNT`. Adding photos means: drop them in `_original-photos/`, re-run the script, bump `COUNT`. `Gallery` and both `PhotoRail`s pick them up with no other edit.
+Two separate savings are at work, and both are easy to undo:
+
+- **Format.** WebP over JPEG. The JPEG is a fallback only — `Photo.jsx` serves it through `<picture>` because `srcset` entries are not type-checked, so a browser that knows `srcset` but not WebP (Safari 13 and older) would otherwise pick a WebP and show nothing.
+- **Width.** Nothing in the app picks a file; `srcset` offers all four and the browser chooses. That choice depends entirely on the `sizes` attribute, so **`sizes` is mandatory** — omit it and the browser assumes full-viewport and takes the largest file. The correct values per placement live in `PHOTO_SIZES`.
+
+Always render campus photos through `Photo` (`src/components/Photo/Photo.jsx`), never a bare `<img>`. Its `.photo { display: contents }` is what keeps `<picture>` from becoming a layout box, so CSS written against the `<img>` keeps working.
+
+The hero rails were the worst case before this: 420px boxes cycling all 25 photos at 1600px. They now paint the 640px WebP (~32 kB each), and `PhotoRail` warms up `photo.rail` — the same file it will display — rather than fetching a second copy.
+
+Adding photos means: drop them in `_original-photos/`, re-run the script, bump `COUNT` in `src/lib/galleryImages.js`. `WIDTHS` there must match `WIDTHS` in `optimize-gallery.mjs`.
 
 ### Performance
 

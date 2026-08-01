@@ -1,0 +1,8 @@
+/* The wrapper exists only so the browser can choose a format — it must not
+   become a box of its own, or the img's width/height:100% would resolve against
+   an inline element instead of the real container. `display: contents` makes
+   the img behave exactly as if it were a direct child, so every layout written
+   before <picture> was introduced keeps working untouched. */
+.photo {
+  display: contents;
+}

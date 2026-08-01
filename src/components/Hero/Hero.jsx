@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { ChevronUp } from "lucide-react";
 import PhotoRail from "../PhotoRail/PhotoRail";
-import { GALLERY_IMAGES } from "../../lib/galleryImages";
+import { GALLERY_PHOTOS } from "../../lib/galleryImages";
 import "./Hero.css";
 
 // The rails start half the set apart and tick at slightly different speeds, so
 // they never show the same photo or swap in lockstep.
 const LEFT_RAIL_START = 0;
-const RIGHT_RAIL_START = Math.floor(GALLERY_IMAGES.length / 2);
+const RIGHT_RAIL_START = Math.floor(GALLERY_PHOTOS.length / 2);
 
 // Qualification-level names, not group names: FSc covers Pre-Engineering,
 // Pre-Medical and General Science; FA covers Humanities and FA-IT.
@@ -41,8 +41,8 @@ export default function Hero({ scrollTo, onPortalClick, onAdmissionClick }) {
           <div key={i} className="hero__shape" style={{ width: `${60 + i * 30}px`, height: `${60 + i * 30}px`, top: `${10 + i * 15}%`, left: `${(i * 17) % 90}%`, animationDuration: `${3 + i}s` }} />
         ))}
       </div>
-      <PhotoRail images={GALLERY_IMAGES} side="left" startIndex={LEFT_RAIL_START} interval={4500} />
-      <PhotoRail images={GALLERY_IMAGES} side="right" startIndex={RIGHT_RAIL_START} interval={5300} />
+      <PhotoRail photos={GALLERY_PHOTOS} side="left" startIndex={LEFT_RAIL_START} interval={4500} />
+      <PhotoRail photos={GALLERY_PHOTOS} side="right" startIndex={RIGHT_RAIL_START} interval={5300} />
 
       <div className="hero__content">
         <h1 className="hero__title">Community Model<br />Girls College</h1>

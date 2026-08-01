@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
-import { GALLERY_IMAGES as IMAGES, GALLERY_THUMBS as THUMBS } from "../../lib/galleryImages";
+import { GALLERY_PHOTOS as PHOTOS, PHOTO_SIZES } from "../../lib/galleryImages";
+import Photo from "../Photo/Photo";
 import "./Gallery.css";
 
 export default function Gallery() {
@@ -14,7 +15,7 @@ export default function Gallery() {
     return () => { document.body.style.overflow = ""; };
   }, [lightbox]);
 
-  const step = (delta) => setActive((i) => (i + delta + IMAGES.length) % IMAGES.length);
+  const step = (delta) => setActive((i) => (i + delta + PHOTOS.length) % PHOTOS.length);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -35,9 +36,10 @@ export default function Gallery() {
 
         {/* Featured photo — click to view it fullscreen */}
         <button className="gallery__feature" onClick={() => setLightbox(true)} aria-label="View this photo fullscreen">
-          <img key={active} src={IMAGES[active]} alt="" className="gallery__feature-img" loading="lazy" decoding="async" />
+          <Photo key={active} photo={PHOTOS[active]} sizes={PHOTO_SIZES.feature}
+            className="gallery__feature-img" loading="lazy" decoding="async" />
           <span className="gallery__feature-hint"><Maximize2 size={14} /> Click to enlarge</span>
-          <span className="gallery__feature-count">{active + 1} / {IMAGES.length}</span>
+          <span className="gallery__feature-count">{active + 1} / {PHOTOS.length}</span>
           <span
             className="gallery__feature-nav gallery__feature-nav--left"
             role="button"
@@ -62,17 +64,18 @@ export default function Gallery() {
 
         {/* Thumbnail strip — picking one swaps the featured photo above */}
         <div className="gallery__thumbs">
-          {IMAGES.map((img, i) => (
+          {PHOTOS.map((photo, i) => (
             <button
-              key={img}
+              key={photo.jpg}
               onClick={() => setActive(i)}
               className={`gallery__thumb ${i === active ? "gallery__thumb--active" : ""}`}
               aria-label={`Show photo ${i + 1}`}
               aria-current={i === active}
             >
-              {/* 320px thumb, not the 1600px original — the strip is 25 images
-                  wide, so this is where the byte savings actually land. */}
-              <img src={THUMBS[i]} alt="" loading="lazy" decoding="async" />
+              {/* sizes says 120px, so the browser takes the 320px WebP — about
+                  10 kB. The strip is 25 images wide, so this is where the byte
+                  savings land hardest. */}
+              <Photo photo={photo} sizes={PHOTO_SIZES.thumb} loading="lazy" decoding="async" />
             </button>
           ))}
         </div>
@@ -86,7 +89,8 @@ export default function Gallery() {
           >
             <ChevronLeft size={26} />
           </button>
-          <img src={IMAGES[active]} alt="" className="gallery__lightbox-img" onClick={(e) => e.stopPropagation()} />
+          <Photo photo={PHOTOS[active]} sizes={PHOTO_SIZES.lightbox}
+            className="gallery__lightbox-img" onClick={(e) => e.stopPropagation()} />
           <button
             className="gallery__lightbox-nav gallery__lightbox-nav--right"
             onClick={(e) => { e.stopPropagation(); step(1); }}

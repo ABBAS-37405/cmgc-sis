@@ -8,8 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "optimize:images": "node scripts/optimize-gallery.mjs",
-    "optimize:logo": "node scripts/optimize-logo.mjs"
+    "optimize:images": "node optimize-gallery.mjs",
+    "optimize:logo": "node optimize-logo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

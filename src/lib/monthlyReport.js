@@ -14,6 +14,7 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { examTypeOf } from "./exams";
 
 /** "2026-08" -> { from: "2026-08-01", to: "2026-08-31", label: "August 2026" } */
 export function monthRange(month) {
@@ -57,12 +58,12 @@ const num = (v) => (v === null || v === undefined || v === "" ? null : Number(v)
 /**
  * Which examination the report speaks about.
  *
- * The default is class tests alone, because that is what most months actually
- * hold. The two sentinels are not exam names — anything else in this field is
- * matched against `results.exam_name` verbatim.
+ * The sentinel is not an exam name — anything else in this field is matched
+ * against `results.exam_name` verbatim. Monthly Reports always passes the
+ * sentinel (that tab is about class tests); Exam Reports always passes a real
+ * name it took from `fetchExamNames()`.
  */
 export const EXAM_CLASS_TESTS = "__class_tests__"; // no examination section at all
-export const EXAM_AUTO_MONTH = "__auto_month__";   // whatever exam was entered this month
 
 /** Every section is on unless the admin turns it off. */
 export const DEFAULT_SECTIONS = {
@@ -113,7 +114,7 @@ export async function fetchExamNames(studentIds) {
 
   return [...latest.entries()]
     .sort((a, b) => new Date(b[1]) - new Date(a[1]))
-    .map(([name, enteredAt]) => ({ name, enteredAt }));
+    .map(([name, enteredAt]) => ({ name, enteredAt, type: examTypeOf(name) }));
 }
 
 /**
@@ -157,7 +158,7 @@ export async function buildMonthlyReports(students, month, { examName = EXAM_CLA
       .gte("due_date", range.from)
       .lte("due_date", range.to),
 
-    examResultsQuery(ids, range, examName),
+    examResultsQuery(ids, examName),
 
     // Fee position as it stood at month end: every charge already due by then.
     supabase
@@ -212,27 +213,17 @@ export async function buildMonthlyReports(students, month, { examName = EXAM_CLA
 /**
  * Which `results` rows the examination section is built from.
  *
- * A named exam is fetched whole, with no date filter — a Pre-Board sat in
+ * A named exam is fetched whole, with **no date filter** — a Pre-Board sat in
  * December is exactly the thing an admin wants to send out in January, and
- * scoping it to the report month would silently return nothing. Only the
- * automatic mode looks at the month, and it looks at `created_at` because
- * `results` carries no exam date of its own.
+ * scoping it to the report month would silently return nothing. The exam name
+ * already pins it to one sitting; the month only governs the other sections.
  */
-function examResultsQuery(ids, range, examName) {
+function examResultsQuery(ids, examName) {
   const columns = "student_id, exam_name, subject, marks_obtained, total_marks, created_at";
 
-  if (examName === EXAM_CLASS_TESTS) {
+  if (!examName || examName === EXAM_CLASS_TESTS) {
     // Nothing to fetch: the report has no examination section in this mode.
     return Promise.resolve({ data: [], error: null });
-  }
-
-  if (examName === EXAM_AUTO_MONTH) {
-    return supabase
-      .from("results")
-      .select(columns)
-      .in("student_id", ids)
-      .gte("created_at", `${range.from}T00:00:00`)
-      .lte("created_at", `${range.to}T23:59:59`);
   }
 
   return supabase.from("results").select(columns).in("student_id", ids).eq("exam_name", examName);

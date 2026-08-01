@@ -120,18 +120,24 @@ A test can span groups: picking `"All Programs"` stores that literal in `class_t
 
 ### Reports
 
-The `reports` tab holds two screens, both gated by the `reports` permission and scoped by `allowed_programs` like every other admin screen.
+The `reports` tab holds three screens, all gated by the `reports` permission and scoped by `allowed_programs` like every other admin screen.
 
-**Monthly Reports** — one PDF per girl per month: attendance, class tests, assignments, an examination result, and her fee position. Sent to the parent over WhatsApp, or downloaded for the whole class at once (one combined PDF, or a ZIP of separate files).
+- **Monthly Reports** — one PDF per girl for a month: attendance, class tests, assignments, fee position. Class tests only; this tab never touches `results`.
+- **Exam Reports** — one PDF per girl for one term exam: its marksheet, plus the same attendance/assignments/fee context.
+- **Test Reports** — one class test across a class: a result sheet with positions, grades and class statistics, then a page per girl to send home. `src/lib/testReport.js` owns it.
 
-Two controls decide what a report actually says, and both flow through every path — the individual PDF, the bulk PDF, the ZIP and the WhatsApp text:
+**Monthly and Exam are the same component.** `ReportsPane.jsx` takes `mode="monthly" | "exam"`; `MonthlyReports.jsx` is only the tab shell. They differ in exactly one thing — whether an examination is part of the report — and everything else (month/group/class filters, section ticks, the two bulk downloads, the per-student PDF, the WhatsApp queue) is deliberately identical. Splitting them into two files would be four hundred duplicated lines that drift apart the first time either is touched. The shell passes `key={tab}` so switching modes remounts the pane rather than carrying the other one's filters and half-finished send queue.
 
-- **The exam selector.** `EXAM_CLASS_TESTS` (the default) means no examination section at all; `EXAM_AUTO_MONTH` means whatever exam was entered during the report month; anything else is matched against `results.exam_name` verbatim, **with no date filter** — a Pre-Board sat in December is exactly what an admin wants to send out in January, and scoping it to the report month would silently return nothing. The dropdown is built from `fetchExamNames()`, i.e. what is actually in the table, because exam names are free text assembled by `EnterResults` ("Pre-Board Exam - 15 August 2026") and there is no list of them anywhere else.
-- **The section ticks** (`DEFAULT_SECTIONS`, all on). An unticked section is not drawn at all — not drawn empty, not drawn with a "not included" note. `buildReportMessage()` honours the same object, so the WhatsApp text never quotes a figure the PDF behind it does not contain. The class summary sheet drops the matching column and the matching footer statistic too.
+Two controls decide what a report says, and both flow through every path — the individual PDF, the bulk PDF, the ZIP and the WhatsApp text:
 
-**Test Reports** — one class test across a class: a result sheet with positions, grades and class statistics, followed by a page per girl to send home. `src/lib/testReport.js` owns it.
+- **The exam.** Monthly mode always passes the `EXAM_CLASS_TESTS` sentinel, which fetches no `results` at all. Exam mode passes a real `results.exam_name`, matched verbatim and **with no date filter** — a Pre-Board sat in December is exactly what an admin wants to send out in January, and scoping it to the report month would silently return nothing. The month still governs the attendance, assignments and fee sections.
+- **The section ticks** (`DEFAULT_SECTIONS`, all on). An unticked section is not drawn at all — not drawn empty, not drawn with a "not included" note. `buildReportMessage()` honours the same object, so the WhatsApp text never quotes a figure the PDF behind it does not contain. The class summary sheet drops the matching column and footer statistic too.
 
-Files: `src/lib/monthlyReport.js` and `src/lib/testReport.js` aggregate, `src/lib/reportPdf.js` renders both, `MonthlyReports.jsx` + `TestReports.jsx` are the screens. Nothing is stored that could be recomputed — every report is assembled from existing tables when it is opened.
+`src/lib/exams.js` is the single definition of `EXAM_TYPES`. `EnterResults` builds `results.exam_name` from it by pinning a type to a date ("Pre-Board Exam - 15 August 2026") or a month ("Monthly Test - August 2026"), nothing in the database constrains that column, and `examTypeOf()` reads the type back out by prefix — longest first, so a short type cannot claim a longer one's rows. **It lives outside `academics.js` on purpose**: that file is reached from the landing page, and exam vocabulary is only ever needed inside the admin chunk. Moving it there costs the landing bundle real bytes for nothing.
+
+The exam dropdown is populated from `fetchExamNames()` — what is actually in the table — because there is no list of sittings anywhere else. Which one is selected is **derived during render**, not stored: the admin's pick when it still belongs to the chosen type, otherwise the newest of that type. An effect that stored it would change the selection once the list arrived and trigger a second full load.
+
+Files: `src/lib/monthlyReport.js` and `src/lib/testReport.js` aggregate, `src/lib/reportPdf.js` renders all of it, `ReportsPane.jsx` + `TestReports.jsx` are the screens. Nothing is stored that could be recomputed — every report is assembled from existing tables when it is opened.
 
 **`reportPdf.js` imports nothing that reaches `supabaseClient`, and it must stay that way.** That is what lets the whole PDF layer be driven from plain Node against fixture data, which is the only way any of it gets exercised in a repo with no test runner. It is why grading lives in `testReport.js` (`gradeFor` stamps `row.grade`) rather than in the renderer, and why `buildTestReport` returns finished rows rather than raw marks.
 

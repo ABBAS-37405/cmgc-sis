@@ -3,11 +3,11 @@ import { Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { SUBJECTS } from "../../lib/academics";
+import { EXAM_TYPES } from "../../lib/exams";
 import "./EnterResults.css";
 
 const ALL_PROGRAMS = "All Programs";
 
-const EXAM_TYPES = ["Class Test", "Monthly Test", "Bi-Monthly", "Send-Up Exam", "Pre-Board Exam"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const EXAM_SELECTION_KEY = "cmgc_admin_exam_selection";
 

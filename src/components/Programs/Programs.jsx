@@ -1,27 +1,49 @@
+import { PROGRAMS, GROUP_COMBINATIONS, COMPULSORY_SUBJECTS, groupHasChoice, formatCombination } from "../../lib/academics";
 import "./Programs.css";
 
-const PROGRAMS = [
-  { name: "FSc Pre-Medical", duration: "2 Years", subjects: "Biology, Chemistry, Physics, English" },
-  { name: "FSc Pre-Engineering", duration: "2 Years", subjects: "Mathematics, Chemistry, Physics, English" },
-  { name: "FA (Humanities)", duration: "2 Years", subjects: "Economics, Education, Civics, English" },
-  { name: "ICS", duration: "2 Years", subjects: "Computer Science, Mathematics, Physics" },
-  { name: "ICOM", duration: "2 Years", subjects: "Accounting, Business, Economics" },
-];
-
+/**
+ * Derived from the same group definitions the admission form uses, so the list a
+ * visitor reads here can never drift from the groups she can actually apply for.
+ * To add or change a programme, edit GROUP_COMBINATIONS in src/lib/academics.js.
+ */
 export default function Programs() {
   return (
     <section id="programs" className="programs">
       <div className="programs__container">
         <h2 className="programs__heading">Programs Offered</h2>
+
         <div className="programs__grid">
-          {PROGRAMS.map((p) => (
-            <div key={p.name} className="programs__card">
-              <h3>{p.name}</h3>
-              <p className="programs__duration">{p.duration}</p>
-              <p className="programs__subjects">{p.subjects}</p>
-            </div>
-          ))}
+          {PROGRAMS.map((name) => {
+            const combos = GROUP_COMBINATIONS[name];
+            const hasChoice = groupHasChoice(name);
+
+            return (
+              <div key={name} className="programs__card">
+                <h3>{name}</h3>
+                <p className="programs__duration">
+                  2 Years{hasChoice && <span className="programs__choice"> · choose 1 of {combos.length}</span>}
+                </p>
+
+                {hasChoice ? (
+                  <ul className="programs__options">
+                    {combos.map((combo, i) => (
+                      <li key={formatCombination(combo)}>
+                        <span className="programs__option-num">Option {i + 1}</span>
+                        {formatCombination(combo)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="programs__subjects">{formatCombination(combos[0])}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        <p className="programs__note">
+          {formatCombination(COMPULSORY_SUBJECTS)} are compulsory in every group.
+        </p>
       </div>
     </section>
   );

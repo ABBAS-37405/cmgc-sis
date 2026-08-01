@@ -2,6 +2,7 @@
 .sl-tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
 .sl-tab { flex: 1; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--subtext); }
 .sl-tab--active { background: var(--accent); color: white; }
+.sl-tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; }
 .sl-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 .sl-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; flex: 1; max-width: 320px; color: var(--subtext); background: var(--card); }
 .sl-year-filters { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -106,3 +107,52 @@
 .sl-pic-cell { width: 50px; text-align: center; }
 .sl-student-pic { width: 40px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
 .sl-pic-placeholder { display: flex; align-items: center; justify-content: center; width: 40px; height: 50px; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); color: var(--subtext); font-size: 12px; }
+/* ---------- Row actions + recycle bin ---------- */
+.sl-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sl-delete-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 8px; border-radius: 6px;
+  border: 1px solid #f87171; color: #b91c1c; background: #fef2f2;
+}
+.sl-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sl-deleted { display: flex; flex-direction: column; gap: 16px; }
+.sl-deleted__intro { font-size: 13px; color: var(--subtext); line-height: 1.6; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.sl-deleted__intro strong { color: var(--text); }
+.sl-deleted__empty { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--subtext); font-size: 14px; padding: 48px 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+.sl-deleted__section h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+
+.sl-restore-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--accent); color: var(--accent); background: var(--card);
+}
+.sl-purge-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+  border: 1px solid #f87171; color: #b91c1c; background: #fef2f2;
+}
+.sl-restore-btn:disabled, .sl-purge-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Add form: WhatsApp hint + Further Entry ---------- */
+.sl-field-hint { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+.sl-add-field--wide { grid-column: 1 / -1; }
+.sl-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.sl-check input { width: auto; }
+
+.sl-further-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: 1px dashed var(--border); color: var(--accent); background: var(--bg); margin-top: 12px; }
+.sl-further-btn:hover { border-color: var(--accent); border-style: solid; }
+.sl-further { margin-top: 12px; display: flex; flex-direction: column; gap: 16px; }
+.sl-further-hint { font-size: 12px; color: var(--subtext); line-height: 1.6; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.sl-further-hint strong { color: var(--text); }
+.sl-further-group h4 { font-size: 12px; font-weight: 700; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+.sl-further-group textarea { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; resize: vertical; }
+
+/* ---------- Enrolled list actions ---------- */
+.sl-detail-btn, .sl-edit-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 7px;
+  border: 1px solid var(--border); color: var(--text); background: var(--card);
+}
+.sl-detail-btn:hover, .sl-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sl-wa-fallback { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #b45309; background: #fef3c7; border-radius: 999px; padding: 2px 6px; margin-left: 6px; }

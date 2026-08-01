@@ -37,6 +37,25 @@ const requireSuperAdmin = async (accessToken) => {
   return userData.user.id;
 };
 
+// Same idea, but for teacher logins: a super admin always qualifies, and so does a
+// sub-admin who has been given the `teachers` permission.
+const requireTeacherManager = async (accessToken) => {
+  if (!supabaseAdmin || !accessToken) return null;
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
+  if (userError || !userData?.user) return null;
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('admin_profiles')
+    .select('is_super_admin, permissions')
+    .eq('user_id', userData.user.id)
+    .single();
+
+  if (profileError || !profile) return null;
+  if (!profile.is_super_admin && !(profile.permissions || []).includes('teachers')) return null;
+  return userData.user.id;
+};
+
 const normalizePhone = (value) => {
   if (!value) return '';
   const digits = String(value).replace(/\D/g, '');
@@ -193,6 +212,144 @@ app.post('/api/admin/delete', async (req, res) => {
   const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId);
   if (deleteError) {
     return res.status(500).json({ error: deleteError.message });
+  }
+
+  return res.json({ success: true });
+});
+
+/**
+ * Creates a teacher's login. Two shapes:
+ *   - with `teacherId`  -> attaches a login to a teacher record that already exists
+ *   - without           -> creates the auth user and the teachers row together
+ * The auth user is rolled back if the teachers row cannot be written, so a login never
+ * ends up without the record that grants it any rights.
+ */
+app.post('/api/teacher/create', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Teacher management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, teacherId, email, password, name, qualification, phone, subjects, programs, rights } = req.body || {};
+
+  const callerId = await requireTeacherManager(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
+  }
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+  if (!teacherId && !name) {
+    return res.status(400).json({ error: 'Teacher name is required.' });
+  }
+
+  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+
+  if (createError || !created?.user) {
+    return res.status(500).json({ error: createError?.message || 'Failed to create the teacher login.' });
+  }
+
+  const record = {
+    user_id: created.user.id,
+    email,
+    name: name || undefined,
+    qualification: qualification || null,
+    phone: phone || null,
+    subjects: Array.isArray(subjects) ? subjects : [],
+    programs: Array.isArray(programs) ? programs : [],
+    rights: Array.isArray(rights) ? rights : [],
+    // Keep the legacy single-subject column populated for anything still reading it.
+    subject: Array.isArray(subjects) && subjects.length > 0 ? subjects[0] : null,
+  };
+
+  const { data: teacherRow, error: rowError } = teacherId
+    ? await supabaseAdmin.from('teachers').update(record).eq('id', teacherId).select().single()
+    : await supabaseAdmin.from('teachers').insert(record).select().single();
+
+  if (rowError || !teacherRow) {
+    await supabaseAdmin.auth.admin.deleteUser(created.user.id);
+    return res.status(500).json({ error: `Failed to save the teacher record: ${rowError?.message || 'unknown error'}` });
+  }
+
+  return res.json({ success: true, teacher: teacherRow });
+});
+
+app.post('/api/teacher/password', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Teacher management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, teacherId, password } = req.body || {};
+
+  const callerId = await requireTeacherManager(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
+  }
+
+  if (!teacherId || !password) {
+    return res.status(400).json({ error: 'teacherId and a new password are required.' });
+  }
+
+  const { data: teacherRow, error: lookupError } = await supabaseAdmin
+    .from('teachers')
+    .select('user_id')
+    .eq('id', teacherId)
+    .single();
+
+  if (lookupError || !teacherRow?.user_id) {
+    return res.status(404).json({ error: 'This teacher does not have a login yet.' });
+  }
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(teacherRow.user_id, { password });
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message });
+  }
+
+  return res.json({ success: true });
+});
+
+app.post('/api/teacher/delete', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Teacher management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, teacherId } = req.body || {};
+
+  const callerId = await requireTeacherManager(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
+  }
+
+  if (!teacherId) {
+    return res.status(400).json({ error: 'teacherId is required.' });
+  }
+
+  const { data: teacherRow, error: lookupError } = await supabaseAdmin
+    .from('teachers')
+    .select('user_id')
+    .eq('id', teacherId)
+    .single();
+
+  if (lookupError || !teacherRow) {
+    return res.status(404).json({ error: 'Teacher not found.' });
+  }
+
+  // Remove the record first: class_tests.teacher_id is ON DELETE SET NULL, so the test
+  // history survives. Only then drop the login it pointed at.
+  const { error: deleteRowError } = await supabaseAdmin.from('teachers').delete().eq('id', teacherId);
+  if (deleteRowError) {
+    return res.status(500).json({ error: deleteRowError.message });
+  }
+
+  if (teacherRow.user_id) {
+    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(teacherRow.user_id);
+    if (deleteUserError) {
+      return res.status(500).json({ error: `Teacher record removed, but their login could not be deleted: ${deleteUserError.message}` });
+    }
   }
 
   return res.json({ success: true });

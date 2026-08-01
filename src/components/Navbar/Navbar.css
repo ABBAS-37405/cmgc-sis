@@ -2,7 +2,8 @@
 .navbar--scrolled { background: var(--nav-bg); box-shadow: 0 2px 10px rgba(0,0,0,0.08); backdrop-filter: blur(8px); }
 .navbar__inner { max-width: 1200px; margin: 0 auto; padding: 0 20px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
 .navbar__brand { display: flex; align-items: center; gap: 8px; }
-.navbar__logo { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; }
+/* No background any more: the seal image fills the circle itself. */
+.navbar__logo { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .navbar__title { font-weight: 700; font-size: 15px; color: white; }
 .navbar__links { display: none; gap: 24px; }
 .navbar__link { font-size: 14px; font-weight: 500; color: white; }

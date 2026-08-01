@@ -1,12 +1,97 @@
 .gallery { background: var(--card); padding: 64px 20px; }
 .gallery__container { max-width: 1100px; margin: 0 auto; }
 .gallery__heading { font-size: 26px; font-weight: 700; color: var(--text); text-align: center; margin-bottom: 4px; }
-.gallery__subheading { color: var(--subtext); text-align: center; font-size: 13px; margin-bottom: 32px; }
-.gallery__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.gallery__item { border-radius: 10px; overflow: hidden; aspect-ratio: 1; padding: 0; border: none; cursor: pointer; }
-.gallery__item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
-.gallery__item:hover img { transform: scale(1.08); }
+.gallery__subheading { color: var(--subtext); text-align: center; font-size: 13px; margin-bottom: 24px; }
 
+/* ---------- Featured photo ---------- */
+.gallery__feature {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: zoom-in;
+  margin-bottom: 14px;
+}
+.gallery__feature-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Keyed on the active index in JSX, so React remounts the img and this replays
+     on every swap — that is what makes the change read as a fade, not a jump. */
+  animation: galleryFade 0.45s ease;
+}
+@keyframes galleryFade {
+  from { opacity: 0; transform: scale(1.03); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.gallery__feature-hint,
+.gallery__feature-count {
+  position: absolute;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 999px;
+  padding: 6px 12px;
+  backdrop-filter: blur(4px);
+}
+.gallery__feature-hint { left: 12px; opacity: 0; transition: opacity 0.2s; }
+.gallery__feature:hover .gallery__feature-hint { opacity: 1; }
+.gallery__feature-count { right: 12px; }
+
+.gallery__feature-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  cursor: pointer;
+}
+.gallery__feature:hover .gallery__feature-nav { opacity: 1; }
+.gallery__feature-nav:hover { background: rgba(0, 0, 0, 0.75); }
+.gallery__feature-nav--left { left: 12px; }
+.gallery__feature-nav--right { right: 12px; }
+
+/* ---------- Thumbnail strip ---------- */
+.gallery__thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  gap: 8px;
+}
+.gallery__thumb {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  cursor: pointer;
+  opacity: 0.62;
+  transition: opacity 0.2s, border-color 0.2s, transform 0.2s;
+}
+.gallery__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery__thumb:hover { opacity: 1; transform: translateY(-2px); }
+.gallery__thumb--active { opacity: 1; border-color: var(--accent); }
+
+/* ---------- Lightbox ---------- */
 .gallery__lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000; display: flex; align-items: center; justify-content: center; }
 .gallery__lightbox-img { max-width: 90%; max-height: 75vh; border-radius: 8px; }
 .gallery__lightbox-nav { position: fixed; top: 50%; transform: translateY(-50%); color: white; padding: 10px; z-index: 1001; }
@@ -20,5 +105,15 @@
   z-index: 1001;
 }
 
-@media (min-width: 640px) { .gallery__grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1024px) { .gallery__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 640px) {
+  .gallery__thumbs { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+}
+@media (min-width: 1024px) {
+  .gallery__feature { aspect-ratio: 16 / 9; }
+  .gallery__thumbs { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery__feature-img { animation: none; }
+  .gallery__thumb:hover { transform: none; }
+}

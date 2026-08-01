@@ -1,6 +1,14 @@
 import { useState, useRef } from "react";
 import { ArrowLeft, CheckCircle, FileCheck, Upload, User } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import {
+  PROGRAMS,
+  COMPULSORY_SUBJECTS,
+  combinationsFor,
+  groupHasChoice,
+  formatCombination,
+} from "../../lib/academics";
+import { findBFormClash, describeUniqueViolation } from "../../lib/bform";
 import "./AdmissionPage.css";
 
 const DOCS_BASE = [
@@ -8,14 +16,6 @@ const DOCS_BASE = [
   { key: "fatherIdDoc", label: "Father's ID Card (NIC)", required: true },
   { key: "marksheet", label: "Matric Marksheet", required: true },
 ];
-
-const GROUPS = {
-  "Pre-Engineering": ["Physics", "Chemistry", "Mathematics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "Pre-Medical": ["Physics", "Chemistry", "Biology", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "ICS": ["Computer Science", "Mathematics", "Physics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "General Science": ["Mathematics", "Economics", "Computer Science", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "Humanities": ["Education", "Sociology", "Civics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-};
 
 const BOARDS = [
   "BISE Rawalpindi","BISE Lahore","BISE Gujranwala","BISE Sargodha","BISE Faisalabad",
@@ -46,6 +46,7 @@ const FIELD_LABELS = {
   board: "Board Name",
   sscGroup: "Subjects Group",
   group: "Select Group (Section 4)",
+  combination: "Subject Combination (Section 4)",
   photo: "Student Photo",
   bformDoc: "B-Form Document",
   fatherIdDoc: "Father's ID Card Document",
@@ -83,9 +84,20 @@ export default function AdmissionPage({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [errorModal, setErrorModal] = useState(null);
   const [group, setGroup] = useState("");
+  // Index into the chosen group's combination list. Groups with a single
+  // combination auto-select it, so only FA-IT and Humanities present a choice.
+  const [comboIndex, setComboIndex] = useState(null);
+
+  // Switching group must clear any previously picked combination — otherwise
+  // "option 3" chosen under Humanities would carry over to a group that has two.
+  const selectGroup = (g) => {
+    setGroup(g);
+    setComboIndex(combinationsFor(g).length === 1 ? 0 : null);
+  };
+
+  const chosenElectives = comboIndex === null ? null : combinationsFor(group)[comboIndex] || null;
   const [selectedBoard, setSelectedBoard] = useState("");
 
-  // ✅ CHANGE 1: yearOfStudy added to form state
   const [form, setForm] = useState({
     name: "", father: "", dob: "", bform: "", fatherCnic: "",
     nationality: "", religion: "", orphan: "no", fatherOccupation: "",
@@ -161,6 +173,7 @@ export default function AdmissionPage({ onBack }) {
     if (!selectedBoard) e.board = "Required";
     if (!form.sscGroup) e.sscGroup = "Required";
     if (!group) e.group = "Select a group";
+    else if (groupHasChoice(group) && comboIndex === null) e.combination = "Choose one subject combination";
     if (!photo) e.photo = "Student photo is required";
     activeDocs.forEach((d) => {
       if (d.required && !files[d.key]) e[d.key] = "Required";
@@ -180,6 +193,17 @@ export default function AdmissionPage({ onBack }) {
       return;
     }
     setLoading(true);
+
+    // Checked before a single file is uploaded — being told at the end, after
+    // five documents have gone up, would be the worst possible moment.
+    const clash = await findBFormClash(form.bform);
+    if (clash) {
+      setLoading(false);
+      setErrors({ ...e, bform: "Already registered" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setErrorModal({ title: "Application Not Submitted", reasons: [clash] });
+      return;
+    }
 
     const uploadedUrls = {};
     if (photo) {
@@ -208,7 +232,6 @@ export default function AdmissionPage({ onBack }) {
       uploadedUrls[doc.key] = urlData.publicUrl;
     }
 
-    // ✅ CHANGE 2: year_of_study added to insert
     const { error } = await supabase.from("applications").insert({
       student_name: form.name,
       father_name: form.father,
@@ -235,6 +258,7 @@ export default function AdmissionPage({ onBack }) {
       board: selectedBoard,
       student_group: form.sscGroup,
       group_selected: group,
+      subject_combination: chosenElectives ? formatCombination(chosenElectives) : null,
       year_of_study: form.yearOfStudy,
       photo_url: uploadedUrls.photo || null,
       bform_doc_url: uploadedUrls.bformDoc || null,
@@ -246,10 +270,12 @@ export default function AdmissionPage({ onBack }) {
 
     setLoading(false);
     if (error) {
-      setErrorModal({
-        title: "Application Not Submitted",
-        reasons: [`Submission failed: ${error.message || "Please try again or contact the office."}`],
-      });
+      // The unique index is the real guard — the check above can be beaten by
+      // two people submitting in the same second.
+      const reason = error.code === "23505"
+        ? describeUniqueViolation(error, "This application has already been submitted.")
+        : `Submission failed: ${error.message || "Please try again or contact the office."}`;
+      setErrorModal({ title: "Application Not Submitted", reasons: [reason] });
       return;
     }
     setSubmitted(true);
@@ -445,21 +471,49 @@ export default function AdmissionPage({ onBack }) {
               <SectionHeading number="4" title="HSSC-I & II Admission" />
               <Field label="Select Group *" error={errors.group}>
                 <div className="ap-group-btns">
-                  {Object.keys(GROUPS).map((g) => (
-                    <button key={g} type="button" onClick={() => setGroup(g)} className={`ap-group-btn ${group === g ? "ap-group-btn--active" : ""}`}>{g}</button>
+                  {PROGRAMS.map((g) => (
+                    <button key={g} type="button" onClick={() => selectGroup(g)} className={`ap-group-btn ${group === g ? "ap-group-btn--active" : ""}`}>{g}</button>
                   ))}
                 </div>
               </Field>
-              {group && (
+
+              {groupHasChoice(group) && (
+                <Field label={`Choose Your Subject Combination for ${group} *`} error={errors.combination}>
+                  <div className="ap-combo-list">
+                    {combinationsFor(group).map((combo, i) => (
+                      <button
+                        key={formatCombination(combo)}
+                        type="button"
+                        onClick={() => setComboIndex(i)}
+                        className={`ap-combo-btn ${comboIndex === i ? "ap-combo-btn--active" : ""}`}
+                        aria-pressed={comboIndex === i}
+                      >
+                        <span className="ap-combo-radio" />
+                        <span className="ap-combo-text">
+                          <strong>Option {i + 1}</strong>
+                          <span>{formatCombination(combo)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
+
+              {chosenElectives && (
                 <div className="ap-subjects">
                   <p>Subjects for <strong>{group}</strong>:</p>
                   <div className="ap-subject-tags">
-                    {GROUPS[group].map((s) => <span key={s} className="ap-subject-tag">{s}</span>)}
+                    {chosenElectives.map((s) => <span key={s} className="ap-subject-tag">{s}</span>)}
+                    {COMPULSORY_SUBJECTS.map((s) => (
+                      <span key={s} className="ap-subject-tag ap-subject-tag--compulsory">{s}</span>
+                    ))}
                   </div>
+                  <p className="ap-subjects-note">
+                    The last four are compulsory for every group.
+                  </p>
                 </div>
               )}
 
-              {/* ✅ CHANGE 3: Year of Admission field */}
               <div style={{ marginTop: "16px" }}>
                 <Field label="Year of Admission *">
                   <div className="ap-radio-row">

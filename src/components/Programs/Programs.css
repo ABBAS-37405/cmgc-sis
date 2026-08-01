@@ -6,7 +6,14 @@
 .programs__card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
 .programs__card h3 { color: var(--text); margin-bottom: 4px; font-size: 16px; }
 .programs__duration { color: var(--accent); font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.programs__choice { color: var(--subtext); font-weight: 500; }
 .programs__subjects { color: var(--subtext); font-size: 14px; }
+
+/* Groups where the applicant picks one elective set (FA-IT, Humanities) */
+.programs__options { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.programs__options li { color: var(--subtext); font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.programs__option-num { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+.programs__note { text-align: center; color: var(--subtext); font-size: 13px; margin-top: 24px; }
 
 @media (min-width: 640px) { .programs__grid { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1024px) { .programs__grid { grid-template-columns: 1fr 1fr 1fr; } }

@@ -1,18 +1,11 @@
 import { useState, useEffect } from "react";
 import { Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { PROGRAMS } from "../../lib/adminAuth";
+import { SUBJECTS } from "../../lib/academics";
 import "./EnterResults.css";
 
-const PROGRAMS = ["Pre-Engineering", "Pre-Medical", "ICS", "General Science", "Humanities"];
 const ALL_PROGRAMS = "All Programs";
-
-const SUBJECTS = {
-  "Pre-Engineering": ["Physics", "Chemistry", "Mathematics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "Pre-Medical": ["Physics", "Chemistry", "Biology", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "ICS": ["Computer Science", "Mathematics", "Physics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "General Science": ["Mathematics", "Economics", "Computer Science", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-  "Humanities": ["Education", "Sociology", "Civics", "English", "Urdu", "Islamiat", "Tarjama Tul Quran"],
-};
 
 const EXAM_TYPES = ["Class Test", "Monthly Test", "Bi-Monthly", "Send-Up Exam", "Pre-Board Exam"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -79,11 +72,15 @@ export default function EnterResults({ allowedPrograms = [] }) {
     let query = supabase
       .from("students")
       .select("id, name, roll_no, program")
+      .is("deleted_at", null)
       .order("program")
       .order("name");
 
     if (program !== ALL_PROGRAMS) {
       query = query.eq("program", program);
+    } else if (isRestricted) {
+      // "All Programs" means all of *hers*, never the whole college.
+      query = query.in("program", visiblePrograms);
     }
 
     if (yearFilter !== "Both") {
@@ -168,7 +165,7 @@ export default function EnterResults({ allowedPrograms = [] }) {
         <div className="enter-results__field">
           <label>Program</label>
           <select value={program} onChange={(e) => setProgram(e.target.value)}>
-            {!isRestricted && <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>}
+            {visiblePrograms.length > 1 && <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>}
             {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
           </select>
         </div>

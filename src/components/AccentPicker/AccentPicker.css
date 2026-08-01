@@ -1,0 +1,57 @@
+.accent { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The full hue circle, so every position on the bar is the colour it sets. */
+.accent__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 92px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: linear-gradient(to right,
+    hsl(0 85% 50%), hsl(60 85% 50%), hsl(120 85% 50%),
+    hsl(180 85% 50%), hsl(240 85% 50%), hsl(300 85% 50%), hsl(360 85% 50%));
+  cursor: pointer;
+}
+/* Before a colour is picked the bar is dimmed, so it does not claim a
+   selection the visitor never made. */
+.accent__range--idle { opacity: 0.55; }
+.accent__range:hover { opacity: 1; }
+
+.accent__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+.accent__range::-webkit-slider-thumb:active { cursor: grabbing; }
+.accent__range::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+.accent__range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.accent__reset {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--subtext);
+}
+.accent__reset:hover:not(:disabled) { color: var(--text); }
+.accent__reset:disabled { opacity: 0.35; cursor: default; }
+
+.accent--compact .accent__range { width: 120px; height: 12px; }
+
+@media (max-width: 900px) {
+  .accent__range { width: 80px; }
+}

@@ -1,0 +1,59 @@
+.lmsm { display: flex; flex-direction: column; gap: 14px; }
+
+.lmsm__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.lmsm__head h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+.lmsm__head p { font-size: 12px; color: var(--subtext); margin-top: 3px; max-width: 60ch; line-height: 1.5; }
+
+.lmsm__btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.lmsm__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lmsm__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ---- form ---- */
+.lmsm__form {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 16px;
+}
+.lmsm__field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lmsm__field--wide { grid-column: 1 / -1; }
+.lmsm__field label { font-size: 12px; font-weight: 600; color: var(--text); }
+.lmsm__field input[type="text"], .lmsm__field input:not([type]), .lmsm__field select, .lmsm__field textarea {
+  font: inherit; font-size: 13px; padding: 8px 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); width: 100%;
+}
+.lmsm__field textarea { resize: vertical; }
+.lmsm__hint { font-size: 11.5px; color: var(--subtext); display: inline-flex; align-items: center; gap: 5px; line-height: 1.5; }
+.lmsm__hint--yt { color: #b91c1c; }
+
+.lmsm__checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.lmsm__check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--subtext); cursor: pointer; }
+.lmsm__check--on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.lmsm__check input { accent-color: var(--accent); }
+
+.lmsm__file { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 9px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg); color: var(--subtext); cursor: pointer; }
+.lmsm__file:hover { border-color: var(--accent); color: var(--text); }
+.lmsm__clear { align-self: flex-start; font-size: 12px; color: #b91c1c; }
+
+.lmsm__actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.lmsm__error { grid-column: 1 / -1; font-size: 13px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 12px; }
+.lmsm__saved { font-size: 13px; color: #15803d; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 10px 12px; }
+
+/* ---- list ---- */
+.lmsm__empty { font-size: 13px; color: var(--subtext); }
+.lmsm__list { display: flex; flex-direction: column; gap: 10px; }
+.lmsm__row { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px 15px; }
+.lmsm__row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.lmsm__row-main strong { font-size: 14px; color: var(--text); }
+.lmsm__meta { font-size: 11.5px; color: var(--subtext); }
+.lmsm__row-body { font-size: 12.5px; color: var(--subtext); line-height: 1.5; white-space: pre-wrap; max-height: 4.5em; overflow: hidden; }
+.lmsm__row-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.lmsm__tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--subtext); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; text-decoration: none; }
+.lmsm__tag--yt { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+
+.lmsm__remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: #b91c1c; }
+.lmsm__remove:hover { border-color: #fecaca; background: #fef2f2; }
+
+@media (max-width: 640px) {
+  .lmsm__head { flex-direction: column; }
+  .lmsm__head .lmsm__btn { width: 100%; justify-content: center; }
+}

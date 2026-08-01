@@ -1,0 +1,44 @@
+.er { display: flex; flex-direction: column; gap: 14px; }
+
+.er__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.er__head h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+.er__head p { font-size: 12px; color: var(--subtext); margin-top: 3px; max-width: 62ch; line-height: 1.5; }
+
+.er__filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.er__filter { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--subtext); }
+.er__filter--active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.er__empty { font-size: 13px; color: var(--subtext); }
+.er__empty--box { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 16px; border: 1px dashed var(--border); border-radius: 12px; }
+
+.er__list { display: flex; flex-direction: column; gap: 10px; }
+.er__card { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.er__card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.er__card-head strong { font-size: 14px; color: var(--text); display: block; }
+.er__meta { font-size: 12px; color: var(--subtext); }
+
+.er__status { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
+.er__status--pending { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+.er__status--approved { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+.er__status--rejected { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+.er__reason { font-size: 13.5px; color: var(--text); line-height: 1.55; padding: 8px 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+
+.er__foot { display: flex; flex-wrap: wrap; gap: 12px; }
+.er__when, .er__note { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--subtext); }
+
+.er__note-box { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.er__note-box label { font-size: 12px; font-weight: 600; color: var(--text); }
+.er__note-box input { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+
+.er__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.er__btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.er__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.er__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.er__btn--approve { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+.er__btn--reject { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+@media (max-width: 640px) {
+  .er__head { flex-direction: column; }
+  .er__actions .er__btn { flex: 1 1 auto; justify-content: center; }
+}

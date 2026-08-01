@@ -1,18 +1,15 @@
 .app { min-height: 100vh; position: relative; }
-.content-with-bg { position: relative; z-index: 1; }
-.content-with-bg::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image: url("/images/hero/hero1.jpg");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  opacity: 0.12;
+/* Shown while a lazily-loaded screen (portal, admission form) is fetched. */
+.app-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--subtext);
+  background: var(--bg);
 }
+
 .back-to-top {
   position: fixed; bottom: 24px; right: 24px;
   background: var(--accent); color: white;

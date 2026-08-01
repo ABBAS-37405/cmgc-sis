@@ -29,22 +29,26 @@ export default function AdminOverview() {
     // Total students
     const { count: studentsCount } = await supabase
       .from("students")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .is("deleted_at", null);
 
     const { count: firstYearCount } = await supabase
       .from("students")
       .select("*", { count: "exact", head: true })
+      .is("deleted_at", null)
       .eq("year_of_study", "1st Year");
 
     const { count: secondYearCount } = await supabase
       .from("students")
       .select("*", { count: "exact", head: true })
+      .is("deleted_at", null)
       .eq("year_of_study", "2nd Year");
 
     // Pending applications
     const { count: pendingCount } = await supabase
       .from("applications")
       .select("*", { count: "exact", head: true })
+      .is("deleted_at", null)
       .eq("status", "Pending");
 
     // Total notices

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Menu, X, GraduationCap } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import Logo from "../Logo/Logo";
+import AccentPicker from "../AccentPicker/AccentPicker";
 import "./Navbar.css";
 
 const NAV_LINKS = [
@@ -14,7 +16,7 @@ const NAV_LINKS = [
 
 const THEME_NAMES = ["light", "dark", "soft", "academic"];
 
-export default function Navbar({ theme, setTheme, scrolled, onAdmissionClick }) {
+export default function Navbar({ theme, setTheme, accentHue, setAccentHue, scrolled, onAdmissionClick }) {
   const [open, setOpen] = useState(false);
 
   const scrollTo = (id) => {
@@ -30,7 +32,7 @@ export default function Navbar({ theme, setTheme, scrolled, onAdmissionClick }) 
     <nav className={`navbar ${scrolled ? "navbar--scrolled" : ""}`}>
       <div className="navbar__inner">
         <button className="navbar__brand" onClick={() => scrollTo("home")}>
-          <span className="navbar__logo"><GraduationCap size={20} /></span>
+          <span className="navbar__logo"><Logo size={36} /></span>
           <span className="navbar__title">CMGC Rawalpindi</span>
         </button>
 
@@ -53,6 +55,7 @@ export default function Navbar({ theme, setTheme, scrolled, onAdmissionClick }) 
               />
             ))}
           </div>
+          <AccentPicker hue={accentHue} setHue={setAccentHue} />
           <button className="navbar__cta" onClick={() => onAdmissionClick && onAdmissionClick()}>Apply Now</button>
         </div>
 
@@ -72,6 +75,7 @@ export default function Navbar({ theme, setTheme, scrolled, onAdmissionClick }) 
             {THEME_NAMES.map((name) => (
               <button key={name} className={`navbar__theme-dot navbar__theme-dot--${name} ${theme === name ? "navbar__theme-dot--active" : ""}`} onClick={() => setTheme(name)} />
             ))}
+            <AccentPicker hue={accentHue} setHue={setAccentHue} compact />
           </div>
         </div>
       )}

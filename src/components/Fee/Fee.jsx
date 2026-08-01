@@ -62,7 +62,12 @@ export default function Fee({ studentId }) {
       .from("fees")
       .select("*")
       .eq("student_id", studentId)
-      .order("created_at", { ascending: false });
+      // Chronological, then by position within an enrolment: admission fee, 1st,
+      // 2nd, 3rd. `created_at` cannot break the tie — Postgres stamps every row
+      // of one multi-row INSERT with the same value.
+      .order("due_date", { ascending: true })
+      .order("sort_order", { ascending: true, nullsFirst: true })
+      .order("created_at", { ascending: true });
 
     if (feesData && feesData.length > 0) {
       const feeIds = feesData.map((fee) => fee.id);
@@ -235,7 +240,10 @@ export default function Fee({ studentId }) {
                   <div className="fee__header">
                     <div className="fee__title">
                       <span className="fee__title-icon"><Wallet size={16} /></span>
-                      <h3>{f.program}</h3>
+                      {/* `label` names the charge ("Admission Fee", "2nd Installment").
+                          Rows created before fee plans existed have none, so fall
+                          back to the group name as before. */}
+                      <h3>{f.label || f.program}</h3>
                     </div>
                     {statusBadge(f.status, remaining)}
                   </div>

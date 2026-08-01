@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { Users, CheckCircle, GraduationCap, Award } from "lucide-react";
+import { PROGRAMS } from "../../lib/academics";
 import "./Stats.css";
 
 const TARGETS = [
   { label: "Students", value: 2000, suffix: "+", icon: Users },
   { label: "Pass Rate", value: 98, suffix: "%", icon: CheckCircle },
-  { label: "Programs", value: 4, suffix: "", icon: GraduationCap },
+  // Counted from the group definitions, not typed in — this said 4 long after
+  // FA-IT and Humanities took the real number to 6.
+  { label: "Programs", value: PROGRAMS.length, suffix: "", icon: GraduationCap },
   { label: "Years of Excellence", value: 15, suffix: "+", icon: Award },
 ];
 

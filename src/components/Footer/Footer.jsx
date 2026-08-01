@@ -1,4 +1,5 @@
-import { MapPin, Phone, Mail, GraduationCap } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
+import Logo from "../Logo/Logo";
 import "./Footer.css";
 
 function FacebookIcon() {
@@ -32,7 +33,7 @@ export default function Footer() {
       <div className="footer__grid">
         <div>
           <div className="footer__brand">
-            <span className="footer__logo"><GraduationCap size={16} /></span>
+            <span className="footer__logo"><Logo size={32} /></span>
             <span>CMGC Rawalpindi</span>
           </div>
           <p className="footer__muted">Empowering girls through education since 2011.</p>

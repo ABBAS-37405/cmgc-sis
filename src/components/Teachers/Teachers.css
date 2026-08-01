@@ -1,0 +1,60 @@
+.teachers { display: flex; flex-direction: column; gap: 16px; }
+
+.teachers__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.teachers__tab { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+.teachers__tab--active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.teachers__section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.teachers__heading { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+.teachers__form { display: flex; flex-direction: column; gap: 10px; }
+.teachers__form-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.teachers__field { display: flex; flex-direction: column; gap: 4px; }
+.teachers__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+.teachers__field input, .teachers__field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+.teachers__password-wrap { position: relative; display: flex; align-items: center; }
+.teachers__password-wrap input { padding-right: 34px; }
+.teachers__eye { position: absolute; right: 8px; color: var(--subtext); background: none; }
+
+.teachers__field-label { font-size: 12px; font-weight: 600; color: var(--subtext); margin-top: 4px; }
+.teachers__chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.teachers__chip { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
+.teachers__chip--active { background: var(--accent); color: white; border-color: var(--accent); }
+.teachers__hint { font-size: 12px; color: var(--subtext); line-height: 1.5; }
+.teachers__active-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin-top: 4px; }
+.teachers__error { color: #dc2626; font-size: 13px; }
+.teachers__form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.teachers__submit { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-weight: 600; font-size: 13px; padding: 9px 16px; border-radius: 8px; }
+.teachers__submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.teachers__cancel { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+
+.teachers__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 24px 0; }
+.teachers__list { display: flex; flex-direction: column; gap: 10px; }
+.teachers__card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--bg); flex-wrap: wrap; }
+.teachers__card-info { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+.teachers__name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.teachers__meta { font-size: 12px; color: var(--subtext); }
+.teachers__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.teachers__tags-icon { color: var(--subtext); flex-shrink: 0; }
+.teachers__tag { font-size: 11px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+.teachers__tag--muted { color: var(--subtext); }
+.teachers__tag--right { color: var(--accent); border-color: var(--accent); }
+.teachers__tag--off { color: #b91c1c; border-color: #f87171; background: #fef2f2; }
+.teachers__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.teachers__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
+.teachers__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+
+.teachers__report-picker { max-width: 340px; margin-bottom: 14px; }
+.teachers__stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.teachers__stat { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg); text-align: center; }
+.teachers__stat-value { font-size: 20px; font-weight: 700; color: var(--accent); }
+.teachers__stat-label { font-size: 11px; color: var(--subtext); margin-top: 3px; }
+
+.teachers__table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.teachers__table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+.teachers__table th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--subtext); font-weight: 600; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.teachers__table td { padding: 10px; color: var(--text); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.teachers__table tbody tr:last-child td { border-bottom: none; }
+
+@media (max-width: 768px) {
+  .teachers__form-row { grid-template-columns: 1fr; }
+}

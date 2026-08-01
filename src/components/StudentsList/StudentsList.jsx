@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
-import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { PROGRAMS } from "../../lib/academics";
+import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
+import { findBFormClash, describeUniqueViolation, isValidBForm, formatBForm } from "../../lib/bform";
+import StudentDetail from "../StudentDetail/StudentDetail";
+import EditRequests from "../EditRequests/EditRequests";
+import { DETAIL_GROUPS, blankDetails, detailsToRow, matricPercentage } from "../../lib/studentFields";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { fetchFeePlans, findPlan, buildFeeRows } from "../../lib/feePlans";
 import "./StudentsList.css";
 
-const PROGRAMS = ["Pre-Engineering", "Pre-Medical", "ICS", "General Science", "Humanities"];
-const ADMISSION_FEE = 12500;
-const FEE_AMOUNTS = {
-  "Pre-Engineering": 3000,
-  "Pre-Medical": 3000,
-  "ICS": 3000,
-  "General Science": 3000,
-  "Humanities": 2500,
-};
+// Used only until the fee_plans rows load, or if a group has no plan yet.
+// The real amounts live in the fee_plans table and are edited from Fee Settings.
+const FALLBACK_ADMISSION_FEE = 12500;
+const FALLBACK_MONTHLY_FEE = 3000;
 
 const DOCUMENTS = [
   { key: "photo", label: "Student Photo", urlField: "photo_url" },
@@ -21,15 +24,6 @@ const DOCUMENTS = [
   { key: "noc", label: "NOC", urlField: "noc_url" },
   { key: "verified_marksheet", label: "Verified Marksheet", urlField: "verified_marksheet_url" },
 ];
-
-const normalizeWhatsAppNumber = (value) => {
-  if (!value) return "";
-  const digits = String(value).replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("92")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+92${digits.slice(1)}`;
-  return `+${digits}`;
-};
 
 const buildCredentialsMessage = (studentName, rollNo, password) => {
   return [
@@ -86,13 +80,7 @@ const sendRejectionNotice = (application, message, waWindowRef) => {
   }
 
   if (whatsapp) {
-    const normalized = normalizeWhatsAppNumber(whatsapp);
-    const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
-    if (waWindowRef && !waWindowRef.closed) {
-      waWindowRef.location.href = waUrl;
-    } else {
-      window.open(waUrl, "_blank", "noopener,noreferrer");
-    }
+    openWhatsApp(whatsapp, message, waWindowRef);
   } else if (waWindowRef && !waWindowRef.closed) {
     waWindowRef.close();
   }
@@ -101,16 +89,18 @@ const sendRejectionNotice = (application, message, waWindowRef) => {
 };
 
 const sendStudentCredentialsWhatsApp = (student) => {
-  let phone = (student?.phone || "").trim();
-  if (!phone) {
-    const entered = window.prompt("Student WhatsApp number is missing. Enter a WhatsApp number (03XXXXXXXXX):", "");
+  // Her WhatsApp number, not her phone: the two are often different and a
+  // landline-style phone may have no WhatsApp on it at all.
+  let number = whatsappNumberFor(student);
+  if (!isValidWhatsAppNumber(number)) {
+    const entered = window.prompt(
+      `WhatsApp number for ${student?.name || "this student"} is missing or invalid. Enter one (03XXXXXXXXX):`,
+      number || ""
+    );
     if (!entered || !entered.trim()) return;
-    phone = entered.trim();
+    number = entered.trim();
   }
-  const normalized = normalizeWhatsAppNumber(phone);
-  const body = encodeURIComponent(buildCredentialsMessage(student?.name || "Student", student?.roll_no, student?.password));
-  const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
-  window.open(waUrl, "_blank", "noopener,noreferrer");
+  openWhatsApp(number, buildCredentialsMessage(student?.name || "Student", student?.roll_no, student?.password));
 };
 
 const shareCredentials = (application, rollNo, password, waWindowRef) => {
@@ -142,13 +132,7 @@ const shareCredentials = (application, rollNo, password, waWindowRef) => {
   }
 
   if (whatsapp) {
-    const normalized = normalizeWhatsAppNumber(whatsapp);
-    const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
-    if (waWindowRef && !waWindowRef.closed) {
-      waWindowRef.location.href = waUrl;
-    } else {
-      window.open(waUrl, "_blank", "noopener,noreferrer");
-    }
+    openWhatsApp(whatsapp, buildCredentialsMessage(application?.student_name || "Student", rollNo, password), waWindowRef);
   } else if (waWindowRef && !waWindowRef.closed) {
     waWindowRef.close();
   }
@@ -171,9 +155,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({
-    roll_no: "", name: "", father_name: "", program: isRestricted ? (visiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
-    phone: "", password: "", year_of_study: "1st Year",
+    roll_no: "", name: "", father_name: "", cnic: "",
+    program: isRestricted ? (visiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
+    phone: "", whatsapp: "", password: "", year_of_study: "1st Year",
+    ...blankDetails(),
   });
+  // The optional half of the form stays folded away until the admin asks for it.
+  const [showFurther, setShowFurther] = useState(false);
+  const [detailStudent, setDetailStudent] = useState(null);   // { student, edit }
+  // Owned by the EditRequests tab; kept here only to badge the tab button.
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const [profileImage, setProfileImage] = useState(null);
   const [profileImagePreview, setProfileImagePreview] = useState(null);
   const [formError, setFormError] = useState("");
@@ -190,20 +181,27 @@ export default function StudentsList({ allowedPrograms = [] }) {
   const [admissionFeeConfirmed, setAdmissionFeeConfirmed] = useState(false);
   const [docReview, setDocReview] = useState({});
   const [rejecting, setRejecting] = useState(false);
+  const [feePlans, setFeePlans] = useState([]);
+  const [deletedApps, setDeletedApps] = useState([]);
+  const [deletedStudents, setDeletedStudents] = useState([]);
+  const [busyRow, setBusyRow] = useState(null);
 
-  useEffect(() => {
-    fetchApplications();
-    fetchStudents();
-    const now = new Date();
-    const due = new Date(now.getFullYear(), now.getMonth() + 1, 28);
-    setFeeDueDate(due.toISOString().split("T")[0]);
-  }, []);
+  // The plan that applies to the application currently open for review — drives
+  // the admission-fee figure shown in the confirmation modal and the WhatsApp
+  // message, so those can never drift from what is actually charged.
+  const selectedProgram = selected?.group_selected || selected?.program;
+  const selectedYear = selected?.year_of_study || "1st Year";
+  const activePlan = findPlan(feePlans, selectedYear, selectedProgram);
+  const admissionFee = Number(activePlan?.admission_fee ?? FALLBACK_ADMISSION_FEE);
 
+  // Every list below filters on deleted_at: a deleted row must vanish from both
+  // the Applications and Enrolled tabs, and appear only in Deleted Items.
   const fetchApplications = async () => {
     setLoading(true);
     const { data } = await supabase
       .from("applications")
       .select("*")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (data) setApplications(data);
     setLoading(false);
@@ -213,8 +211,158 @@ export default function StudentsList({ allowedPrograms = [] }) {
     const { data } = await supabase
       .from("students")
       .select("*")
+      .is("deleted_at", null)
       .order("name");
     if (data) setStudents(data);
+  };
+
+  const fetchDeleted = async () => {
+    const [apps, studs] = await Promise.all([
+      supabase.from("applications").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
+      supabase.from("students").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
+    ]);
+    setDeletedApps(apps.data || []);
+    setDeletedStudents(studs.data || []);
+  };
+
+  // Just the number, so the tab can carry a badge without loading the tab.
+  // RLS already limits a sub-admin to her own programs.
+  const fetchPendingRequestCount = async () => {
+    const { count } = await supabase
+      .from("profile_edit_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "Pending");
+    setPendingRequestCount(count || 0);
+  };
+
+  useEffect(() => {
+    fetchApplications();
+    fetchStudents();
+    fetchDeleted();
+    fetchPendingRequestCount();
+    // Non-fatal: enrolment falls back to the constants above if this fails.
+    fetchFeePlans().then(setFeePlans).catch(() => setFeePlans([]));
+    const now = new Date();
+    const due = new Date(now.getFullYear(), now.getMonth() + 1, 28);
+    setFeeDueDate(due.toISOString().split("T")[0]);
+  }, []);
+
+  /* ---------- Recycle bin ---------- */
+  // Soft delete: stamp deleted_at. The row keeps its status and every linked
+  // record, so restoring puts it back exactly where it was.
+  const softDelete = async (table, row, name) => {
+    const label = table === "applications" ? "application" : "enrolled student";
+    if (!window.confirm(
+      `Delete the ${label} "${name}"?\n\n` +
+      "It will move to the Deleted Items tab and disappear from this list. " +
+      "Nothing is erased — you can restore it from there at any time."
+    )) return;
+
+    setBusyRow(row.id);
+    const { data: hit, error } = await supabase
+      .from(table)
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .select("id");
+    setBusyRow(null);
+
+    if (error) {
+      alert("Could not delete: " + error.message);
+      return;
+    }
+    if (!hit || hit.length === 0) {
+      alert(WRITE_BLOCKED_HINT);
+      return;
+    }
+    if (selected?.id === row.id) setSelected(null);
+    await Promise.all([fetchApplications(), fetchStudents(), fetchDeleted()]);
+  };
+
+  const restore = async (table, row) => {
+    setBusyRow(row.id);
+    const { data: hit, error } = await supabase
+      .from(table).update({ deleted_at: null }).eq("id", row.id).select("id");
+    setBusyRow(null);
+    if (error) {
+      alert("Could not restore: " + error.message);
+      return;
+    }
+    if (!hit || hit.length === 0) {
+      alert(WRITE_BLOCKED_HINT);
+      return;
+    }
+    await Promise.all([fetchApplications(), fetchStudents(), fetchDeleted()]);
+  };
+
+  /**
+   * The application a student was enrolled from, if any.
+   *
+   * `doApprove` copies the applicant's B-form into `students.cnic`, and that is
+   * the only link between the two tables — students added by hand through the
+   * Add Student form have no cnic and no application, so matching on it cannot
+   * pick up the wrong person.
+   */
+  const findSourceApplication = async (student) => {
+    if (!student.cnic) return null;
+    const { data } = await supabase
+      .from("applications")
+      .select("id, student_name, status")
+      .eq("bform", student.cnic)
+      .eq("status", "Approved")
+      .maybeSingle();
+    return data || null;
+  };
+
+  // The real DELETE. For a student the database cascades her fees, payments,
+  // attendance, results and class test marks along with her — see
+  // supabase_soft_delete.sql.
+  const permanentDelete = async (table, row, name) => {
+    const isStudent = table === "students";
+    const sourceApp = isStudent ? await findSourceApplication(row) : null;
+
+    if (!window.confirm(
+      `Permanently delete "${name}"?\n\n` +
+      "THIS CANNOT BE UNDONE. The record will be erased from the database.\n\n" +
+      (isStudent
+        ? "Her fee history, payments, attendance, results and class test marks will be deleted with her."
+        : "The submitted documents and all form data will be gone.") +
+      (sourceApp
+        ? "\n\nHer application will go back to Pending, so you can approve it again to re-enrol her — or delete it too."
+        : "")
+    )) return;
+
+    if (!window.confirm(`Last check — really erase "${name}" for good?`)) return;
+
+    setBusyRow(row.id);
+    const { data: erased, error } = await supabase
+      .from(table).delete().eq("id", row.id).select("id");
+    const reallyGone = !error && erased && erased.length > 0;
+
+    // Only after the student is actually gone: otherwise a failed delete would
+    // leave an enrolled student whose application says Pending.
+    if (reallyGone && sourceApp) {
+      const { error: appError } = await supabase
+        .from("applications")
+        .update({ status: "Pending" })
+        .eq("id", sourceApp.id);
+      if (appError) {
+        alert(
+          `${name} was deleted, but her application could not be reset to Pending: ${appError.message}\n\n` +
+          "Open the Applications tab and change it by hand."
+        );
+      }
+    }
+    setBusyRow(null);
+
+    if (error) {
+      alert("Could not delete permanently: " + error.message);
+      return;
+    }
+    if (!reallyGone) {
+      alert(WRITE_BLOCKED_HINT);
+      return;
+    }
+    await Promise.all([fetchApplications(), fetchDeleted()]);
   };
 
   const presentDocuments = () => DOCUMENTS.filter((d) => selected?.[d.urlField]);
@@ -302,9 +450,6 @@ export default function StudentsList({ allowedPrograms = [] }) {
       return;
     }
 
-    const { count } = await supabase
-      .from("students")
-      .select("*", { count: "exact", head: true });
     const year = new Date().getFullYear();
     const rollNo = "CMGC-" + year + "-" + String(Date.now()).slice(-5);
     const defaultPassword = selected.bform
@@ -318,33 +463,84 @@ export default function StudentsList({ allowedPrograms = [] }) {
         name: selected.student_name,
         father_name: selected.father_name,
         program: selected.group_selected || selected.program,
+        // Which elective set she chose on the form — only FA-IT and Humanities
+        // offer a choice, so this is null for the single-combination groups.
+        subject_combination: selected.subject_combination || null,
         phone: selected.phone1,
         password: defaultPassword,
         cnic: selected.bform,
         year_of_study: selected.year_of_study || "1st Year",
         profile_picture_url: selected.photo_url || null,
+
+        // Everything else she filled in on the admission form. This used to be
+        // dropped on approval, so an enrolled student lost her WhatsApp number,
+        // address, matric record and every uploaded document.
+        whatsapp: selected.whatsapp || selected.phone1 || null,
+        phone2: selected.phone2 || null,
+        email: selected.email || null,
+        address: selected.address || null,
+        dob: selected.dob || null,
+        father_cnic: selected.father_cnic || null,
+        nationality: selected.nationality || null,
+        religion: selected.religion || null,
+        orphan: selected.orphan ?? null,
+        father_occupation: selected.father_occupation || null,
+        monthly_income: selected.monthly_income ?? null,
+        family_members: selected.family_members ?? null,
+        financial_assistance: selected.financial_assistance ?? null,
+        ssc_roll_no: selected.ssc_roll_no || null,
+        ssc_registration_no: selected.ssc_registration_no || null,
+        matric_marks_obtained: selected.matric_marks_obtained ?? null,
+        matric_total_marks: selected.matric_total_marks ?? null,
+        matric_percentage: selected.matric_percentage ?? null,
+        board: selected.board || null,
+        student_group: selected.student_group || null,
+        bform_doc_url: selected.bform_doc_url || null,
+        father_id_doc_url: selected.father_id_doc_url || null,
+        marksheet_url: selected.marksheet_url || null,
+        noc_url: selected.noc_url || null,
+        verified_marksheet_url: selected.verified_marksheet_url || null,
       })
       .select()
       .single();
 
     if (studentError) {
       if (waWindowRef && !waWindowRef.closed) waWindowRef.close();
-      alert("Student enroll failed: " + studentError.message);
+      // Approving a second application for a girl who is already enrolled trips
+      // the B-Form index; say so plainly instead of showing the raw constraint.
+      alert("Student enroll failed: " + (studentError.code === "23505"
+        ? describeUniqueViolation(studentError)
+        : studentError.message));
       setApproving(false);
       return;
     }
 
     if (newStudent) {
-      const admDue = new Date();
-      admDue.setDate(admDue.getDate() + 7);
-      const { error: feeError } = await supabase.from("fees").insert({
-        student_id: newStudent.id,
-        program: selected.group_selected || selected.program,
-        amount_due: ADMISSION_FEE,
-        due_date: admDue.toISOString().split("T")[0],
-        status: "Unpaid",
-      });
+      // The whole year's schedule is written up front — admission fee plus every
+      // instalment — so the office and the student both see what is owed and
+      // when, instead of the admin allocating each month by hand.
+      const feeRows = activePlan
+        ? buildFeeRows({
+            plan: activePlan,
+            studentId: newStudent.id,
+            program: selectedProgram,
+            year: selectedYear,
+          })
+        : [{
+            student_id: newStudent.id,
+            program: selectedProgram,
+            year_of_study: selectedYear,
+            label: "Admission Fee",
+            amount_due: FALLBACK_ADMISSION_FEE,
+            due_date: new Date(Date.now() + 7 * 864e5).toISOString().split("T")[0],
+            status: "Unpaid",
+          }];
+
+      const { error: feeError } = await supabase.from("fees").insert(feeRows);
       if (feeError) alert("Fee allocation failed: " + feeError.message);
+      else if (!activePlan) {
+        alert(`No fee plan is set for ${selectedYear} ${selectedProgram}, so only the admission fee was created. Set it up in Fee Verification → Fee Settings, then allocate the rest manually.`);
+      }
 
       const credentialsShared = shareCredentials(selected, rollNo, defaultPassword, waWindowRef);
       if (!credentialsShared) {
@@ -364,7 +560,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
         "Roll No: " + rollNo + "\n" +
         "Year: " + (selected.year_of_study || "1st Year") + "\n" +
         "Password: " + defaultPassword + "\n" +
-        "Admission Fee Due: Rs " + ADMISSION_FEE.toLocaleString() + "\n\n" +
+        "Admission Fee Due: Rs " + admissionFee.toLocaleString() + "\n\n" +
         "The login credentials were prepared for delivery via email or WhatsApp."
       );
     } else if (waWindowRef && !waWindowRef.closed) {
@@ -387,7 +583,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
     if (!form.name.trim()) return setFormError("Name is required");
     if (!form.password.trim()) return setFormError("Password is required");
     if (form.password.length < 6) return setFormError("Password must be at least 6 characters");
+    if (!isValidBForm(form.cnic)) return setFormError("B-Form number is required, in the format 12345-1234567-1");
     setSaving(true);
+
+    // Checked here so the admin is told whose record already holds this number,
+    // rather than being handed a raw constraint error after the photo upload.
+    const clash = await findBFormClash(form.cnic);
+    if (clash) {
+      setSaving(false);
+      return setFormError(clash);
+    }
 
     let profileImageUrl = null;
 
@@ -431,20 +636,33 @@ export default function StudentsList({ allowedPrograms = [] }) {
       roll_no: form.roll_no,
       name: form.name,
       father_name: form.father_name,
+      cnic: formatBForm(form.cnic),
       program: form.program,
       phone: form.phone,
+      // Falls back to the phone so she is at least reachable; the admin can
+      // correct it later from Edit.
+      whatsapp: form.whatsapp.trim() || form.phone.trim() || null,
       password: form.password,
       year_of_study: form.year_of_study,
       profile_picture_url: profileImageUrl,
+      // Whatever was filled in under "Further Entry" — all optional.
+      ...detailsToRow(form),
     });
     setSaving(false);
     if (error) {
-      if (error.code === "23505") setFormError("Roll number already exists");
+      // Two unique indexes can fire here now, so read which one it was rather
+      // than always blaming the roll number.
+      if (error.code === "23505") setFormError(describeUniqueViolation(error));
       else setFormError("Error: " + error.message);
       return;
     }
     setSaved(true);
-    setForm({ roll_no: "", name: "", father_name: "", program: "Pre-Medical", phone: "", password: "", year_of_study: "1st Year" });
+    setShowFurther(false);
+    setForm({
+      roll_no: "", name: "", father_name: "", cnic: "", program: "Pre-Medical",
+      phone: "", whatsapp: "", password: "", year_of_study: "1st Year",
+      ...blankDetails(),
+    });
     setProfileImage(null);
     setProfileImagePreview(null);
     fetchStudents();
@@ -542,7 +760,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
 
   const openFeeModal = (student) => {
     setShowFeeModal(student);
-    setFeeAmount(String(FEE_AMOUNTS[student.program] || 3000));
+    setFeeAmount(String(findPlan(feePlans, student.year_of_study || "1st Year", student.program)?.monthly_fee || FALLBACK_MONTHLY_FEE));
     const now = new Date();
     const due = new Date(now.getFullYear(), now.getMonth() + 1, 28);
     setFeeDueDate(due.toISOString().split("T")[0]);
@@ -570,11 +788,13 @@ export default function StudentsList({ allowedPrograms = [] }) {
       "New: " + newYear
     );
     if (!confirmed) return;
-    const { error } = await supabase
+    const { data: hit, error } = await supabase
       .from("students")
       .update({ year_of_study: newYear })
-      .eq("id", student.id);
+      .eq("id", student.id)
+      .select("id");
     if (error) { alert("Error: " + error.message); return; }
+    if (!hit || hit.length === 0) { alert(WRITE_BLOCKED_HINT); return; }
     setStudents((prev) =>
       prev.map((s) => s.id === student.id ? { ...s, year_of_study: newYear } : s)
     );
@@ -626,7 +846,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
     <div className="sl-detail-actions">
       <div className="sl-fee-notice">
         <DollarSign size={16} />
-        <p>Admission fee of <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong> must be collected before approving. Mark every document above as Correct/Incorrect first — if any document is Incorrect, the application will be rejected with the reason sent to the student instead of being approved.</p>
+        <p>Admission fee of <strong>Rs {admissionFee.toLocaleString()}</strong> must be collected before approving. Mark every document above as Correct/Incorrect first — if any document is Incorrect, the application will be rejected with the reason sent to the student instead of being approved.</p>
       </div>
       <div className="sl-action-btns">
         <button onClick={handleReject} disabled={approving || rejecting} className="sl-reject-btn">
@@ -670,7 +890,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
               <div className="sl-modal-fee-box">
                 <p>Student: <strong>{selected.student_name}</strong></p>
                 <p>Year: <strong>{selected.year_of_study || "1st Year"}</strong></p>
-                <p>Admission Fee: <strong>Rs {ADMISSION_FEE.toLocaleString()}</strong></p>
+                <p>Admission Fee: <strong>Rs {admissionFee.toLocaleString()}</strong></p>
               </div>
               <label className="sl-modal-check">
                 <input
@@ -678,7 +898,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
                   checked={admissionFeeConfirmed}
                   onChange={(e) => setAdmissionFeeConfirmed(e.target.checked)}
                 />
-                I confirm that Rs {ADMISSION_FEE.toLocaleString()} admission fee has been received.
+                I confirm that Rs {admissionFee.toLocaleString()} admission fee has been received.
               </label>
               <div className="sl-modal-actions">
                 <button onClick={() => { setShowAdmissionFeeModal(false); setAdmissionFeeConfirmed(false); }} className="sl-modal-cancel">Cancel</button>
@@ -851,10 +1071,17 @@ export default function StudentsList({ allowedPrograms = [] }) {
         <button onClick={() => setActiveTab("students")} className={"sl-tab " + (activeTab === "students" ? "sl-tab--active" : "")}>
           Enrolled Students ({students.length})
         </button>
+        <button onClick={() => setActiveTab("editRequests")} className={"sl-tab " + (activeTab === "editRequests" ? "sl-tab--active" : "")}>
+          Edit Requests
+          {pendingRequestCount > 0 && <span className="sl-tab-badge">{pendingRequestCount}</span>}
+        </button>
+        <button onClick={() => setActiveTab("deleted")} className={"sl-tab " + (activeTab === "deleted" ? "sl-tab--active" : "")}>
+          <Trash2 size={13} /> Deleted Items ({deletedApps.length + deletedStudents.length})
+        </button>
       </div>
 
-      {/* Toolbar */}
-      <div className="sl-toolbar">
+      {/* Toolbar — the requests tab has its own filters and no roster to search */}
+      <div className="sl-toolbar" hidden={activeTab === "editRequests"}>
         <div className="sl-search">
           <Search size={15} />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." />
@@ -878,6 +1105,10 @@ export default function StudentsList({ allowedPrograms = [] }) {
         )}
       </div>
 
+      {activeTab === "editRequests" && (
+        <EditRequests allowedPrograms={allowedPrograms} onCountChange={setPendingRequestCount} />
+      )}
+
       {/* Applications Tab */}
       {activeTab === "applications" && (
         loading ? <p className="sl-empty">Loading...</p> :
@@ -897,7 +1128,17 @@ export default function StudentsList({ allowedPrograms = [] }) {
                   <td>{a.phone1}</td>
                   <td>{new Date(a.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}</td>
                   <td>{statusBadge(a.status)}</td>
-                  <td><button onClick={() => { setSearch(""); setDocReview({}); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button></td>
+                  <td className="sl-row-actions">
+                    <button onClick={() => { setSearch(""); setDocReview({}); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button>
+                    <button
+                      onClick={() => softDelete("applications", a, a.student_name)}
+                      disabled={busyRow === a.id}
+                      className="sl-delete-btn"
+                      title="Move to Deleted Items"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -916,12 +1157,22 @@ export default function StudentsList({ allowedPrograms = [] }) {
                 <div className="sl-add-field"><label>Student Name *</label><input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div className="sl-add-field"><label>Father's Name</label><input placeholder="Father's name" value={form.father_name} onChange={(e) => setForm({ ...form, father_name: e.target.value })} /></div>
                 <div className="sl-add-field">
+                  <label>B-Form No. *</label>
+                  <input placeholder="12345-1234567-1" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} />
+                  <span className="sl-field-hint">One B-Form, one student — a number already on record will be refused.</span>
+                </div>
+                <div className="sl-add-field">
                   <label>Program *</label>
                   <select value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
                     {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="sl-add-field"><label>Phone</label><input placeholder="03XXXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                <div className="sl-add-field">
+                  <label>WhatsApp No.</label>
+                  <input placeholder="03XXXXXXXXX" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} />
+                  <span className="sl-field-hint">Messages go here. Blank = use the phone above.</span>
+                </div>
                 <div className="sl-add-field"><label>Login Password *</label><input type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
                 <div className="sl-add-field">
                   <label>Year of Study *</label>
@@ -946,6 +1197,77 @@ export default function StudentsList({ allowedPrograms = [] }) {
                   )}
                 </div>
               </div>
+
+              {/* Everything below is optional for the admin. It stays folded away
+                  so the quick path — name, roll no, group, password — is not
+                  buried under twenty fields she does not have to hand. */}
+              <button
+                type="button"
+                onClick={() => setShowFurther((v) => !v)}
+                className="sl-further-btn"
+              >
+                {showFurther ? <><X size={14} /> Hide Further Entry</> : <><Plus size={14} /> Further Entry (optional)</>}
+              </button>
+
+              {showFurther && (
+                <div className="sl-further">
+                  <p className="sl-further-hint">
+                    None of this is required now — you can fill it in later from the student's
+                    <strong> Edit</strong> button, along with her documents.
+                  </p>
+                  {DETAIL_GROUPS.map((group) => (
+                    <div key={group.title} className="sl-further-group">
+                      <h4>{group.title}</h4>
+                      <div className="sl-add-grid">
+                        {group.fields.map((f) => (
+                          <div key={f.key} className={"sl-add-field " + (f.wide ? "sl-add-field--wide" : "")}>
+                            <label>{f.label}</label>
+                            {f.type === "select" ? (
+                              <select value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}>
+                                <option value="">— Select —</option>
+                                {(f.options || []).map((o) => <option key={o}>{o}</option>)}
+                              </select>
+                            ) : f.type === "boolean" ? (
+                              <label className="sl-check">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(form[f.key])}
+                                  onChange={(e) => setForm({ ...form, [f.key]: e.target.checked })}
+                                />
+                                Yes
+                              </label>
+                            ) : f.type === "textarea" ? (
+                              <textarea
+                                rows={2}
+                                placeholder={f.placeholder}
+                                value={form[f.key] ?? ""}
+                                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                              />
+                            ) : (
+                              <input
+                                type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                                placeholder={f.placeholder}
+                                readOnly={f.readOnly}
+                                value={form[f.key] ?? ""}
+                                onChange={(e) => {
+                                  const next = { ...form, [f.key]: e.target.value };
+                                  if (f.key === "matric_marks_obtained" || f.key === "matric_total_marks") {
+                                    next.matric_percentage = matricPercentage(
+                                      next.matric_marks_obtained,
+                                      next.matric_total_marks
+                                    );
+                                  }
+                                  setForm(next);
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {formError && <p className="sl-form-error">{formError}</p>}
               {saved && <p className="sl-form-success">Student added successfully!</p>}
               <button onClick={addStudent} disabled={saving} className="sl-save-btn">
@@ -959,21 +1281,22 @@ export default function StudentsList({ allowedPrograms = [] }) {
             <div className="sl-table-wrap">
               <table className="sl-table">
                 <thead>
-                  <tr><th></th><th>Roll No</th><th>Name</th><th>Father</th><th>Program</th><th>Year</th><th>Phone</th><th>Actions</th></tr>
+                  {/* Only what the office needs at a glance — everything else is
+                      one click away under Details. */}
+                  <tr><th></th><th>Roll No</th><th>Name</th><th>Program</th><th>Year</th><th>WhatsApp</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {filteredStudents.map((s) => (
                     <tr key={s.id}>
                       <td className="sl-pic-cell">
                         {s.profile_picture_url ? (
-                          <img src={s.profile_picture_url} alt={s.name} className="sl-student-pic" />
+                          <img src={s.profile_picture_url} alt={s.name} className="sl-student-pic" loading="lazy" decoding="async" />
                         ) : (
                           <div className="sl-student-pic sl-pic-placeholder">—</div>
                         )}
                       </td>
                       <td>{s.roll_no}</td>
                       <td className="sl-name">{s.name}</td>
-                      <td>{s.father_name}</td>
                       <td>{s.program}</td>
                       <td>
                         <select
@@ -985,8 +1308,17 @@ export default function StudentsList({ allowedPrograms = [] }) {
                           <option>2nd Year</option>
                         </select>
                       </td>
-                      <td>{s.phone}</td>
                       <td>
+                        {s.whatsapp || s.phone || "—"}
+                        {!s.whatsapp && s.phone && <span className="sl-wa-fallback" title="No WhatsApp number on record — using her phone">phone</span>}
+                      </td>
+                      <td>
+                        <button onClick={() => setDetailStudent({ student: s, edit: false })} className="sl-detail-btn">
+                          <Eye size={13} /> Details
+                        </button>
+                        <button onClick={() => setDetailStudent({ student: s, edit: true })} className="sl-edit-btn">
+                          <Save size={13} /> Edit
+                        </button>
                         <button onClick={() => openFeeModal(s)} className="sl-fee-btn">
                           <DollarSign size={13} /> Fee
                         </button>
@@ -996,6 +1328,14 @@ export default function StudentsList({ allowedPrograms = [] }) {
                         <button onClick={() => sendStudentCredentialsWhatsApp(s)} className="sl-whatsapp-btn" title="Send login ID & password via WhatsApp">
                           <WhatsappIcon />
                         </button>
+                        <button
+                          onClick={() => softDelete("students", s, s.name)}
+                          disabled={busyRow === s.id}
+                          className="sl-delete-btn"
+                          title="Move to Deleted Items"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1003,6 +1343,102 @@ export default function StudentsList({ allowedPrograms = [] }) {
               </table>
             </div>
           }
+        </div>
+      )}
+
+      {detailStudent && (
+        <StudentDetail
+          student={detailStudent.student}
+          allowedPrograms={allowedPrograms}
+          startInEdit={detailStudent.edit}
+          onClose={() => setDetailStudent(null)}
+          onSaved={fetchStudents}
+        />
+      )}
+
+      {/* Deleted Items Tab */}
+      {activeTab === "deleted" && (
+        <div className="sl-deleted">
+          <p className="sl-deleted__intro">
+            Anything deleted from the Applications or Enrolled Students tab is kept here.
+            <strong> Restore</strong> puts it back exactly where it was.
+            <strong> Delete Permanently</strong> erases it from the database for good.
+          </p>
+
+          {deletedApps.length === 0 && deletedStudents.length === 0 ? (
+            <div className="sl-deleted__empty">
+              <Trash2 size={30} />
+              <p>Deleted Items is empty.</p>
+            </div>
+          ) : (
+            <>
+              {deletedApps.length > 0 && (
+                <div className="sl-deleted__section">
+                  <h4>Applications ({deletedApps.length})</h4>
+                  <div className="sl-table-wrap">
+                    <table className="sl-table">
+                      <thead>
+                        <tr><th>Name</th><th>Group</th><th>Year</th><th>Phone</th><th>Status</th><th>Deleted</th><th>Actions</th></tr>
+                      </thead>
+                      <tbody>
+                        {deletedApps.map((a) => (
+                          <tr key={a.id}>
+                            <td className="sl-name">{a.student_name}</td>
+                            <td>{a.group_selected}</td>
+                            <td>{a.year_of_study || "1st Year"}</td>
+                            <td>{a.phone1}</td>
+                            <td>{statusBadge(a.status)}</td>
+                            <td>{new Date(a.deleted_at).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</td>
+                            <td className="sl-row-actions">
+                              <button onClick={() => restore("applications", a)} disabled={busyRow === a.id} className="sl-restore-btn">
+                                <ArrowLeft size={13} /> Restore
+                              </button>
+                              <button onClick={() => permanentDelete("applications", a, a.student_name)} disabled={busyRow === a.id} className="sl-purge-btn">
+                                <X size={13} /> Delete Permanently
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {deletedStudents.length > 0 && (
+                <div className="sl-deleted__section">
+                  <h4>Enrolled Students ({deletedStudents.length})</h4>
+                  <div className="sl-table-wrap">
+                    <table className="sl-table">
+                      <thead>
+                        <tr><th>Roll No</th><th>Name</th><th>Father</th><th>Program</th><th>Year</th><th>Deleted</th><th>Actions</th></tr>
+                      </thead>
+                      <tbody>
+                        {deletedStudents.map((s) => (
+                          <tr key={s.id}>
+                            <td>{s.roll_no}</td>
+                            <td className="sl-name">{s.name}</td>
+                            <td>{s.father_name}</td>
+                            <td>{s.program}</td>
+                            <td>{s.year_of_study || "1st Year"}</td>
+                            <td>{new Date(s.deleted_at).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</td>
+                            <td className="sl-row-actions">
+                              <button onClick={() => restore("students", s)} disabled={busyRow === s.id} className="sl-restore-btn">
+                                <ArrowLeft size={13} /> Restore
+                              </button>
+                              <button onClick={() => permanentDelete("students", s, s.name)} disabled={busyRow === s.id} className="sl-purge-btn">
+                                <X size={13} /> Delete Permanently
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
-import { GraduationCap, LayoutDashboard, Users, CalendarCheck, FileText, Wallet, Bell, ShieldCheck, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut } from "lucide-react";
+import Logo from "../Logo/Logo";
 import { hasPermission } from "../../lib/adminAuth";
 import "./AdminSidebar.css";
 
@@ -9,6 +10,8 @@ const NAV_ITEMS = [
   { id: "results", label: "Results", icon: FileText, permission: "results" },
   { id: "fee", label: "Fee Verification", icon: Wallet, permission: "fee" },
   { id: "notices", label: "Notices", icon: Bell, permission: "notices" },
+  { id: "lms", label: "LMS", icon: BookOpen, permission: "lms" },
+  { id: "teachers", label: "Teachers", icon: BookOpen, permission: "teachers" },
   { id: "admins", label: "Manage Admins", icon: ShieldCheck, permission: "__super_admin_only__" },
 ];
 
@@ -22,7 +25,7 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
   return (
     <>
       <aside className="admin-sidebar">
-        <div className="admin-sidebar__brand"><GraduationCap size={22} /><span>CMGC Admin</span></div>
+        <div className="admin-sidebar__brand"><Logo size={26} /><span>CMGC Admin</span></div>
         {visibleItems.map((it) => (
           <button key={it.id} onClick={() => setActive(it.id)} className={`admin-sidebar__item ${active === it.id ? "admin-sidebar__item--active" : ""}`}>
             <it.icon size={17} /> {it.label}

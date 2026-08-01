@@ -6,9 +6,30 @@ export const PERMISSION_KEYS = [
   { id: "results", label: "Results" },
   { id: "fee", label: "Fee Verification" },
   { id: "notices", label: "Notices" },
+  { id: "lms", label: "Course Material (LMS)" },
+  { id: "teachers", label: "Teachers" },
 ];
 
-export const PROGRAMS = ["Pre-Engineering", "Pre-Medical", "ICS", "General Science", "Humanities"];
+// Re-exported so every existing `import { PROGRAMS } from "adminAuth"` keeps
+// working, but the list itself is derived from the group definitions in
+// academics.js — adding a group there adds it everywhere, with no second list to
+// forget. These strings must match the DB and the RLS policies exactly.
+export { PROGRAMS } from "./academics";
+
+/**
+ * An update or delete the RLS policies refuse does NOT come back as an error —
+ * PostgREST reports a plain success that simply affected zero rows. Any write
+ * that matters must therefore ask for the changed rows back (`.select(...)`) and
+ * treat an empty result as a failure, or the UI will cheerfully report "saved"
+ * while the database ignored the whole thing.
+ *
+ * In practice this means one of two things: the admin's Supabase session has
+ * expired (so the request went out as an anonymous visitor), or a sub-admin is
+ * touching a student outside her allowed programs.
+ */
+export const WRITE_BLOCKED_HINT =
+  "Nothing was saved — the database refused the change. Your admin session has most likely expired: " +
+  "sign out, sign in again, and try once more. (Sub-admins can only change records in the programs assigned to them.)";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 

@@ -17,7 +17,7 @@ export default function About() {
           <div className="about__card about__card--principal">
             <div className="about__principal-photo-wrap">
               <div className="about__principal-ring"></div>
-              <img src="/images/principal.jpg" alt="Principal" className="about__principal-photo" />
+              <img src="/images/principal.jpg" alt="Principal" className="about__principal-photo" loading="lazy" decoding="async" />
             </div>
             <h3>Principal's Message</h3>
             <p>"Every student who walks through our doors carries the potential to lead. Our goal is to nurture that potential every single day."</p>

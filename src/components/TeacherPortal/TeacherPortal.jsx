@@ -1,0 +1,188 @@
+import { useState, useEffect } from "react";
+import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen } from "lucide-react";
+import Sidebar from "../Sidebar/Sidebar";
+import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
+import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
+import LmsManage from "../LmsManage/LmsManage";
+import MarkAttendance from "../MarkAttendance/MarkAttendance";
+import EnterResults from "../EnterResults/EnterResults";
+import { supabase } from "../../lib/supabaseClient";
+import { PROGRAMS } from "../../lib/adminAuth";
+import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
+import "./TeacherPortal.css";
+
+const ALL_PROGRAMS = "All Programs";
+
+const NAV_ITEMS = [
+  { id: "class_tests", label: "Class Tests", icon: ClipboardList },
+  { id: "assignments", label: "Assignments", icon: NotebookPen },
+  { id: "lms", label: "LMS", icon: BookOpen },
+  { id: "view_students", label: "Students", icon: Users },
+  { id: "attendance", label: "Attendance", icon: CalendarCheck },
+  { id: "results", label: "Results", icon: FileText },
+];
+
+export default function TeacherPortal({ teacher, onLogout }) {
+  const allowedPrograms = teacherPrograms(teacher);
+  const subjects = teacherSubjects(teacher);
+
+  const items = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
+  const [active, setActive] = useState(items[0]?.id || "none");
+
+  return (
+    <div className="portal">
+      <Sidebar
+        items={items}
+        active={active}
+        setActive={setActive}
+        onLogout={onLogout}
+        userLabel={`${teacher?.name || "Teacher"} (teacher)`}
+      />
+      <main className="portal__main">
+        <div className="teacher-portal__header">
+          <div>
+            <h2 className="teacher-portal__name">{teacher?.name}</h2>
+            <p className="teacher-portal__meta">
+              {teacher?.email}
+              {teacher?.qualification ? ` · ${teacher.qualification}` : ""}
+            </p>
+          </div>
+          <div className="teacher-portal__tags">
+            {subjects.length === 0 ? (
+              <span className="teacher-portal__tag teacher-portal__tag--muted">All subjects</span>
+            ) : (
+              subjects.map((s) => <span key={s} className="teacher-portal__tag">{s}</span>)
+            )}
+            {allowedPrograms.length === 0 ? (
+              <span className="teacher-portal__tag teacher-portal__tag--muted">All programs</span>
+            ) : (
+              allowedPrograms.map((p) => <span key={p} className="teacher-portal__tag">{p}</span>)
+            )}
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="teacher-portal__blocked">
+            <p>No duties have been assigned to your account yet.</p>
+            <p className="teacher-portal__blocked-hint">Ask the admin to give you rights from the Teachers tab.</p>
+          </div>
+        ) : (
+          <>
+            {active === "class_tests" && <ClassTestEntry teacher={teacher} allowedPrograms={allowedPrograms} />}
+            {active === "assignments" && <AssignmentEntry teacher={teacher} allowedPrograms={allowedPrograms} />}
+            {active === "lms" && <LmsManage teacher={teacher} />}
+            {active === "view_students" && <TeacherStudents allowedPrograms={allowedPrograms} />}
+            {active === "attendance" && <MarkAttendance allowedPrograms={allowedPrograms} />}
+            {active === "results" && <EnterResults allowedPrograms={allowedPrograms} />}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/* Read-only roster of the programs this teacher is assigned to. */
+function TeacherStudents({ allowedPrograms }) {
+  const isRestricted = allowedPrograms.length > 0;
+  const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+
+  // Default to seeing everything she teaches, rather than just her first group.
+  const [program, setProgram] = useState(visiblePrograms.length > 1 ? ALL_PROGRAMS : (visiblePrograms[0] || PROGRAMS[0]));
+  const [yearFilter, setYearFilter] = useState("Both");
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    let query = supabase
+      .from("students")
+      .select("id, name, roll_no, father_name, program, year_of_study")
+      .is("deleted_at", null)
+      .order("program")
+      .order("name");
+
+    // "All Programs" is always scoped to the groups she was assigned — a teacher
+    // given Pre-Engineering, ICS and General Science never sees Pre-Medical here.
+    if (program === ALL_PROGRAMS) query = query.in("program", visiblePrograms);
+    else query = query.eq("program", program);
+
+    if (yearFilter !== "Both") query = query.eq("year_of_study", yearFilter);
+
+    const { data } = await query;
+    setStudents(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program, yearFilter]);
+
+  const filtered = students.filter(
+    (s) => s.name.toLowerCase().includes(search.toLowerCase()) || (s.roll_no || "").includes(search)
+  );
+
+  return (
+    <div className="teacher-students">
+      <div className="teacher-students__toolbar">
+        <div className="teacher-students__field">
+          <label>Program</label>
+          <select value={program} onChange={(e) => setProgram(e.target.value)}>
+            {visiblePrograms.length > 1 && <option key={ALL_PROGRAMS}>{ALL_PROGRAMS}</option>}
+            {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="teacher-students__search">
+          <Search size={14} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student..." />
+        </div>
+      </div>
+
+      <div className="teacher-students__year-filters" role="group" aria-label="Filter by class year">
+        {["1st Year", "2nd Year", "Both"].map((y) => (
+          <button
+            key={y}
+            onClick={() => setYearFilter(y)}
+            className={"teacher-students__year-btn " + (yearFilter === y ? "teacher-students__year-btn--active" : "")}
+          >
+            {y}
+          </button>
+        ))}
+        <span className="teacher-students__count">
+          {filtered.length} student{filtered.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {loading ? (
+        <p className="teacher-students__empty">Loading...</p>
+      ) : filtered.length === 0 ? (
+        <p className="teacher-students__empty">No students found in {program}.</p>
+      ) : (
+        <div className="teacher-students__table-wrap">
+          <table className="teacher-students__table">
+            <thead>
+              <tr>
+                <th>Roll No.</th><th>Name</th><th>Father Name</th>
+                {/* Only worth a column when several groups are mixed together. */}
+                {program === ALL_PROGRAMS && <th>Group</th>}
+                <th>Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.roll_no}</td>
+                  <td>{s.name}</td>
+                  <td>{s.father_name || "—"}</td>
+                  {program === ALL_PROGRAMS && <td>{s.program}</td>}
+                  <td>{s.year_of_study || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,12 +1,18 @@
-import { CalendarCheck, Clock, Wallet, Award, Bell } from "lucide-react";
+import { CalendarCheck, Clock, Wallet, Award, Bell, GraduationCap } from "lucide-react";
 import "./Overview.css";
 
-export default function Overview({ student }) {
+export default function Overview({ student, onNavigate }) {
+  // Enrolment defaults to 1st Year everywhere else in the app, so a missing
+  // value is shown the same way here rather than as a dash.
+  const classYear = student?.year_of_study || "1st Year";
+
   const stats = [
     { label: "Program", value: student?.program || "—", icon: Award, cls: "stat--purple" },
+    { label: "Class", value: classYear, icon: GraduationCap, cls: "stat--rose" },
     { label: "Roll Number", value: student?.roll_no || "—", icon: Clock, cls: "stat--amber" },
     { label: "Phone", value: student?.phone || "—", icon: Wallet, cls: "stat--blue" },
-    { label: "Attendance", value: "View →", icon: CalendarCheck, cls: "stat--green" },
+    // The only card that goes anywhere — it opens the Attendance tab.
+    { label: "Attendance", value: "View →", icon: CalendarCheck, cls: "stat--green", goTo: "attendance" },
   ];
 
   return (
@@ -16,27 +22,51 @@ export default function Overview({ student }) {
           <div>
             <p>Welcome back,</p>
             <h2>{student?.name || "Student"}</h2>
-            <p className="overview__meta">{student?.program} • Roll No: {student?.roll_no}</p>
+            <p className="overview__meta">{student?.program} • {classYear} • Roll No: {student?.roll_no}</p>
           </div>
           {student?.profile_picture_url && (
-            <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" />
+            <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" loading="lazy" decoding="async" />
           )}
         </div>
       </div>
 
       <div className="overview__stats">
-        {stats.map((s) => (
-          <div key={s.label} className="overview__stat-card">
-            <div className={`overview__stat-icon ${s.cls}`}><s.icon size={18} /></div>
-            <p className="overview__stat-value">{s.value}</p>
-            <p className="overview__stat-label">{s.label}</p>
-          </div>
-        ))}
+        {stats.map((s) => {
+          const body = (
+            <>
+              <div className={`overview__stat-icon ${s.cls}`}><s.icon size={18} /></div>
+              <p className="overview__stat-value">{s.value}</p>
+              <p className="overview__stat-label">{s.label}</p>
+            </>
+          );
+          // A real <button> for the one that navigates, so it is reachable by
+          // keyboard and reads as clickable to a screen reader.
+          return s.goTo ? (
+            <button
+              key={s.label}
+              type="button"
+              className="overview__stat-card overview__stat-card--link"
+              onClick={() => onNavigate && onNavigate(s.goTo)}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={s.label} className="overview__stat-card">{body}</div>
+          );
+        })}
       </div>
 
       <div className="overview__card">
         <h3><Bell size={14} /> Important</h3>
-        <p className="overview__muted">Use the sidebar to check your Attendance, Results, and Fee status.</p>
+        {/* The nav is a left sidebar on desktop but a fixed bar along the bottom
+            below 1024px, so the wording swaps at exactly that breakpoint —
+            "sidebar" would point at nothing on a phone. */}
+        <p className="overview__muted">
+          Use the{" "}
+          <span className="overview__nav-hint overview__nav-hint--wide">sidebar on the left</span>
+          <span className="overview__nav-hint overview__nav-hint--narrow">menu at the bottom of the screen</span>
+          {" "}to check your Attendance, Class Tests, Assignments, Results and Fee status.
+        </p>
       </div>
     </div>
   );

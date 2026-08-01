@@ -42,3 +42,93 @@
 .fee-v__admin-tag { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--bg); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px; }
 
 @media (min-width: 640px) { .fee-v__card { flex-direction: row; align-items: center; justify-content: space-between; } }
+/* ---------- Unpaid Fee tab: filters, summary, grouped list ---------- */
+.fee-v__unpaid { display: flex; flex-direction: column; gap: 14px; }
+.fee-v__filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+
+.fee-v__view-toggle { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.fee-v__view-btn { padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--subtext); }
+.fee-v__view-btn--active { background: var(--accent); color: white; }
+
+.fee-v__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.fee-v__stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center; }
+.fee-v__stat-value { font-size: 19px; font-weight: 700; color: var(--accent); }
+.fee-v__stat-label { font-size: 11px; color: var(--subtext); margin-top: 3px; }
+
+
+.fee-v__groups { display: flex; flex-direction: column; gap: 8px; }
+.fee-v__group { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.fee-v__group--open { border-color: var(--accent); }
+.fee-v__group-head { display: grid; grid-template-columns: 18px minmax(120px, 1.6fr) 1fr 1fr 0.8fr 34px auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 14px; }
+.fee-v__group-head:hover { background: var(--bg); }
+.fee-v__caret { color: var(--subtext); font-size: 12px; }
+.fee-v__group-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.fee-v__group-meta { font-size: 12px; color: var(--subtext); }
+.fee-v__badge { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--accent); color: white; font-size: 12px; font-weight: 700; }
+.fee-v__group-total { font-size: 14px; font-weight: 700; color: var(--text); text-align: right; white-space: nowrap; }
+
+.fee-v__group-body { border-top: 1px solid var(--border); background: var(--bg); padding: 4px 14px 12px; }
+.fee-v__detail { padding: 12px 0; border-bottom: 1px dashed var(--border); }
+.fee-v__detail:last-child { border-bottom: none; }
+.fee-v__detail-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.fee-v__detail-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.fee-v__detail-amount { font-size: 14px; font-weight: 700; color: var(--accent); }
+.fee-v__detail-due { font-size: 12px; color: var(--subtext); }
+.fee-v__detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+@media (max-width: 768px) {
+  .fee-v__group-head { grid-template-columns: 16px 1fr 30px auto; }
+  .fee-v__group-head .fee-v__group-meta { display: none; }
+}
+
+/* ---------- Month picker (pending "up to", and collection "in") ---------- */
+.fee-v__month-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.fee-v__month-picker-label { font-size: 12px; font-weight: 600; color: var(--subtext); white-space: nowrap; }
+
+.fee-v__month-summary { font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; line-height: 1.6; }
+.fee-v__month-note { color: var(--subtext); font-size: 12px; }
+.fee-v__month-chip {
+  position: relative;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.fee-v__month-chip:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 5px 12px rgba(0,0,0,0.12);
+}
+.fee-v__month-chip:active { transform: translateY(0); }
+.fee-v__month-chip--active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 5px 14px rgba(0,0,0,0.22);
+}
+.fee-v__month-chip--active:hover {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+  border-color: transparent;
+}
+
+/* Same treatment for the year buttons and the Overall/Monthly toggle, so the
+   whole filter strip reads as one control set rather than three styles. */
+.fee-v__year-btn { transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+.fee-v__year-btn:hover { transform: translateY(-1px); border-color: var(--accent); color: var(--accent); }
+.fee-v__year-btn--active:hover { color: #fff; }
+.fee-v__view-btn { transition: background 0.15s ease, color 0.15s ease; }
+.fee-v__view-btn:hover { color: var(--accent); }
+.fee-v__view-btn--active:hover { color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fee-v__month-chip, .fee-v__year-btn { transition: none; }
+  .fee-v__month-chip:hover, .fee-v__year-btn:hover { transform: none; }
+}

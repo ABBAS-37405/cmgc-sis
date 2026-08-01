@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Full-size camera originals kept out of the build and out of git (93 MB).
+_original-photos/

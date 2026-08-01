@@ -30,7 +30,7 @@ alter table admin_profiles enable row level security;
 `overview` is always visible to every admin and is not a toggle.
 
 **Program values** (must match exactly what's used elsewhere in the app):
-`Pre-Engineering`, `Pre-Medical`, `ICS`, `General Science`, `Humanities`.
+`Pre-Engineering`, `Pre-Medical`, `ICS`, `General Science`, `FA-IT`, `Humanities`.
 An empty `allowed_programs` array means "no restriction — all programs".
 
 ---

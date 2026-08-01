@@ -1,14 +1,22 @@
 import { useState } from "react";
-import { GraduationCap, User, Users, Shield, Lock, Eye, EyeOff, ArrowLeft, AlertCircle } from "lucide-react";
+import { User, Users, Shield, BookOpen, Lock, Eye, EyeOff, ArrowLeft, AlertCircle } from "lucide-react";
+import Logo from "../Logo/Logo";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAdminProfile } from "../../lib/adminAuth";
+import { fetchTeacherProfile } from "../../lib/teacherAuth";
 import "./LoginPage.css";
 
 const ROLES = [
   { id: "student", label: "Student", icon: User },
   { id: "parent", label: "Parent", icon: Users },
+  { id: "teacher", label: "Teacher", icon: BookOpen },
   { id: "admin", label: "Admin", icon: Shield },
 ];
+
+const PLACEHOLDERS = {
+  admin: "Admin Email",
+  teacher: "Teacher Email",
+};
 
 export default function LoginPage({ onLogin, onBack }) {
   const [role, setRole] = useState("student");
@@ -51,11 +59,46 @@ export default function LoginPage({ onLogin, onBack }) {
       return;
     }
 
+    if (role === "teacher") {
+      // Same Supabase Auth mechanism as the admin login above — a teacher's account is
+      // just an auth user whose `teachers` row holds her subjects and rights.
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: id,
+        password,
+      });
+      if (authError) {
+        setLoading(false);
+        setError("Invalid email or password");
+        return;
+      }
+
+      const teacher = await fetchTeacherProfile(authData.user.id);
+      setLoading(false);
+
+      if (!teacher) {
+        setError("This login is not registered as a teacher. Contact the admin.");
+        await supabase.auth.signOut();
+        return;
+      }
+
+      if (teacher.is_active === false) {
+        setError("This teacher account has been deactivated. Contact the admin.");
+        await supabase.auth.signOut();
+        return;
+      }
+
+      onLogin("teacher", id, teacher);
+      return;
+    }
+
     if (role === "student" || role === "parent") {
       // Students table se roll number + password check karein
       const { data, error: dbError } = await supabase
         .from("students")
         .select("*")
+        // A deleted student must not be able to sign in while she sits in the
+        // admin's Deleted Items bin.
+        .is("deleted_at", null)
         .eq("roll_no", id.trim())
         .eq("password", password.trim())
         .single();
@@ -80,7 +123,7 @@ export default function LoginPage({ onLogin, onBack }) {
         </button>
 
         <div className="login__header">
-          <div className="login__logo"><GraduationCap size={28} /></div>
+          <div className="login__logo"><Logo size={56} /></div>
           <h1>CMGC Portal Login</h1>
           <p>Community Model Girls College</p>
         </div>
@@ -97,7 +140,7 @@ export default function LoginPage({ onLogin, onBack }) {
           value={id}
           onChange={(e) => setId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-          placeholder={role === "admin" ? "Admin Email" : "Roll Number (e.g. CMGC-2026-001)"}
+          placeholder={PLACEHOLDERS[role] || "Roll Number (e.g. CMGC-2026-001)"}
           className="login__input"
         />
         <div className="login__password-wrap">

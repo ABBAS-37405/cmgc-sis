@@ -1,0 +1,39 @@
+.sd-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.sd-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 860px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.sd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.sd-head h3 { font-size: 16px; font-weight: 700; color: var(--text); }
+.sd-head p { font-size: 12px; color: var(--subtext); margin-top: 3px; }
+.sd-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sd-edit-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--accent); color: var(--accent); background: var(--card); }
+.sd-cancel-btn { font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+.sd-close { color: var(--subtext); padding: 4px; }
+
+.sd-body { overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+.sd-error { color: #dc2626; font-size: 13px; background: var(--bg); border: 1px solid #f87171; border-radius: 8px; padding: 10px 12px; }
+
+.sd-section h4 { font-size: 13px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.sd-hint { font-size: 12px; color: var(--subtext); margin-bottom: 10px; line-height: 1.5; }
+
+.sd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.sd-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sd-field--wide { grid-column: 1 / -1; }
+.sd-field label { font-size: 11px; font-weight: 600; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.3px; }
+.sd-value { font-size: 14px; color: var(--text); word-break: break-word; }
+.sd-field input, .sd-field select, .sd-field textarea { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+.sd-field textarea { resize: vertical; }
+.sd-field-hint { font-size: 11px; color: var(--subtext); }
+.sd-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.sd-check input { width: auto; }
+
+.sd-docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.sd-doc { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.sd-doc-label { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; min-width: 90px; }
+.sd-doc-view { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--accent); }
+.sd-doc-missing { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--subtext); }
+.sd-doc-upload { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--border); color: var(--text); background: var(--card); cursor: pointer; }
+.sd-doc-upload:hover { border-color: var(--accent); color: var(--accent); }
+
+.sd-footer { padding: 14px 18px; border-top: 1px solid var(--border); background: var(--bg); }
+.sd-save { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 8px; }
+.sd-save:disabled { opacity: 0.6; cursor: not-allowed; }

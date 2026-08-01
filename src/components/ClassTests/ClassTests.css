@@ -1,0 +1,39 @@
+.class-tests { display: flex; flex-direction: column; gap: 14px; }
+.class-tests__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; }
+
+.class-tests__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.class-tests__stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center; }
+.class-tests__stat-value { font-size: 19px; font-weight: 700; color: var(--accent); }
+.class-tests__stat-label { font-size: 11px; color: var(--subtext); margin-top: 3px; }
+
+.class-tests__filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.class-tests__filter { font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border); color: var(--subtext); background: var(--card); }
+.class-tests__filter--active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.class-tests__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.class-tests__none { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--subtext); font-size: 14px; padding: 40px 20px; text-align: center; }
+.class-tests__none-hint { font-size: 12px; }
+
+.class-tests__subject-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.class-tests__subject { font-size: 15px; font-weight: 700; color: var(--text); }
+.class-tests__subject-meta { font-size: 12px; color: var(--subtext); margin-top: 3px; }
+.class-tests__badge { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text); flex-shrink: 0; }
+
+/* Each subject gets its own horizontal strip, so a subject with 6 tests and a subject
+   with 1 test both render correctly without stretching the layout. */
+.class-tests__strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.class-tests__test { flex: 0 0 auto; width: 108px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; background: var(--bg); text-align: center; }
+.class-tests__test-no { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.4px; }
+.class-tests__test-title { font-size: 11px; color: var(--text); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.class-tests__test-date { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+.class-tests__score { font-size: 15px; font-weight: 700; margin-top: 6px; color: var(--text); }
+.class-tests__test-pct { font-size: 11px; color: var(--subtext); margin-top: 1px; }
+.class-tests__score--high { color: #16a34a; }
+.class-tests__score--mid { color: #ca8a04; }
+.class-tests__score--low { color: #dc2626; }
+.class-tests__score--absent { font-size: 12px; color: #b91c1c; }
+.class-tests__score--pending { font-size: 12px; color: var(--subtext); font-weight: 500; }
+
+.class-tests__badge.class-tests__score--high { border-color: #16a34a; }
+.class-tests__badge.class-tests__score--mid { border-color: #ca8a04; }
+.class-tests__badge.class-tests__score--low { border-color: #dc2626; }

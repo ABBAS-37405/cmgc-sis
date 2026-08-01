@@ -1,18 +1,11 @@
 import { useState, useEffect } from "react";
 import { Check, X, Eye } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import FeeSettings from "../FeeSettings/FeeSettings";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import "./FeeVerification.css";
 
 const PAYMENT_METHODS = ["Easypaisa", "Bank Al Habib", "Raast", "Cash in College Office"];
-
-const normalizeWhatsAppNumber = (value) => {
-  if (!value) return "";
-  const digits = String(value).replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("92")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+92${digits.slice(1)}`;
-  return `+${digits}`;
-};
 
 const buildFeeReminderMessage = (studentName, rollNo, amount, dueDate) => {
   const lines = [
@@ -41,28 +34,35 @@ function WhatsappIcon() {
 
 const sendFeeReminderWhatsApp = async (fee, onPhoneSaved) => {
   const student = fee.student;
-  let phone = (student?.phone || "").trim();
-  if (!phone) {
-    const entered = window.prompt(`WhatsApp number missing for ${student?.name || "this student"}. Enter a number (03XXXXXXXXX):`, "");
+  let number = whatsappNumberFor(student);
+  if (!isValidWhatsAppNumber(number)) {
+    const entered = window.prompt(
+      `WhatsApp number for ${student?.name || "this student"} is missing or invalid. Enter one (03XXXXXXXXX):`,
+      number || ""
+    );
     if (!entered || !entered.trim()) return;
-    phone = entered.trim();
+    number = entered.trim();
 
-    // Persist it on the student record so future messages use it automatically
-    await supabase.from("students").update({ phone }).eq("id", student.id);
-    if (onPhoneSaved) onPhoneSaved(student.id, phone);
+    // Save it against her WhatsApp field so it is not asked for again.
+    await supabase.from("students").update({ whatsapp: number }).eq("id", student.id);
+    if (onPhoneSaved) onPhoneSaved(student.id, number);
   }
-  const normalized = normalizeWhatsAppNumber(phone);
-  const body = encodeURIComponent(
+  openWhatsApp(
+    number,
     buildFeeReminderMessage(student?.name || "Student", student?.roll_no, fee.remaining_amount, fee.due_date)
   );
-  const waUrl = `https://wa.me/${normalized.replace("+", "")}?text=${body}`;
-  window.open(waUrl, "_blank", "noopener,noreferrer");
 };
 
 export default function FeeVerification() {
   const [pending, setPending] = useState([]);
   const [unpaidFees, setUnpaidFees] = useState([]);
   const [yearFilter, setYearFilter] = useState("Both");
+  const [unpaidView, setUnpaidView] = useState("overall"); // "overall" | "monthly"
+  const [unpaidMonth, setUnpaidMonth] = useState(null);
+  const [txView, setTxView] = useState("overall"); // "overall" | "monthly"
+  const [txMonth, setTxMonth] = useState(null);
+  // Student rows start collapsed; this holds the keys of the ones opened.
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("pending");
@@ -77,79 +77,62 @@ export default function FeeVerification() {
 
   const fetchPending = async () => {
     setLoading(true);
+    // Embedded rather than a fee lookup per pending transaction.
     const { data } = await supabase
       .from("payment_transactions")
-      .select("*")
+      .select("*, fees(*, students(name, roll_no, program))")
       .eq("status", "Pending Verification")
       .order("created_at", { ascending: false });
 
-    if (data) {
-      const enriched = await Promise.all(
-        data.map(async (txn) => {
-          const { data: fee } = await supabase
-            .from("fees")
-            .select("*, students(name, roll_no, program)")
-            .eq("id", txn.fee_id)
-            .single();
-          return { ...txn, fees: fee };
-        })
-      );
-      setPending(enriched);
-    }
+    if (data) setPending(data);
     setLoading(false);
   };
 
+  // One query, not two per fee. This used to fire 1 + 2N requests — 135 of them
+  // on a 67-row fee table — and every new student made the tab slower. The
+  // student is joined with !inner so a deleted one drops the fee outright, and
+  // her payments come back embedded instead of being looked up row by row.
   const fetchUnpaidFees = async () => {
     const { data: feesData } = await supabase
       .from("fees")
-      .select("id, student_id, amount_due, amount_paid, due_date, status")
-      .order("due_date", { ascending: true });
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, status, label, sort_order, " +
+        "students!inner(id, name, roll_no, program, year_of_study, phone, whatsapp), " +
+        "payment_transactions(amount, status)"
+      )
+      .is("students.deleted_at", null)
+      .order("due_date", { ascending: true })
+      .order("sort_order", { ascending: true, nullsFirst: true });
 
     if (feesData) {
-      const enriched = await Promise.all(
-        feesData.map(async (fee) => {
-          const { data: student } = await supabase
-            .from("students")
-            .select("id, name, roll_no, program, year_of_study, phone")
-            .eq("id", fee.student_id)
-            .single();
+      const enriched = feesData.map((fee) => {
+        const paidAmount = (fee.payment_transactions || [])
+          .filter((txn) => txn.status === "Success")
+          .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+        return {
+          ...fee,
+          student: fee.students,
+          remaining_amount: Math.max(Number(fee.amount_due || 0) - paidAmount, 0),
+        };
+      });
 
-          const { data: transactions } = await supabase
-            .from("payment_transactions")
-            .select("amount, status")
-            .eq("fee_id", fee.id)
-            .eq("status", "Success");
-
-          const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
-          const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
-          return { ...fee, student, remaining_amount: remainingAmount };
-        })
+      setUnpaidFees(
+        enriched.filter(
+          (fee) => fee.student && Number(fee.remaining_amount || 0) > 0 && !["Paid"].includes(fee.status)
+        )
       );
-
-      setUnpaidFees(enriched.filter((fee) => Number(fee.remaining_amount || 0) > 0 && !["Paid"].includes(fee.status)));
     }
   };
 
+  // Every transaction, not the last 20: the collection totals below are only
+  // right if they see the whole history. One embedded query instead of a lookup
+  // per row, which also stops this getting slower as records pile up.
   const fetchAll = async () => {
     const { data } = await supabase
       .from("payment_transactions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (data) {
-      const enriched = await Promise.all(
-        data.map(async (txn) => {
-          const { data: fee } = await supabase
-            .from("fees")
-            .select("*, students(name, roll_no, program)")
-            .eq("id", txn.fee_id)
-            .single();
-          return { ...txn, fees: fee };
-        })
-      );
-      setAllTransactions(enriched);
-    }
+      .select("*, fees(id, label, due_date, students(id, name, roll_no, program, year_of_study))")
+      .order("created_at", { ascending: false });
+    setAllTransactions(data || []);
   };
 
   useEffect(() => {
@@ -245,6 +228,175 @@ export default function FeeVerification() {
     if (yearFilter === "Both") return true;
     return fee.student?.year_of_study === yearFilter;
   });
+
+  /* ---------- Grouping for the Unpaid Fee tab ---------- */
+
+  // One entry per student instead of one per fee, so a girl with three
+  // outstanding instalments appears once with a "3" badge rather than three
+  // times down the list.
+  const groupByStudent = (fees) => {
+    const map = new Map();
+    for (const fee of fees) {
+      const id = fee.student?.id;
+      if (!id) continue;
+      if (!map.has(id)) map.set(id, { student: fee.student, fees: [], total: 0 });
+      const g = map.get(id);
+      g.fees.push(fee);
+      g.total += Number(fee.remaining_amount || 0);
+    }
+    return [...map.values()].sort((a, b) => a.student.name.localeCompare(b.student.name));
+  };
+
+  const monthKeyOf = (fee) => (fee.due_date ? fee.due_date.slice(0, 7) : "no-date");
+  const monthLabelOf = (key) =>
+    key === "no-date"
+      ? "No due date"
+      : new Date(`${key}-01T00:00:00`).toLocaleDateString("en-PK", { month: "long", year: "numeric" });
+
+  const overallGroups = groupByStudent(filteredUnpaidFees);
+
+  // Every month that has something outstanding, oldest first.
+  const unpaidMonths = [...new Set(filteredUnpaidFees.map(monthKeyOf))].sort();
+
+  // Picking a month answers "what is outstanding by the end of this month?", so
+  // it accumulates everything due up to and including it. Later months are
+  // deliberately excluded — those are what the Overall view is for. Derived
+  // rather than stored, so the choice stays valid when the year filter changes.
+  const activeUnpaidMonth = unpaidMonths.includes(unpaidMonth)
+    ? unpaidMonth
+    : unpaidMonths[unpaidMonths.length - 1] || null;
+
+  const feesUpToMonth = activeUnpaidMonth
+    ? filteredUnpaidFees.filter((f) => monthKeyOf(f) <= activeUnpaidMonth)
+    : [];
+  const monthGroups = groupByStudent(feesUpToMonth);
+  const monthTotal = feesUpToMonth.reduce((s, f) => s + Number(f.remaining_amount || 0), 0);
+
+  const overallTotal = filteredUnpaidFees.reduce((s, f) => s + Number(f.remaining_amount || 0), 0);
+
+  /* ---------- Fee collection (All Transactions tab) ---------- */
+
+  const successful = allTransactions.filter((t) => t.status === "Success");
+  const txMonthKeyOf = (t) => (t.created_at ? t.created_at.slice(0, 7) : "no-date");
+  const txMonths = [...new Set(successful.map(txMonthKeyOf))].sort().reverse();
+
+  const activeTxMonth = txMonths.includes(txMonth) ? txMonth : txMonths[0] || null;
+
+  // Collection is per month, not cumulative: "how much came in during September".
+  const shownTransactions =
+    txView === "overall" ? allTransactions : allTransactions.filter((t) => txMonthKeyOf(t) === activeTxMonth);
+  const shownSuccessful = shownTransactions.filter((t) => t.status === "Success");
+  const collected = shownSuccessful.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const payingStudents = new Set(
+    shownSuccessful.map((t) => t.fees?.students?.id).filter(Boolean)
+  ).size;
+
+  const toggleGroup = (key) =>
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const fmtDue = (d) =>
+    d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+  // One outstanding charge, with the controls that were previously spread across
+  // the table row: adjust the amount, nudge on WhatsApp, or record a payment.
+  const renderFeeDetail = (fee) => (
+    <div key={fee.id} className="fee-v__detail">
+      <div className="fee-v__detail-head">
+        <span className="fee-v__detail-label">{fee.label || "Fee"}</span>
+        <span className="fee-v__detail-amount">Rs {Number(fee.remaining_amount || 0).toLocaleString()}</span>
+        <span className="fee-v__detail-due">Due {fmtDue(fee.due_date)}</span>
+      </div>
+
+      <div className="fee-v__detail-actions">
+        {editingFeeId === fee.id ? (
+          <div className="fee-v__edit-row">
+            <input
+              type="number"
+              value={feeAdjustmentAmount}
+              onChange={(e) => setFeeAdjustmentAmount(e.target.value)}
+            />
+            <button onClick={() => saveFeeAdjustment(fee)} disabled={savingAdjustment} className="fee-v__view">
+              {savingAdjustment ? "Saving..." : "Save"}
+            </button>
+            <button onClick={() => setEditingFeeId(null)} className="fee-v__reject">Cancel</button>
+          </div>
+        ) : (
+          <div className="fee-v__edit-row">
+            <button onClick={() => startFeeEdit(fee)} className="fee-v__view">Edit Fee</button>
+            <button
+              onClick={() => sendFeeReminderWhatsApp(fee, (studentId, savedNumber) => {
+                setUnpaidFees((prev) => prev.map((f) =>
+                  f.student?.id === studentId ? { ...f, student: { ...f.student, whatsapp: savedNumber } } : f
+                ));
+              })}
+              className="fee-v__whatsapp"
+              title="Send fee deposit reminder via WhatsApp"
+            >
+              <WhatsappIcon />
+            </button>
+          </div>
+        )}
+
+        <div className="fee-v__record-payment">
+          <input
+            type="number"
+            min="0"
+            max={fee.remaining_amount}
+            placeholder="Amount paid"
+            className="fee-v__amount-input"
+            value={getPaymentAmount(fee)}
+            onChange={(e) => setPaymentAmountByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+          />
+          <select
+            value={getPaymentMethod(fee.id)}
+            onChange={(e) => setPaymentMethodByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+          >
+            {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
+          </select>
+          <input
+            type="date"
+            value={getPaymentDate(fee.id)}
+            onChange={(e) => setPaymentDateByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
+          />
+          <button
+            onClick={() => markFeePaid(fee)}
+            disabled={markingPaidId === fee.id}
+            className="fee-v__mark-paid"
+          >
+            {markingPaidId === fee.id ? "Saving..." : "Mark Paid"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // A collapsed student row. `keyPrefix` keeps the open/closed state separate per
+  // month, so expanding a girl under August does not also expand her under November.
+  const renderStudentGroup = (group, keyPrefix) => {
+    const key = keyPrefix + group.student.id;
+    const open = expandedGroups.has(key);
+    return (
+      <div key={key} className={"fee-v__group " + (open ? "fee-v__group--open" : "")}>
+        <button className="fee-v__group-head" onClick={() => toggleGroup(key)} aria-expanded={open}>
+          <span className="fee-v__caret">{open ? "▾" : "▸"}</span>
+          <span className="fee-v__group-name">{group.student.name}</span>
+          <span className="fee-v__group-meta">{group.student.roll_no}</span>
+          <span className="fee-v__group-meta">{group.student.program}</span>
+          <span className="fee-v__group-meta">{group.student.year_of_study || "—"}</span>
+          <span className="fee-v__badge" title={`${group.fees.length} pending fee${group.fees.length === 1 ? "" : "s"}`}>
+            {group.fees.length}
+          </span>
+          <span className="fee-v__group-total">Rs {group.total.toLocaleString()}</span>
+        </button>
+        {open && <div className="fee-v__group-body">{group.fees.map(renderFeeDetail)}</div>}
+      </div>
+    );
+  };
 
   const startFeeEdit = (fee) => {
     setEditingFeeId(fee.id);
@@ -388,7 +540,15 @@ export default function FeeVerification() {
         >
           All Transactions
         </button>
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={"fee-v__tab " + (activeTab === "settings" ? "fee-v__tab--active" : "")}
+        >
+          Fee Settings
+        </button>
       </div>
+
+      {activeTab === "settings" && <FeeSettings />}
 
       {activeTab === "pending" && (
         <div>
@@ -465,124 +625,163 @@ export default function FeeVerification() {
       )}
 
       {activeTab === "unpaid" && (
-        <div>
-          <div className="fee-v__year-filters" role="group" aria-label="Filter by class year">
-            <button onClick={() => setYearFilter("1st Year")} className={"fee-v__year-btn " + (yearFilter === "1st Year" ? "fee-v__year-btn--active" : "")}>1st Year</button>
-            <button onClick={() => setYearFilter("2nd Year")} className={"fee-v__year-btn " + (yearFilter === "2nd Year" ? "fee-v__year-btn--active" : "")}>2nd Year</button>
-            <button onClick={() => setYearFilter("Both")} className={"fee-v__year-btn " + (yearFilter === "Both" ? "fee-v__year-btn--active" : "")}>Both</button>
+        <div className="fee-v__unpaid">
+          <div className="fee-v__filters">
+            <div className="fee-v__year-filters" role="group" aria-label="Filter by class year">
+              {["1st Year", "2nd Year", "Both"].map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setYearFilter(y)}
+                  className={"fee-v__year-btn " + (yearFilter === y ? "fee-v__year-btn--active" : "")}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+            <div className="fee-v__view-toggle" role="group" aria-label="Pending fee view">
+              <button
+                onClick={() => setUnpaidView("overall")}
+                className={"fee-v__view-btn " + (unpaidView === "overall" ? "fee-v__view-btn--active" : "")}
+              >
+                Overall
+              </button>
+              <button
+                onClick={() => setUnpaidView("monthly")}
+                className={"fee-v__view-btn " + (unpaidView === "monthly" ? "fee-v__view-btn--active" : "")}
+              >
+                Month wise
+              </button>
+            </div>
           </div>
-          <div className="fee-v__table-wrap">
-            {filteredUnpaidFees.length === 0 ? (
-              <p className="fee-v__empty">No unpaid fees found</p>
-            ) : (
-              <table className="fee-v__table">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Roll No</th>
-                  <th>Program</th>
-                  <th>Year</th>
-                  <th>Pending Fee</th>
-                  <th>Due Date</th>
-                  <th>Action</th>
-                  <th>Record Payment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUnpaidFees.map((fee) => (
-                  <tr key={fee.id}>
-                    <td>
-                      <p className="fee-v__student-name">
-                        {fee.student ? fee.student.name : "Unknown"}
-                      </p>
-                    </td>
-                    <td>{fee.student ? fee.student.roll_no : "—"}</td>
-                    <td>{fee.student ? fee.student.program : "—"}</td>
-                    <td>{fee.student && fee.student.year_of_study ? fee.student.year_of_study : "—"}</td>
-                    <td>Rs {fee.remaining_amount ? fee.remaining_amount.toLocaleString() : "—"}</td>
-                    <td>
-                      {fee.due_date ? new Date(fee.due_date).toLocaleDateString("en-PK", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      }) : "—"}
-                    </td>
-                    <td>
-                      {editingFeeId === fee.id ? (
-                        <div className="fee-v__edit-row">
-                          <input
-                            type="number"
-                            value={feeAdjustmentAmount}
-                            onChange={(e) => setFeeAdjustmentAmount(e.target.value)}
-                          />
-                          <button onClick={() => saveFeeAdjustment(fee)} disabled={savingAdjustment} className="fee-v__view">
-                            {savingAdjustment ? "Saving..." : "Save"}
-                          </button>
-                          <button onClick={() => setEditingFeeId(null)} className="fee-v__reject">Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="fee-v__edit-row">
-                          <button onClick={() => startFeeEdit(fee)} className="fee-v__view">Edit Fee</button>
-                          <button
-                            onClick={() => sendFeeReminderWhatsApp(fee, (studentId, savedPhone) => {
-                              setUnpaidFees((prev) => prev.map((f) =>
-                                f.student?.id === studentId ? { ...f, student: { ...f.student, phone: savedPhone } } : f
-                              ));
-                            })}
-                            className="fee-v__whatsapp"
-                            title="Send fee deposit reminder via WhatsApp"
-                          >
-                            <WhatsappIcon />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div className="fee-v__record-payment">
-                        <input
-                          type="number"
-                          min="0"
-                          max={fee.remaining_amount}
-                          placeholder="Amount paid"
-                          className="fee-v__amount-input"
-                          value={getPaymentAmount(fee)}
-                          onChange={(e) => setPaymentAmountByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
-                        />
-                        <select
-                          value={getPaymentMethod(fee.id)}
-                          onChange={(e) => setPaymentMethodByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
-                        >
-                          {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                        </select>
-                        <input
-                          type="date"
-                          value={getPaymentDate(fee.id)}
-                          onChange={(e) => setPaymentDateByFee((p) => ({ ...p, [fee.id]: e.target.value }))}
-                        />
-                        <button
-                          onClick={() => markFeePaid(fee)}
-                          disabled={markingPaidId === fee.id}
-                          className="fee-v__mark-paid"
-                        >
-                          {markingPaidId === fee.id ? "Saving..." : "Mark Paid"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
-            )}
+
+          <div className="fee-v__summary">
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{overallGroups.length}</p>
+              <p className="fee-v__stat-label">Students</p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{filteredUnpaidFees.length}</p>
+              <p className="fee-v__stat-label">Pending Fees</p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{unpaidMonths.length}</p>
+              <p className="fee-v__stat-label">Months</p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">Rs {overallTotal.toLocaleString()}</p>
+              <p className="fee-v__stat-label">Total Pending</p>
+            </div>
           </div>
+
+          {filteredUnpaidFees.length === 0 ? (
+            <p className="fee-v__empty">No unpaid fees found</p>
+          ) : unpaidView === "overall" ? (
+            <div className="fee-v__groups">
+              {overallGroups.map((g) => renderStudentGroup(g, "all:"))}
+            </div>
+          ) : (
+            <>
+              <div className="fee-v__month-picker">
+                <span className="fee-v__month-picker-label">Show pending up to:</span>
+                <div className="fee-v__month-chips">
+                  {unpaidMonths.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setUnpaidMonth(m)}
+                      className={"fee-v__month-chip " + (m === activeUnpaidMonth ? "fee-v__month-chip--active" : "")}
+                    >
+                      {monthLabelOf(m)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="fee-v__month-summary">
+                Outstanding by the end of <strong>{monthLabelOf(activeUnpaidMonth)}</strong>:{" "}
+                {monthGroups.length} student{monthGroups.length === 1 ? "" : "s"} ·{" "}
+                {feesUpToMonth.length} fee{feesUpToMonth.length === 1 ? "" : "s"} ·{" "}
+                <strong>Rs {monthTotal.toLocaleString()}</strong>
+                {feesUpToMonth.length < filteredUnpaidFees.length && (
+                  <span className="fee-v__month-note">
+                    {" "}— {filteredUnpaidFees.length - feesUpToMonth.length} later fee
+                    {filteredUnpaidFees.length - feesUpToMonth.length === 1 ? "" : "s"} not yet due, see Overall.
+                  </span>
+                )}
+              </div>
+
+              <div className="fee-v__groups">
+                {monthGroups.map((g) => renderStudentGroup(g, activeUnpaidMonth + ":"))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {activeTab === "all" && (
-        <div className="fee-v__table-wrap">
-          {allTransactions.length === 0 ? (
-            <p className="fee-v__empty">No transactions yet</p>
-          ) : (
-            <table className="fee-v__table">
+        <div className="fee-v__unpaid">
+          <div className="fee-v__filters">
+            <span className="fee-v__month-picker-label">Fee collection</span>
+            <div className="fee-v__view-toggle" role="group" aria-label="Collection view">
+              <button
+                onClick={() => setTxView("overall")}
+                className={"fee-v__view-btn " + (txView === "overall" ? "fee-v__view-btn--active" : "")}
+              >
+                Overall
+              </button>
+              <button
+                onClick={() => setTxView("monthly")}
+                className={"fee-v__view-btn " + (txView === "monthly" ? "fee-v__view-btn--active" : "")}
+              >
+                Monthly
+              </button>
+            </div>
+          </div>
+
+          {txView === "monthly" && txMonths.length > 0 && (
+            <div className="fee-v__month-picker">
+              <span className="fee-v__month-picker-label">Month:</span>
+              <div className="fee-v__month-chips">
+                {txMonths.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setTxMonth(m)}
+                    className={"fee-v__month-chip " + (m === activeTxMonth ? "fee-v__month-chip--active" : "")}
+                  >
+                    {monthLabelOf(m)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="fee-v__summary">
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">Rs {collected.toLocaleString()}</p>
+              <p className="fee-v__stat-label">
+                {txView === "overall" ? "Collected (all time)" : `Collected in ${monthLabelOf(activeTxMonth)}`}
+              </p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{payingStudents}</p>
+              <p className="fee-v__stat-label">Students Paid</p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{shownSuccessful.length}</p>
+              <p className="fee-v__stat-label">Payments Received</p>
+            </div>
+            <div className="fee-v__stat">
+              <p className="fee-v__stat-value">{txMonths.length}</p>
+              <p className="fee-v__stat-label">Months with Collection</p>
+            </div>
+          </div>
+
+          <div className="fee-v__table-wrap">
+            {shownTransactions.length === 0 ? (
+              <p className="fee-v__empty">
+                {txView === "overall" ? "No transactions yet" : `No transactions in ${monthLabelOf(activeTxMonth)}`}
+              </p>
+            ) : (
+              <table className="fee-v__table">
               <thead>
                 <tr>
                   <th>Student</th>
@@ -595,7 +794,7 @@ export default function FeeVerification() {
                 </tr>
               </thead>
               <tbody>
-                {allTransactions.map((t) => (
+                {shownTransactions.map((t) => (
                   <tr key={t.id}>
                     <td>
                       <p className="fee-v__student-name">
@@ -633,8 +832,9 @@ export default function FeeVerification() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          )}
+              </table>
+            )}
+          </div>
         </div>
       )}
     </div>

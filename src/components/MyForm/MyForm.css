@@ -1,0 +1,53 @@
+.myform { display: flex; flex-direction: column; gap: 16px; }
+
+.myform__head h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; color: var(--text); }
+.myform__head p { font-size: 13px; color: var(--subtext); margin-top: 2px; }
+.myform__empty { font-size: 14px; color: var(--subtext); padding: 24px 0; }
+
+/* ---- status banner ---- */
+.myform__banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); }
+.myform__banner-main { display: flex; align-items: flex-start; gap: 10px; flex: 1 1 260px; }
+.myform__banner > svg, .myform__banner-main > svg { flex-shrink: 0; margin-top: 1px; }
+.myform__banner strong { display: block; font-size: 14px; color: var(--text); }
+.myform__banner span { font-size: 12.5px; color: var(--subtext); line-height: 1.5; }
+.myform__banner--open { border-color: #86efac; background: #f0fdf4; }
+.myform__banner--open strong { color: #166534; }
+.myform__banner--open span { color: #15803d; }
+.myform__banner--waiting { border-color: #fcd34d; background: #fffbeb; }
+.myform__banner--waiting strong { color: #92400e; }
+.myform__banner--waiting span { color: #b45309; }
+
+/* ---- request form ---- */
+.myform__ask { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.myform__ask label { font-size: 13px; font-weight: 600; color: var(--text); }
+.myform__ask textarea { width: 100%; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); resize: vertical; }
+.myform__ask-actions { display: flex; gap: 8px; }
+
+/* ---- sections ---- */
+.myform__section { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 16px; }
+.myform__section h3 { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.myform__section-note { font-size: 12px; color: var(--subtext); margin-bottom: 12px; }
+.myform__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 10px; }
+.myform__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.myform__field--wide { grid-column: 1 / -1; }
+.myform__label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--subtext); }
+.myform__value { font-size: 13.5px; color: var(--text); word-break: break-word; }
+.myform__input { width: 100%; font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.myform__input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* ---- actions ---- */
+.myform__btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.myform__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.myform__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.myform__save-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid #86efac; border-radius: 12px; background: #f0fdf4; }
+.myform__save-note { font-size: 12px; color: #15803d; }
+
+.myform__error { font-size: 13px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 12px; }
+.myform__saved { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #15803d; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 10px 12px; }
+
+@media (max-width: 640px) {
+  .myform__grid { grid-template-columns: 1fr; }
+  .myform__banner { flex-direction: column; align-items: stretch; }
+  .myform__banner .myform__btn { justify-content: center; }
+}

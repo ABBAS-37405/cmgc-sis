@@ -1,0 +1,87 @@
+/* Decorative photo rails flanking the hero. Hidden below 1080px, where the
+   hero must stay exactly as it was on tablet and phone.
+   NOTE: the breakpoint is in CSS pixels, not physical ones. A 1920px monitor at
+   150% Windows scaling reports ~1263px, so a 1280px cutoff would hide the rails
+   on a perfectly wide screen. 1080px keeps them on every real desktop. */
+.photo-rail { display: none; }
+
+@media (min-width: 1080px) {
+  .photo-rail {
+    display: block;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    /* Width follows the space left beside the hero text. The 640px reserve is
+       what the title, tagline and buttons actually occupy — the content box is
+       800px but never fills it, so reserving 800 wasted ~180px per side. */
+    width: min(420px, calc((100vw - 640px) / 2 - 40px));
+    height: clamp(400px, 68vh, 640px);
+    pointer-events: none;
+  }
+  .photo-rail--left { left: 24px; }
+  .photo-rail--right { right: 24px; }
+
+  .photo-rail__frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35);
+    /* A visible shimmer, not a near-transparent tint: these photos are several
+       MB each, so without it the box reads as "nothing rendered" for the seconds
+       before the first one arrives. */
+    background: linear-gradient(110deg, rgba(255,255,255,0.10) 30%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.10) 70%);
+    background-size: 220% 100%;
+    animation: railEnter 0.9s ease both, railShimmer 1.6s linear infinite;
+  }
+  .photo-rail--left .photo-rail__frame { animation-delay: 0.15s; }
+  .photo-rail--right .photo-rail__frame { animation-delay: 0.3s; }
+
+  .photo-rail__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* The incoming photo fades over the outgoing one and drifts slowly inward,
+     so the box is never visually static between swaps. */
+  .photo-rail__img--in {
+    animation: railFade 1.5s ease forwards, railDrift 7s ease-out forwards;
+  }
+
+  /* Ties the photo into the hero gradient instead of sitting on top as a hard rectangle. */
+  .photo-rail__sheen {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.35), transparent 55%);
+  }
+}
+
+@keyframes railEnter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes railShimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@keyframes railFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes railDrift {
+  from { transform: scale(1.1); }
+  to { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-rail__frame {
+    animation: none;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .photo-rail__img--in { animation: none; }
+}

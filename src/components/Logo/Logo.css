@@ -1,0 +1,10 @@
+/* The seal is square with a white field; the radius turns it into a badge that
+   reads the same on all four themes. flex-shrink keeps it round when it sits
+   next to text in a tight sidebar. */
+.logo {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+  background: #fff;
+}

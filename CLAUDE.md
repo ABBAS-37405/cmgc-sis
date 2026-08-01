@@ -118,18 +118,28 @@ A test can span groups: picking `"All Programs"` stores that literal in `class_t
 
 `ClassTestEntry` is shared: pass a `teacher` and it locks to her subjects/programs and stamps her id on new tests; pass `teacher={null}` plus `teacherOptions` and it becomes the admin's full-range view.
 
-### Monthly reports
+### Reports
 
-One PDF per girl per month — attendance, class tests, assignments, the term result if one was recorded, and her fee position — sent to the parent over WhatsApp. Gated by the `reports` permission, and scoped by `allowed_programs` like every other admin screen.
+The `reports` tab holds two screens, both gated by the `reports` permission and scoped by `allowed_programs` like every other admin screen.
 
-Three files: `src/lib/monthlyReport.js` aggregates, `src/lib/reportPdf.js` renders, `MonthlyReports.jsx` is the screen. Nothing is stored that could be recomputed — the report is assembled from existing tables every time it is opened.
+**Monthly Reports** — one PDF per girl per month: attendance, class tests, assignments, the term result if one was recorded, and her fee position. Sent to the parent over WhatsApp, or downloaded for the whole class at once (one combined PDF, or a ZIP of separate files).
+
+**Test Reports** — one class test across a class: a result sheet with positions, grades and class statistics, followed by a page per girl to send home. `src/lib/testReport.js` owns it.
+
+Files: `src/lib/monthlyReport.js` and `src/lib/testReport.js` aggregate, `src/lib/reportPdf.js` renders both, `MonthlyReports.jsx` + `TestReports.jsx` are the screens. Nothing is stored that could be recomputed — every report is assembled from existing tables when it is opened.
+
+**`reportPdf.js` imports nothing that reaches `supabaseClient`, and it must stay that way.** That is what lets the whole PDF layer be driven from plain Node against fixture data, which is the only way any of it gets exercised in a repo with no test runner. It is why grading lives in `testReport.js` (`gradeFor` stamps `row.grade`) rather than in the renderer, and why `buildTestReport` returns finished rows rather than raw marks.
+
+Two rules the test-report maths follows, both easy to get wrong: **positions are dense-ranked with gaps** (equal marks share a position and the next is skipped — 1, 2, 2, 4), and **a girl with no mark row is not a zero.** She is `notMarked`, keeps `obtained: null`, is excluded from the average, the positions and the pass count, and gets no page of her own. Printing 0 for "not yet marked" would be a lie that reaches a parent.
+
+The ZIP path hands JSZip an `ArrayBuffer`, never the Blob jsPDF returns — JSZip only recognises Blob inside a browser and fails with "Can't read the data" anywhere else.
 
 **A link is not a design choice, it is the only option.** Click-to-chat cannot attach a file (see the WhatsApp section below), so the PDF is uploaded to the public `reports` bucket and the message carries its URL. The path is `monthly/<YYYY-MM>/<student uuid>.pdf`: the UUID is what makes it unguessable, and `upsert: true` means regenerating a month replaces the file so links already sent keep working. The trade — anyone the message is forwarded to can also open it — is written up at the bottom of `supabase_monthly_reports.sql`, along with the signed-URL alternative.
 
 Three things here are easy to break:
 
 - **`buildMonthlyReports()` takes the whole roster at once**, not one student. Six queries serve a class of any size; calling it per student inside a `.map()` is exactly the pattern the Performance section forbids. The class-test query needs `class_tests!inner(...)` because `class_test_marks` carries no date of its own — the `test_date` filter has to reach the parent row.
-- **jsPDF is imported dynamically inside `loadPdfLib()`.** It and its optional deps are ~800 kB; a static import would fold the PDF engine into the admin chunk for every admin who never opens the tab. The landing bundle must stay at 419 kB.
+- **jsPDF is imported dynamically inside `loadPdfLib()`, and JSZip inside `buildReportsZip()`.** jsPDF and its optional deps are ~800 kB, JSZip another 96 kB; a static import would fold the PDF engine into the admin chunk for every admin who never opens the tab. The landing bundle must stay at 419 kB.
 - **Sending is a queue, and the popup window is reserved before the `await`.** PDF generation and upload both take time, and a `window.open` fired after them is blocked — `send()` therefore takes a `windowRef` the caller opened inside the click gesture, the same trick `StudentsList.doApprove()` uses.
 
 `report_log` is one row per student per month, upserted on `(student_id, month)`, purely so the list can show "Sent 3 Aug" and nobody gets messaged twice. It snapshots the two percentages that were actually sent, which is not necessarily what the tables would produce later if a mark is corrected. Logging is best effort: `fetchReportLog()` swallows its error and returns `{}` so a portal running before the migration still works.

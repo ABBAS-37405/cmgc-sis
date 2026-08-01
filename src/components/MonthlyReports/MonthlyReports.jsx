@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileDown, Send, RefreshCw, CheckCircle2, AlertCircle, CalendarRange } from "lucide-react";
+import { FileDown, Send, RefreshCw, CheckCircle2, AlertCircle, CalendarRange, FileArchive, Files } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, YEARS } from "../../lib/academics";
 import {
@@ -11,8 +11,15 @@ import {
   logReportSent,
   fetchReportLog,
 } from "../../lib/monthlyReport";
-import { buildReportPdf, reportFileName } from "../../lib/reportPdf";
+import {
+  buildReportPdf,
+  buildAllReportsPdf,
+  buildReportsZip,
+  reportFileName,
+  saveBlob,
+} from "../../lib/reportPdf";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import TestReports from "./TestReports";
 import "./MonthlyReports.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -32,6 +39,7 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
 
+  const [tab, setTab] = useState("monthly");
   const [month, setMonth] = useState(defaultMonth);
   const [program, setProgram] = useState(isRestricted ? visiblePrograms[0] || ALL_PROGRAMS : ALL_PROGRAMS);
   const [yearFilter, setYearFilter] = useState("Both");
@@ -43,6 +51,9 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [note, setNote] = useState("");
+  // Non-empty while a bulk file is being built; also the button's label, because
+  // forty reports take long enough that a silent button looks broken.
+  const [bulk, setBulk] = useState("");
 
   // Sending is a queue, never a loop: browsers block a burst of window.open and
   // WhatsApp Web drops chats pushed at it in the same second. Each click here is
@@ -102,22 +113,40 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
     setBusyId(report.student.id);
     setError("");
     try {
-      const blob = await buildReportPdf(report);
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = reportFileName(report);
-      // Firefox ignores a click on a detached node, and revoking the URL in the
-      // same tick cancels the download it just started — hence the append and
-      // the deferred revoke.
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(href), 30000);
+      saveBlob(await buildReportPdf(report), reportFileName(report));
     } catch (e) {
       setError(e.message || "Could not build the PDF.");
     }
     setBusyId(null);
+  };
+
+  /**
+   * The whole filtered class, in one go, straight to the admin's computer.
+   *
+   * Nothing is uploaded and no WhatsApp is involved — this is the path for
+   * printing, filing, or working offline. `mode` picks between one combined
+   * document and a ZIP of separate files; both walk the same reports.
+   */
+  const downloadAll = async (mode) => {
+    if (filtered.length === 0) return;
+    setError("");
+    setNote("");
+    setBulk("Starting…");
+
+    const onProgress = (done, total) => setBulk(`${done} of ${total}…`);
+    const monthName = MONTHS.find((m) => m.value === month)?.label.replace(/\s+/g, "-") || month;
+
+    try {
+      if (mode === "zip") {
+        saveBlob(await buildReportsZip(filtered, { onProgress }), `CMGC-reports-${monthName}.zip`);
+      } else {
+        saveBlob(await buildAllReportsPdf(filtered, { onProgress }), `CMGC-reports-${monthName}.pdf`);
+      }
+      setNote(`${filtered.length} report${filtered.length === 1 ? "" : "s"} downloaded.`);
+    } catch (e) {
+      setError(e.message || "Could not build the download.");
+    }
+    setBulk("");
   };
 
   /**
@@ -205,17 +234,43 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
     <div className="mrep">
       <div className="mrep__head">
         <div>
-          <h2 className="mrep__title">Monthly Reports</h2>
+          <h2 className="mrep__title">Reports</h2>
           <p className="mrep__sub">
-            One PDF per student — attendance, class tests, assignments, term result and fee position.
-            Sending opens WhatsApp with a link to her report; you still press Send.
+            {tab === "monthly"
+              ? "One PDF per student — attendance, class tests, assignments, term result and fee position. Send it on WhatsApp, or download the whole class at once."
+              : "One class test at a time: the result sheet for the notice board, and a page per student to send home."}
           </p>
         </div>
-        <button className="mrep__refresh" onClick={load} disabled={loading}>
-          <RefreshCw size={15} className={loading ? "mrep__spin" : ""} /> Refresh
+        {tab === "monthly" && (
+          <button className="mrep__refresh" onClick={load} disabled={loading}>
+            <RefreshCw size={15} className={loading ? "mrep__spin" : ""} /> Refresh
+          </button>
+        )}
+      </div>
+
+      <div className="mrep__tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={tab === "monthly"}
+          onClick={() => setTab("monthly")}
+          className={`mrep__tab ${tab === "monthly" ? "mrep__tab--active" : ""}`}
+        >
+          Monthly Reports
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "tests"}
+          onClick={() => setTab("tests")}
+          className={`mrep__tab ${tab === "tests" ? "mrep__tab--active" : ""}`}
+        >
+          Test Reports
         </button>
       </div>
 
+      {tab === "tests" ? (
+        <TestReports allowedPrograms={allowedPrograms} />
+      ) : (
+      <>
       <div className="mrep__filters">
         <label className="mrep__field">
           <span><CalendarRange size={13} /> Month</span>
@@ -279,11 +334,19 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
         <>
           <div className="mrep__bar">
             <span>{filtered.length} student{filtered.length === 1 ? "" : "s"} · {sentCount} already sent this month</span>
-            {!waQueue && (
-              <button className="mrep__btn mrep__btn--primary" onClick={startQueue}>
-                <Send size={14} /> Send all on WhatsApp
+            <div className="mrep__bar-actions">
+              <button className="mrep__btn" onClick={() => downloadAll("pdf")} disabled={!!bulk}>
+                <Files size={14} /> {bulk ? bulk : "Download all — one PDF"}
               </button>
-            )}
+              <button className="mrep__btn" onClick={() => downloadAll("zip")} disabled={!!bulk}>
+                <FileArchive size={14} /> {bulk ? bulk : "Download all — ZIP"}
+              </button>
+              {!waQueue && (
+                <button className="mrep__btn mrep__btn--primary" onClick={startQueue} disabled={!!bulk}>
+                  <Send size={14} /> Send all on WhatsApp
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="mrep__table-wrap">
@@ -375,6 +438,8 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
             </table>
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   );

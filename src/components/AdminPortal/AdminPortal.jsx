@@ -11,15 +11,18 @@ import Teachers from "../Teachers/Teachers";
 import MonthlyReports from "../MonthlyReports/MonthlyReports";
 import ManageAdmins from "../ManageAdmins/ManageAdmins";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
+import { useTabHistory } from "../../lib/backStack";
 import "./AdminPortal.css";
 
 export default function AdminPortal({ adminProfile, onExit }) {
   const [active, setActive] = useState("overview");
   const allowedPrograms = allowedProgramsFor(adminProfile);
+  // Back walks the tabs she has actually visited, newest first.
+  const goToTab = useTabHistory(active, setActive);
 
   return (
     <div className="admin-portal">
-      <AdminSidebar active={active} setActive={setActive} onLogout={onExit} adminProfile={adminProfile} />
+      <AdminSidebar active={active} setActive={goToTab} onLogout={onExit} adminProfile={adminProfile} />
       <main className="admin-portal__main">
         {active === "overview" && <AdminOverview />}
         {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} />}

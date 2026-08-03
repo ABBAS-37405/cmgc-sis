@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { ChevronUp } from "lucide-react";
 import Navbar from "./components/Navbar/Navbar";
 import Hero from "./components/Hero/Hero";
@@ -15,6 +15,8 @@ import Gallery from "./components/Gallery/Gallery";
 // opens them, which is the single biggest thing keeping first paint quick.
 const Portal = lazy(() => import("./components/Portal/Portal"));
 const AdmissionPage = lazy(() => import("./components/AdmissionPage/AdmissionPage"));
+import BackGuard from "./components/BackGuard/BackGuard";
+import { pushStep, truncate } from "./lib/backStack";
 import { applyAccent, storedAccent, ACCENT_KEY } from "./lib/accent";
 import "./styles/themes.css";
 import "./App.css";
@@ -54,18 +56,50 @@ export default function App() {
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
+  // Leaving the landing page is the first thing Back has to be able to undo.
+  // The token is what lets an in-app Back button collapse the portal and every
+  // screen opened inside it in one move — see backStack.js.
+  const portalStep = useRef(null);
+  const admissionStep = useRef(null);
+
+  const openPortal = () => {
+    portalStep.current = pushStep(() => setShowPortal(false));
+    setShowPortal(true);
+  };
+  const closePortal = () => {
+    truncate(portalStep.current);
+    portalStep.current = null;
+    setShowPortal(false);
+  };
+
+  const openAdmission = () => {
+    admissionStep.current = pushStep(() => setShowAdmission(false));
+    setShowAdmission(true);
+  };
+  const closeAdmission = () => {
+    truncate(admissionStep.current);
+    admissionStep.current = null;
+    setShowAdmission(false);
+  };
+
   if (showPortal) {
     return (
-      <Suspense fallback={<div className="app-loading">Loading portal…</div>}>
-        <Portal onExit={() => setShowPortal(false)} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="app-loading">Loading portal…</div>}>
+          <Portal onExit={closePortal} />
+        </Suspense>
+        <BackGuard />
+      </>
     );
   }
   if (showAdmission) {
     return (
-      <Suspense fallback={<div className="app-loading">Loading admission form…</div>}>
-        <AdmissionPage onBack={() => setShowAdmission(false)} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="app-loading">Loading admission form…</div>}>
+          <AdmissionPage onBack={closeAdmission} />
+        </Suspense>
+        <BackGuard />
+      </>
     );
   }
 
@@ -77,22 +111,23 @@ export default function App() {
         accentHue={accentHue}
         setAccentHue={setAccentHue}
         scrolled={scrolled}
-        onAdmissionClick={() => setShowAdmission(true)}
+        onAdmissionClick={openAdmission}
       />
-      <Hero scrollTo={scrollTo} onPortalClick={() => setShowPortal(true)} onAdmissionClick={() => setShowAdmission(true)} />
+      <Hero scrollTo={scrollTo} onPortalClick={openPortal} onAdmissionClick={openAdmission} />
       <Stats />
       <About />
       <Programs />
       <Gallery />
       <NoticeBoard />
-      <Admission onAdmissionClick={() => setShowAdmission(true)} />
-      <PortalTeaser onPortalClick={() => setShowPortal(true)} />
+      <Admission onAdmissionClick={openAdmission} />
+      <PortalTeaser onPortalClick={openPortal} />
       <Footer />
       {showTop && (
         <button className="back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
           <ChevronUp size={20} />
         </button>
       )}
+      <BackGuard />
     </div>
   );
 }

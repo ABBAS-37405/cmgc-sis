@@ -9,6 +9,7 @@ import EnterResults from "../EnterResults/EnterResults";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
+import { useTabHistory } from "../../lib/backStack";
 import "./TeacherPortal.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -28,13 +29,15 @@ export default function TeacherPortal({ teacher, onLogout }) {
 
   const items = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
   const [active, setActive] = useState(items[0]?.id || "none");
+  // Back walks the tabs she has actually visited, newest first.
+  const goToTab = useTabHistory(active, setActive);
 
   return (
     <div className="portal">
       <Sidebar
         items={items}
         active={active}
-        setActive={setActive}
+        setActive={goToTab}
         onLogout={onLogout}
         userLabel={`${teacher?.name || "Teacher"} (teacher)`}
       />

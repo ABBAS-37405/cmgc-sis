@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import LoginPage from "../Login/LoginPage";
 import Sidebar from "../Sidebar/Sidebar";
 import Overview from "../Overview/Overview";
@@ -16,6 +16,7 @@ import TabNav from "../TabNav/TabNav";
 const AdminPortal = lazy(() => import("../AdminPortal/AdminPortal"));
 const TeacherPortal = lazy(() => import("../TeacherPortal/TeacherPortal"));
 import { supabase } from "../../lib/supabaseClient";
+import { pushStep, useTabHistory } from "../../lib/backStack";
 import "./Portal.css";
 
 export default function Portal({ onExit }) {
@@ -25,6 +26,28 @@ export default function Portal({ onExit }) {
   const [studentData, setStudentData] = useState(null);
   const [adminProfile, setAdminProfile] = useState(null);
   const [teacherData, setTeacherData] = useState(null);
+  const loginStep = useRef(null);
+
+  // Back moves between tabs a screen at a time, in the order she visited them.
+  const goToTab = useTabHistory(activeTab, setActiveTab);
+
+  /**
+   * Signing in is one screen deep, so Back from the portal's first tab lands on
+   * the login page — not straight out to the website.
+   *
+   * `r` is passed rather than read from state: this runs from a closure created
+   * during the same handler that set `role`, where the state variable is still
+   * the old one.
+   */
+  const signOutToLogin = async (r) => {
+    // Admins and teachers are both real Supabase Auth sessions; students are not.
+    if (r === "admin" || r === "teacher") await supabase.auth.signOut();
+    setLoggedIn(false);
+    setActiveTab("overview");
+    setStudentData(null);
+    setAdminProfile(null);
+    setTeacherData(null);
+  };
 
   const handleLogin = (r, id, data) => {
     setRole(r);
@@ -36,16 +59,29 @@ export default function Portal({ onExit }) {
       setStudentData(data);
     }
     setLoggedIn(true);
+
+    // Asked rather than done, because a stray back press here costs an admin her
+    // session in the middle of a piece of work.
+    loginStep.current = pushStep({
+      undo: () => signOutToLogin(r),
+      confirm: {
+        signOut: true,
+        title: "Sign out of the portal?",
+        body: "Going back from here closes your portal session and returns you to the login screen.",
+        confirmLabel: "Yes, sign out",
+        cancelLabel: "Stay signed in",
+      },
+    });
   };
 
+  /**
+   * The Logout button, which goes further than Back does: out of the portal and
+   * back to the website. `onExit` truncates the whole stack from the portal
+   * down, so the tab steps and the login step above it go with it.
+   */
   const handleLogout = async () => {
-    // Admins and teachers are both real Supabase Auth sessions; students are not.
-    if (role === "admin" || role === "teacher") await supabase.auth.signOut();
-    setLoggedIn(false);
-    setActiveTab("overview");
-    setStudentData(null);
-    setAdminProfile(null);
-    setTeacherData(null);
+    await signOutToLogin(role);
+    loginStep.current = null;
     onExit && onExit();
   };
 
@@ -69,12 +105,12 @@ export default function Portal({ onExit }) {
     <div className="portal">
       <Sidebar
         active={activeTab}
-        setActive={setActiveTab}
+        setActive={goToTab}
         onLogout={handleLogout}
         userLabel={`${studentData?.name || "Student"} (${role})`}
       />
       <main className="portal__main">
-        {activeTab === "overview" && <Overview student={studentData} onNavigate={setActiveTab} />}
+        {activeTab === "overview" && <Overview student={studentData} onNavigate={goToTab} />}
         {activeTab === "attendance" && <Attendance studentId={studentData?.id} />}
         {activeTab === "classtests" && <ClassTests studentId={studentData?.id} />}
         {activeTab === "assignments" && <Assignments student={studentData} />}
@@ -87,7 +123,7 @@ export default function Portal({ onExit }) {
         {/* Rendered here rather than inside each tab, so every screen gets the
             chain from one place. Overview is skipped because its Attendance
             card already carries her to the next screen. */}
-        {activeTab !== "overview" && <TabNav current={activeTab} setActive={setActiveTab} />}
+        {activeTab !== "overview" && <TabNav current={activeTab} setActive={goToTab} />}
       </main>
     </div>
   );

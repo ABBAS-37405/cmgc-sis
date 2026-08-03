@@ -27,7 +27,18 @@ Vite + React 19 SPA for CMGC (Community Model Girls College) — a public market
 
 ### Navigation is state, not routes
 
-There is no router. `src/App.jsx` early-returns `<Portal>` or `<AdmissionPage>` based on boolean state; `Portal.jsx` early-returns `<LoginPage>` or `<AdminPortal>` based on login/role state; each portal renders its tab from an `active` string. Adding a "page" means adding a state branch, not a route. URLs never change, so deep links and browser back are not supported by design.
+There is no router. `src/App.jsx` early-returns `<Portal>` or `<AdmissionPage>` based on boolean state; `Portal.jsx` early-returns `<LoginPage>` or `<AdminPortal>` based on login/role state; each portal renders its tab from an `active` string. Adding a "page" means adding a state branch, not a route. **URLs never change**, so deep links are not supported by design — and must not be added casually, because state is lost on reload and an address that reloads to the wrong screen is worse than one that never claimed anything.
+
+**The browser's Back button is supported, and `src/lib/backStack.js` is the whole of it.** One press walks back one screen inside the site; a press with nothing left to walk back to asks before leaving. It works without URLs because the browser only ever holds **one** guard entry (`arm()` keeps a marked entry above the one the visitor arrived on, so a back press fires `popstate` instead of unloading), while the real record of where she is lives in the module's own stack of undo steps.
+
+Four rules, and breaking any one of them makes Back do nothing or do too much:
+
+- **Whoever navigates forward calls `pushStep`**, at the click, so the closure captures the screen being left. `useTabHistory(active, setActive)` is that wrapper for a portal's tabs — pass its result as `setActive` and the whole nav follows. The undo sets state directly, so returning never pushes.
+- **Whoever navigates backward in the UI calls `truncate(token)`.** A Logout or a "Back to Website" button collapses several levels at once; the dead steps above would otherwise sit there and swallow presses. `App` holds the tokens for the portal and the admission form, and `onExit` truncating from the portal down is what also clears the login and tab steps.
+- **A step with `confirm` asks first** — used only for signing out of a portal, where a stray press costs an admin her Supabase session. Answering "no" pushes the step back.
+- **`BackGuard` is rendered outside every screen branch in `App`**, in all three returns. It is what installs the guard, so unmounting it disarms the back button.
+
+`installBackGuard()` is deliberately callable without React: the stack machine is the easy part to get wrong, and that seam is what let it be driven from plain Node against a stubbed `window` — the same reason `reportPdf.js` imports nothing that reaches Supabase.
 
 ### Auth: two entirely separate mechanisms, three roles
 

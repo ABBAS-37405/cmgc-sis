@@ -434,6 +434,39 @@ export async function uploadReportPdf(report, blob) {
 }
 
 /**
+ * The report the college itself generated for this month, if there is one.
+ *
+ * `report_log` is the natural place to ask, and a student cannot read it: it is
+ * staff-only under RLS and her portal is the `anon` role. So the honest source
+ * is the bucket. The path is deterministic, which is what makes this safe — one
+ * `list` scoped to the single file we already know the name of. Anon may read
+ * this bucket (that is what makes the parent's WhatsApp link work at all), but
+ * nothing here hands out a path that was not already hers.
+ *
+ * Best effort, exactly like fetchReportLog: a missing bucket or a refused list
+ * leaves the tab working, just without the "already shared" line.
+ */
+export async function fetchSharedReport(studentId, month) {
+  if (!studentId || !month) return null;
+
+  const folder = `monthly/${month}`;
+  const name = `${studentId}.pdf`;
+
+  const { data, error } = await supabase.storage
+    .from(REPORTS_BUCKET)
+    .list(folder, { search: name, limit: 1 });
+
+  if (error) return null;
+
+  // `search` is a match, not an exact name, so confirm what came back.
+  const file = (data || []).find((f) => f.name === name);
+  if (!file) return null;
+
+  const { data: pub } = supabase.storage.from(REPORTS_BUCKET).getPublicUrl(`${folder}/${name}`);
+  return { url: pub.publicUrl, sharedAt: file.updated_at || file.created_at || null };
+}
+
+/**
  * Records that a report went out. Best effort on purpose: the log is a
  * convenience so the admin can see who has already been sent this month's
  * report, and a logging failure must never look like a sending failure.

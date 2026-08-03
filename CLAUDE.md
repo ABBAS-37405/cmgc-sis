@@ -159,6 +159,14 @@ Three things here are easy to break:
 
 `results` has no exam date, so "this month's result" means the marks were **entered** this month (`created_at`) — a term exam sat in March but typed in May lands in May's report.
 
+**The student portal has its own Reports tab** (`src/components/Reports/Reports.jsx`), so a girl or her parents can take the report themselves instead of waiting for it on WhatsApp. It is the same `buildMonthlyReports` + `buildReportPdf` pair as the admin's, with a roster of one — the download she gets is the document her parents receive, not a second version that could disagree. She may pick any of the last 12 months and, from `fetchExamNames()`, any exam she has marks for; sections are all on (`result` only in exam mode), because it is her own record.
+
+Three things about that tab:
+
+- **It generates, it never uploads.** `uploadReportPdf` writes to the `reports` bucket, whose insert policy is `authenticated and is_staff()` — a student session is `anon`. Only the admin's copy is ever stored.
+- **`reportPdf.js` is `import()`ed inside the download handler**, not at the top of the file. Portal statically imports every student tab, so a static import would put the PDF layer in the portal chunk for every student who never opens Reports.
+- **"Already shared by the college" comes from storage, not `report_log`.** The log is staff-only under RLS and the student is `anon`, so `fetchSharedReport()` asks the bucket instead: the path `monthly/<YYYY-MM>/<uuid>.pdf` is deterministic, so one `list` scoped to her own file name answers it without exposing anyone else's. Best effort like `fetchReportLog()` — a refused list just drops the line. That file carries whichever sections the admin ticked, which is why it is offered alongside the generated one rather than instead of it.
+
 ### WhatsApp
 
 `src/lib/whatsapp.js` is the only place that builds a WhatsApp link — `StudentsList`, `MarkAttendance` and `FeeVerification` all go through it, and none of them keeps a local number normalizer.

@@ -9,6 +9,7 @@ import ClassTests from "../ClassTests/ClassTests";
 import Assignments from "../Assignments/Assignments";
 import MyForm from "../MyForm/MyForm";
 import Lms from "../Lms/Lms";
+import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
 // A student signing in should not be made to wait for the admin and teacher
 // portals, which are far bigger than everything she can actually see.
@@ -80,6 +81,7 @@ export default function Portal({ onExit }) {
         {activeTab === "lms" && <Lms student={studentData} />}
         {activeTab === "results" && <Results studentId={studentData?.id} />}
         {activeTab === "fee" && <Fee studentId={studentData?.id} />}
+        {activeTab === "reports" && <Reports student={studentData} />}
         {activeTab === "myform" && <MyForm student={studentData} />}
 
         {/* Rendered here rather than inside each tab, so every screen gets the

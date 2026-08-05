@@ -16,6 +16,7 @@ create table admin_profiles (
   user_id uuid not null unique references auth.users(id) on delete cascade,
   email text not null unique,
   name text,
+  whatsapp text,
   is_super_admin boolean not null default false,
   permissions text[] not null default '{}',       -- subset of: students, attendance, results, fee, notices
   allowed_programs text[] not null default '{}',  -- empty array = all programs allowed

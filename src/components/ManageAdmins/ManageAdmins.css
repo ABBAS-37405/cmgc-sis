@@ -27,6 +27,8 @@
 .manage-admins__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .manage-admins__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
 .manage-admins__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+.manage-admins__whatsapp-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #10b981; color: #047857; background: #d1fae5; }
+.manage-admins__whatsapp-btn:hover { background: #dcfce7; }
 .manage-admins__edit-block { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .manage-admins__edit-actions { display: flex; gap: 8px; margin-top: 4px; }
 .manage-admins__save-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; background: var(--accent); color: white; }

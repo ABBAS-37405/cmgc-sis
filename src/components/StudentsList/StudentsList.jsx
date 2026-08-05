@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS } from "../../lib/academics";
+import { PROGRAMS, combinationsFor, formatCombination, groupHasChoice } from "../../lib/academics";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { findBFormClash, describeUniqueViolation, isValidBForm, formatBForm } from "../../lib/bform";
 import StudentDetail from "../StudentDetail/StudentDetail";
@@ -157,9 +157,20 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   const [form, setForm] = useState({
     roll_no: "", name: "", father_name: "", cnic: "",
     program: isRestricted ? (visiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
+    comboIndex: isRestricted ? (groupHasChoice(visiblePrograms[0] || "Pre-Medical") ? null : 0) : 0,
     phone: "", whatsapp: "", password: "", year_of_study: "1st Year",
     ...blankDetails(),
   });
+
+  const updateForm = (updates) => {
+    if (updates.program) {
+      const nextProgram = updates.program;
+      const nextComboIndex = groupHasChoice(nextProgram) ? null : 0;
+      setForm((prev) => ({ ...prev, ...updates, program: nextProgram, comboIndex: nextComboIndex }));
+      return;
+    }
+    setForm((prev) => ({ ...prev, ...updates }));
+  };
   // The optional half of the form stays folded away until the admin asks for it.
   const [showFurther, setShowFurther] = useState(false);
   const [detailStudent, setDetailStudent] = useState(null);   // { student, edit }
@@ -645,6 +656,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     if (!form.password.trim()) return setFormError("Password is required");
     if (form.password.length < 6) return setFormError("Password must be at least 6 characters");
     if (!isValidBForm(form.cnic)) return setFormError("B-Form number is required, in the format 12345-1234567-1");
+    if (groupHasChoice(form.program) && form.comboIndex === null) {
+      return setFormError("Choose a subject combination for " + form.program);
+    }
     setSaving(true);
 
     // Checked here so the admin is told whose record already holds this number,
@@ -693,12 +707,15 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
       }
     }
 
+    const selectedCombo = form.comboIndex !== null ? combinationsFor(form.program)[form.comboIndex] : combinationsFor(form.program)[0];
     const { error } = await supabase.from("students").insert({
       roll_no: form.roll_no,
       name: form.name,
       father_name: form.father_name,
       cnic: formatBForm(form.cnic),
       program: form.program,
+      group_selected: form.program,
+      subject_combination: selectedCombo ? formatCombination(selectedCombo) : null,
       phone: form.phone,
       // Falls back to the phone so she is at least reachable; the admin can
       // correct it later from Edit.
@@ -721,6 +738,7 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     setShowFurther(false);
     setForm({
       roll_no: "", name: "", father_name: "", cnic: "", program: "Pre-Medical",
+      comboIndex: groupHasChoice("Pre-Medical") ? 0 : 0,
       phone: "", whatsapp: "", password: "", year_of_study: "1st Year",
       ...blankDetails(),
     });
@@ -1251,10 +1269,25 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
                 </div>
                 <div className="sl-add-field">
                   <label>Program *</label>
-                  <select value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
+                  <select value={form.program} onChange={(e) => updateForm({ program: e.target.value })}>
                     {visiblePrograms.map((p) => <option key={p}>{p}</option>)}
                   </select>
                 </div>
+                {groupHasChoice(form.program) && (
+                  <div className="sl-add-field">
+                    <label>Subject Combination *</label>
+                    <select
+                      value={form.comboIndex ?? ""}
+                      onChange={(e) => updateForm({ comboIndex: e.target.value === "" ? null : Number(e.target.value) })}
+                    >
+                      <option value="">— Select combination —</option>
+                      {combinationsFor(form.program).map((combo, index) => (
+                        <option key={index} value={index}>{formatCombination(combo)}</option>
+                      ))}
+                    </select>
+                    <span className="sl-field-hint">Choose the electives for {form.program}.</span>
+                  </div>
+                )}
                 <div className="sl-add-field"><label>Phone</label><input placeholder="03XXXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                 <div className="sl-add-field">
                   <label>WhatsApp No.</label>

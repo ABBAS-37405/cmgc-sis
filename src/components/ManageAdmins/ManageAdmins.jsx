@@ -1,13 +1,33 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Save, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Save, X, ShieldCheck, Eye, EyeOff, MessageCircle } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PERMISSION_KEYS, PROGRAMS, createSubAdmin, deleteSubAdmin } from "../../lib/adminAuth";
+import {
+  PERMISSION_KEYS,
+  PROGRAMS,
+  createSubAdmin,
+  deleteSubAdmin,
+  updateSubAdmin,
+} from "../../lib/adminAuth";
+import { openWhatsApp, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import "./ManageAdmins.css";
 
-const emptyForm = { name: "", email: "", password: "", permissions: [], allowedPrograms: [] };
+const emptyForm = { name: "", email: "", password: "", whatsapp: "", permissions: [], allowedPrograms: [] };
 
 function toggleValue(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+function buildAdminCredentialsMessage(name, email, password) {
+  return [
+    `Assalamualaikum ${name || "Admin"},`,
+    "",
+    "Your CMGC admin portal login has been updated.",
+    "",
+    `Email: ${email}`,
+    `Password: ${password}`,
+    "",
+    "Please use these credentials to sign in.",
+  ].join("\n");
 }
 
 export default function ManageAdmins({ adminProfile }) {
@@ -46,6 +66,10 @@ export default function ManageAdmins({ adminProfile }) {
       setError("Select at least one tab this admin is allowed to use.");
       return;
     }
+    if (form.whatsapp.trim() && !isValidWhatsAppNumber(form.whatsapp.trim())) {
+      setError("WhatsApp number must be in the format 03XXXXXXXXX.");
+      return;
+    }
 
     setCreating(true);
     try {
@@ -53,6 +77,7 @@ export default function ManageAdmins({ adminProfile }) {
         email: form.email.trim(),
         password: form.password,
         name: form.name.trim(),
+        whatsapp: form.whatsapp.trim() || undefined,
         permissions: form.permissions,
         allowedPrograms: form.allowedPrograms,
       });
@@ -67,23 +92,73 @@ export default function ManageAdmins({ adminProfile }) {
 
   const startEdit = (admin) => {
     setEditingId(admin.id);
-    setEditForm({ permissions: [...admin.permissions], allowedPrograms: [...admin.allowed_programs] });
+    setEditForm({
+      name: admin.name || "",
+      email: admin.email || "",
+      password: "",
+      whatsapp: admin.whatsapp || "",
+      permissions: [...admin.permissions],
+      allowedPrograms: [...admin.allowed_programs],
+    });
   };
 
   const saveEdit = async (admin) => {
-    setSavingEditId(admin.id);
-    const { error: updateError } = await supabase
-      .from("admin_profiles")
-      .update({ permissions: editForm.permissions, allowed_programs: editForm.allowedPrograms })
-      .eq("id", admin.id);
-    setSavingEditId(null);
-    if (updateError) {
-      alert("Failed to update permissions: " + updateError.message);
+    if (!editForm.email.trim()) {
+      alert("Email is required.");
       return;
     }
-    setEditingId(null);
-    setEditForm(null);
-    await fetchAdmins();
+    if (editForm.permissions.length === 0) {
+      alert("Select at least one tab this admin is allowed to use.");
+      return;
+    }
+    if (editForm.whatsapp.trim() && !isValidWhatsAppNumber(editForm.whatsapp.trim())) {
+      alert("WhatsApp number must be in the format 03XXXXXXXXX.");
+      return;
+    }
+
+    setSavingEditId(admin.id);
+    try {
+      await updateSubAdmin({
+        targetUserId: admin.user_id,
+        email: editForm.email.trim(),
+        password: editForm.password.trim() || undefined,
+        name: editForm.name.trim(),
+        whatsapp: editForm.whatsapp.trim() || undefined,
+        permissions: editForm.permissions,
+        allowedPrograms: editForm.allowedPrograms,
+      });
+      setEditingId(null);
+      setEditForm(null);
+      await fetchAdmins();
+    } catch (err) {
+      alert("Failed to update admin: " + err.message);
+    } finally {
+      setSavingEditId(null);
+    }
+  };
+
+  const sendCredentials = async (admin) => {
+    let number = (admin.whatsapp || "").trim();
+    if (!number || !isValidWhatsAppNumber(number)) {
+      number = window.prompt("Enter the sub-admin WhatsApp number (03XXXXXXXXX):", "");
+      if (!number || !isValidWhatsAppNumber(number.trim())) {
+        return alert("Please enter a valid WhatsApp number in the format 03XXXXXXXXX.");
+      }
+      number = number.trim();
+    }
+
+    const password = window.prompt(
+      `Enter the password to share with ${admin.name || admin.email}:`, ""
+    );
+    if (!password) {
+      return;
+    }
+
+    const message = buildAdminCredentialsMessage(admin.name, admin.email, password);
+    const success = openWhatsApp(number, message);
+    if (!success) {
+      alert("Could not open WhatsApp. Please check the number and try again.");
+    }
   };
 
   const handleDelete = async (admin) => {
@@ -124,6 +199,11 @@ export default function ManageAdmins({ adminProfile }) {
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
+            <input
+              placeholder="WhatsApp (03XXXXXXXXX)"
+              value={form.whatsapp}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))}
+            />
           </div>
 
           <div className="manage-admins__field-label">Allowed Tabs</div>
@@ -180,9 +260,40 @@ export default function ManageAdmins({ adminProfile }) {
                     )}
                   </p>
                   <p className="manage-admins__email">{admin.email}</p>
+                  {admin.whatsapp && <p className="manage-admins__whatsapp">WhatsApp: {admin.whatsapp}</p>}
 
                   {editingId === admin.id ? (
                     <div className="manage-admins__edit-block">
+                      <div className="manage-admins__form-row">
+                        <input
+                          placeholder="Full name"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                        />
+                        <input
+                          type="email"
+                          placeholder="Email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                        />
+                        <div className="manage-admins__password-wrap">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="New password (leave blank to keep unchanged)"
+                            value={editForm.password}
+                            onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                          />
+                          <button type="button" onClick={() => setShowPassword((s) => !s)} className="manage-admins__eye">
+                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                        <input
+                          placeholder="WhatsApp (03XXXXXXXXX)"
+                          value={editForm.whatsapp}
+                          onChange={(e) => setEditForm((f) => ({ ...f, whatsapp: e.target.value }))}
+                        />
+                      </div>
+
                       <div className="manage-admins__field-label">Allowed Tabs</div>
                       <div className="manage-admins__chip-row">
                         {PERMISSION_KEYS.map((p) => (
@@ -243,6 +354,9 @@ export default function ManageAdmins({ adminProfile }) {
                 {!admin.is_super_admin && editingId !== admin.id && (
                   <div className="manage-admins__card-actions">
                     <button onClick={() => startEdit(admin)} className="manage-admins__edit-btn">Edit</button>
+                    <button onClick={() => sendCredentials(admin)} className="manage-admins__whatsapp-btn">
+                      <MessageCircle size={13} /> Send WhatsApp
+                    </button>
                     {admin.user_id !== adminProfile?.user_id && (
                       <button onClick={() => handleDelete(admin)} className="manage-admins__delete-btn">
                         <Trash2 size={13} /> Remove

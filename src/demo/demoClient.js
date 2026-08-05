@@ -549,15 +549,30 @@ const auth = {
  */
 function handleApi(path, body) {
   if (path.endsWith("/api/admin/create")) {
-    const { email, name, permissions = [], allowedPrograms = [] } = body;
+    const { email, name, whatsapp = null, permissions = [], allowedPrograms = [] } = body;
     if (db.admin_profiles.some((a) => a.email === email)) {
       return { ok: false, status: 400, json: { error: "An admin with this email already exists." } };
     }
     db.admin_profiles.push({
       id: newId(), user_id: newId(), email, name,
+      whatsapp,
       is_super_admin: false, permissions, allowed_programs: allowedPrograms,
       created_at: nowIso(), created_by: session?.user?.id || null,
     });
+    return { ok: true, status: 200, json: { success: true } };
+  }
+
+  if (path.endsWith("/api/admin/update")) {
+    const { targetUserId, email, name, whatsapp, permissions, allowedPrograms } = body;
+    const admin = db.admin_profiles.find((a) => a.user_id === targetUserId);
+    if (!admin) {
+      return { ok: false, status: 404, json: { error: "Admin not found." } };
+    }
+    if (email) admin.email = email;
+    if (name !== undefined) admin.name = name || null;
+    if (whatsapp !== undefined) admin.whatsapp = whatsapp || null;
+    if (permissions !== undefined) admin.permissions = Array.isArray(permissions) ? permissions : [];
+    if (allowedPrograms !== undefined) admin.allowed_programs = Array.isArray(allowedPrograms) ? allowedPrograms : [];
     return { ok: true, status: 200, json: { success: true } };
   }
 

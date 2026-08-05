@@ -71,8 +71,12 @@ async function callAdminApi(path, body) {
   return result;
 }
 
-export function createSubAdmin({ email, password, name, permissions, allowedPrograms }) {
-  return callAdminApi("/api/admin/create", { email, password, name, permissions, allowedPrograms });
+export function createSubAdmin({ email, password, name, whatsapp, permissions, allowedPrograms }) {
+  return callAdminApi("/api/admin/create", { email, password, name, whatsapp, permissions, allowedPrograms });
+}
+
+export function updateSubAdmin({ targetUserId, email, password, name, whatsapp, permissions, allowedPrograms }) {
+  return callAdminApi("/api/admin/update", { targetUserId, email, password, name, whatsapp, permissions, allowedPrograms });
 }
 
 export function deleteSubAdmin(targetUserId) {

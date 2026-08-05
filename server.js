@@ -150,7 +150,7 @@ app.post('/api/admin/create', async (req, res) => {
     return res.status(500).json({ error: 'Admin management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
   }
 
-  const { accessToken, email, password, name, permissions, allowedPrograms } = req.body || {};
+  const { accessToken, email, password, name, whatsapp, permissions, allowedPrograms } = req.body || {};
 
   const callerId = await requireSuperAdmin(accessToken);
   if (!callerId) {
@@ -175,6 +175,7 @@ app.post('/api/admin/create', async (req, res) => {
     user_id: created.user.id,
     email,
     name: name || null,
+    whatsapp: whatsapp || null,
     is_super_admin: false,
     permissions: Array.isArray(permissions) ? permissions : [],
     allowed_programs: Array.isArray(allowedPrograms) ? allowedPrograms : [],
@@ -187,6 +188,65 @@ app.post('/api/admin/create', async (req, res) => {
   }
 
   return res.json({ success: true, userId: created.user.id });
+});
+
+app.post('/api/admin/update', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Admin management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { accessToken, targetUserId, email, password, name, whatsapp, permissions, allowedPrograms } = req.body || {};
+  const callerId = await requireSuperAdmin(accessToken);
+  if (!callerId) {
+    return res.status(403).json({ error: 'Only a super admin can update sub-admin accounts.' });
+  }
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'targetUserId is required.' });
+  }
+
+  const { data: profileRow, error: profileRowError } = await supabaseAdmin
+    .from('admin_profiles')
+    .select('email')
+    .eq('user_id', targetUserId)
+    .single();
+
+  if (profileRowError || !profileRow) {
+    return res.status(404).json({ error: 'Admin profile not found.' });
+  }
+
+  const authUpdates = {};
+  if (email && email !== profileRow.email) authUpdates.email = email;
+  if (password) authUpdates.password = password;
+
+  if (Object.keys(authUpdates).length > 0) {
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(targetUserId, authUpdates);
+    if (authError) {
+      return res.status(500).json({ error: authError.message });
+    }
+  }
+
+  const rowUpdates = {};
+  if (email) rowUpdates.email = email;
+  if (name !== undefined) rowUpdates.name = name || null;
+  if (whatsapp !== undefined) rowUpdates.whatsapp = whatsapp || null;
+  if (permissions !== undefined) rowUpdates.permissions = Array.isArray(permissions) ? permissions : [];
+  if (allowedPrograms !== undefined) rowUpdates.allowed_programs = Array.isArray(allowedPrograms) ? allowedPrograms : [];
+
+  if (Object.keys(rowUpdates).length > 0) {
+    const { error: rowError } = await supabaseAdmin
+      .from('admin_profiles')
+      .update(rowUpdates)
+      .eq('user_id', targetUserId);
+
+    if (rowError) {
+      if (authUpdates.email) {
+        await supabaseAdmin.auth.admin.updateUserById(targetUserId, { email: profileRow.email }).catch(() => {});
+      }
+      return res.status(500).json({ error: rowError.message });
+    }
+  }
+
+  return res.json({ success: true });
 });
 
 app.post('/api/admin/delete', async (req, res) => {

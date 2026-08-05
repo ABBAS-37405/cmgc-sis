@@ -85,6 +85,20 @@ export function copyMessage(message) {
  * tell the admin instead of silently opening a broken tab.
  */
 export function openWhatsApp(number, message, windowRef) {
+  // Demo mode: do not attempt to open real chats. Inform the user instead
+  // and copy a demo notice to the clipboard so they can paste it.
+  const isDemo = (typeof __DEMO__ !== "undefined" && !!__DEMO__) || (typeof window !== "undefined" && !!window.__DEMO__);
+  const demoNotice = "This is a demo version — please add a WhatsApp number to send messages.";
+  if (isDemo) {
+    try { copyMessage(demoNotice); } catch (e) { /* ignore */ }
+    try {
+      if (typeof window !== "undefined" && window.alert) window.alert(demoNotice);
+    } catch (e) {
+      // ignore
+    }
+    return true;
+  }
+
   const n = normalizeWhatsAppNumber(number);
   if (!n) return false;
   const url = whatsappUrl(n, message);

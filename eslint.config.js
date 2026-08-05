@@ -14,7 +14,9 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      globals: globals.browser,
+      // __DEMO__ is injected by vite.config.js as a build-time literal, so it is
+      // a global here rather than an import.
+      globals: { ...globals.browser, __DEMO__: 'readonly' },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },

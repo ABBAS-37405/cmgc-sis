@@ -16,6 +16,8 @@ import Gallery from "./components/Gallery/Gallery";
 const Portal = lazy(() => import("./components/Portal/Portal"));
 const AdmissionPage = lazy(() => import("./components/AdmissionPage/AdmissionPage"));
 import BackGuard from "./components/BackGuard/BackGuard";
+// Demo build only; `__DEMO__` folds to false everywhere else and this goes with it.
+import { DemoBanner } from "./demo/DemoUi";
 import { pushStep, truncate } from "./lib/backStack";
 import { applyAccent, storedAccent, ACCENT_KEY } from "./lib/accent";
 import "./styles/themes.css";
@@ -89,6 +91,7 @@ export default function App() {
           <Portal onExit={closePortal} />
         </Suspense>
         <BackGuard />
+        {__DEMO__ && <DemoBanner />}
       </>
     );
   }
@@ -99,6 +102,7 @@ export default function App() {
           <AdmissionPage onBack={closeAdmission} />
         </Suspense>
         <BackGuard />
+        {__DEMO__ && <DemoBanner />}
       </>
     );
   }
@@ -128,6 +132,7 @@ export default function App() {
         </button>
       )}
       <BackGuard />
+      {__DEMO__ && <DemoBanner />}
     </div>
   );
 }

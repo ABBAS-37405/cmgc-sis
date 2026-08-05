@@ -12,6 +12,9 @@ npm run lint       # eslint .
 npm run optimize:images   # regenerate public/images/gallery from _original-photos/
 npm run optimize:logo     # regenerate public/logo.png + favicon.png from _original-photos/
 node server.js     # Express API on :3001 — must run separately, no npm script for it
+
+npm run dev:demo   # the demo build, on invented data, no Supabase (see DEMO.md)
+npm run build:demo # what the demo Netlify site builds
 ```
 
 There is no test framework in this project — no test runner, no test files, no `npm test`. Don't invent one; verify changes by running the app.
@@ -224,6 +227,47 @@ Also worth keeping: `index.html` preconnects to the Supabase origin so the first
 Component-scoped CSS files sit next to their JSX (`ComponentName/ComponentName.css`) with BEM-ish `block__element--modifier` class names prefixed per component. Theming is CSS custom properties in `src/styles/themes.css` switched by `data-theme` on `<html>` — four themes: `light`, `dark`, `soft`, `academic`, persisted to `localStorage["cmgc-theme"]`. Use the `--bg`/`--text`/`--card`/`--border`/`--accent` variables rather than hardcoded colors so all four themes keep working.
 
 On top of that, `AccentPicker` (the rainbow slider in the navbar) lets a visitor pick any hue. `src/lib/accent.js` turns that hue into inline custom properties on `<html>` — inline wins over the `[data-theme]` rules — overriding only `--accent`, `--accent-hover`, `--hero-from` and `--hero-to`. Backgrounds and text are deliberately never touched, which is what makes every hue safe. Saturation and lightness are chosen per theme and then corrected by luminance: hues darken until white text reads on them, and the dark theme searches for the lightness that best serves both white button text and its near-black background. Stored as a number in `localStorage["cmgc-accent"]`; absent means "use the theme's own accent", which is the default state and the exact look the site had before.
+
+### The demo build
+
+`src/demo/` is a second database, not a second app. `vite.config.js` defines the
+build-time constant `__DEMO__` (true only under `--mode demo`), `supabaseClient.js`
+branches on it, and the app above that line does not know the difference. User-facing
+notes are in `DEMO.md`; what matters here:
+
+- **`__DEMO__` is a `define`, not an `import.meta.env` read, and that is the whole
+  safety mechanism.** It folds to a literal `false` in a normal build, so Rollup
+  removes the branch and then the entire `src/demo` folder. Both halves of that were
+  measured: an `import.meta.env.VITE_DEMO === "true"` comparison survives as a runtime
+  property lookup **even with the variable set in `.env.production`**, and left 4.4 kB
+  of the demo login panel and banner in the real bundle. **The check is a build:**
+  `npm run build` must keep the landing bundle at ~423 kB and the stylesheet at
+  19.4 kB, and `grep demo-banner dist/assets/index-*.js` must find nothing.
+- **This Vite does not apply `define` on the dev server**, so a bare `__DEMO__` is an
+  undefined global there and *both* `npm run dev` and `npm run dev:demo` would throw
+  before painting. The tiny `cmgc-demo-flag` plugin in `vite.config.js` (`apply: 'serve'`)
+  injects `window.__DEMO__` into the HTML for dev only; the build never needs it.
+- **Nothing in `src/demo` may run at import time.** `demoClient.js` builds the
+  database inside `createDemoClient()` for exactly this reason — a `buildDemoDatabase()`
+  call at module scope is a side effect Rollup must preserve, and the folder stops
+  being removable.
+- **Demo styles are a string inside `DemoUi.jsx`, not a `.css` file.** A CSS import
+  is a side effect too; an earlier version leaked 1.8 kB of demo styling into the
+  production stylesheet, same hash in both builds.
+- `demoClient.js` implements the slice of PostgREST the app actually uses — measured
+  from the source, not guessed. That includes two-level embeds
+  (`payment_transactions → fees → students`), filters that target an embedded table
+  (`.is("students.deleted_at", null)`), `!inner` dropping the parent row, `count/head`,
+  and `.single()` returning `PGRST116` when nothing matches, which is what the student
+  login reads as "wrong password".
+- It also patches `window.fetch` for `/api/admin/*` and `/api/teacher/*`. Those are
+  `server.js` routes, not Supabase, and without them Manage Admins and Teachers would
+  be the only screens in the demo that error.
+- The seed is deterministic (fixed mulberry32) so every visitor sees the same college,
+  and **every date is relative to today** so the demo does not go stale. Reports default
+  to the month that just ended, so that month is seeded densely.
+- No demo student has a `profile_picture_url`. The campus photos are of real girls and
+  must never be attached to invented records.
 
 ### Env vars
 

@@ -44,42 +44,59 @@ alter table fees add column if not exists year_of_study text;
 -- ============================================================
 -- 3. Seed the plans
 -- ============================================================
--- 1st year: admission fee, then three 4-month installments (1st due at
---           admission, 2nd in November, 3rd in February) — 12 months in total.
+-- 1st year: admission fee plus a 4-month installment both due at admission
+--           (15,000 Humanities / 16,000 elsewhere), then the remaining eight
+--           months charged one by one, Sep to Apr — 12 months in total.
 -- 2nd year: admission fee, then eight separate monthly charges, Sep to Apr.
 --
 -- NOTE ON FA-IT: seeded at the same rate as the science groups, following the
 -- rule as given ("monthly fee 3000 of all groups except humanities"). If FA-IT
 -- should instead match Humanities, change it from the portal's Fee Settings —
 -- no SQL needed.
+--
+-- If your fee_plans rows already exist, this insert does nothing (see the
+-- `do nothing` below) — supabase_fee_plans_first_year_2026.sql is the file that
+-- applies the revised 1st Year amounts to a table already seeded.
 
 insert into fee_plans (year_of_study, program, admission_fee, monthly_fee, total_fee, installments)
 values
   -- ---------- 1st Year ----------
-  ('1st Year', 'Pre-Engineering', 12500, 3000, 48500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
-  ('1st Year', 'Pre-Medical', 12500, 3000, 48500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
-  ('1st Year', 'ICS', 12500, 3000, 48500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
-  ('1st Year', 'General Science', 12500, 3000, 48500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
-  ('1st Year', 'FA-IT', 12500, 3000, 48500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
-  ('1st Year', 'Humanities', 12500, 2500, 42500,
-   '[{"label":"1st Installment","months":4,"due_month":null},
-     {"label":"2nd Installment","months":4,"due_month":11},
-     {"label":"3rd Installment","months":4,"due_month":2}]'::jsonb),
+  ('1st Year', 'Pre-Engineering', 4000, 3000, 40000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
+  ('1st Year', 'Pre-Medical', 4000, 3000, 40000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
+  ('1st Year', 'ICS', 4000, 3000, 40000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
+  ('1st Year', 'General Science', 4000, 3000, 40000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
+  ('1st Year', 'FA-IT', 4000, 3000, 40000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
+  ('1st Year', 'Humanities', 5000, 2500, 35000,
+   '[{"label":"1st Installment (4 months)","months":4,"due_month":null},
+     {"label":"September","months":1,"due_month":9},{"label":"October","months":1,"due_month":10},
+     {"label":"November","months":1,"due_month":11},{"label":"December","months":1,"due_month":12},
+     {"label":"January","months":1,"due_month":1},{"label":"February","months":1,"due_month":2},
+     {"label":"March","months":1,"due_month":3},{"label":"April","months":1,"due_month":4}]'::jsonb),
 
   -- ---------- 2nd Year (Sep–Apr, charged month by month) ----------
   ('2nd Year', 'Pre-Engineering', 12500, 2500, 32500,
@@ -146,5 +163,5 @@ create policy "fee_plans_delete" on fee_plans for delete to authenticated using 
 --   from fee_plans
 --  order by year_of_study, program;
 --
--- Expected: 12 rows. 1st Year totals 48500 (42500 Humanities) with 3 installments;
+-- Expected: 12 rows. 1st Year totals 40000 (35000 Humanities) with 9 installments;
 -- 2nd Year totals 32500 (28500 Humanities) with 8.

@@ -4,6 +4,9 @@ import Logo from "../Logo/Logo";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAdminProfile } from "../../lib/adminAuth";
 import { fetchTeacherProfile } from "../../lib/teacherAuth";
+// Demo build only. `__DEMO__` is a build-time literal, so the branch below folds
+// away and this import goes with it in a normal build.
+import { DemoLogins } from "../../demo/DemoUi";
 import "./LoginPage.css";
 
 const ROLES = [
@@ -26,19 +29,26 @@ export default function LoginPage({ onLogin, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async () => {
+  /**
+   * The one sign-in path.
+   *
+   * Parameterised rather than reading state directly so the demo build's
+   * one-click buttons can drive it without first pushing values into the form
+   * and waiting a render for them to land.
+   */
+  const handleLogin = async (r = role, identifier = id, pass = password) => {
     setError("");
-    if (!id.trim() || !password.trim()) {
+    if (!String(identifier).trim() || !String(pass).trim()) {
       setError("Please enter your ID and password");
       return;
     }
 
     setLoading(true);
 
-    if (role === "admin") {
+    if (r === "admin") {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: id,
-        password,
+        email: identifier,
+        password: pass,
       });
       if (authError) {
         setLoading(false);
@@ -55,16 +65,16 @@ export default function LoginPage({ onLogin, onBack }) {
         return;
       }
 
-      onLogin("admin", id, profile);
+      onLogin("admin", identifier, profile);
       return;
     }
 
-    if (role === "teacher") {
+    if (r === "teacher") {
       // Same Supabase Auth mechanism as the admin login above — a teacher's account is
       // just an auth user whose `teachers` row holds her subjects and rights.
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: id,
-        password,
+        email: identifier,
+        password: pass,
       });
       if (authError) {
         setLoading(false);
@@ -87,11 +97,11 @@ export default function LoginPage({ onLogin, onBack }) {
         return;
       }
 
-      onLogin("teacher", id, teacher);
+      onLogin("teacher", identifier, teacher);
       return;
     }
 
-    if (role === "student" || role === "parent") {
+    if (r === "student" || r === "parent") {
       // Students table se roll number + password check karein
       const { data, error: dbError } = await supabase
         .from("students")
@@ -99,8 +109,8 @@ export default function LoginPage({ onLogin, onBack }) {
         // A deleted student must not be able to sign in while she sits in the
         // admin's Deleted Items bin.
         .is("deleted_at", null)
-        .eq("roll_no", id.trim())
-        .eq("password", password.trim())
+        .eq("roll_no", String(identifier).trim())
+        .eq("password", String(pass).trim())
         .single();
 
       setLoading(false);
@@ -110,7 +120,7 @@ export default function LoginPage({ onLogin, onBack }) {
         return;
       }
 
-      onLogin(role, id, data);
+      onLogin(r, identifier, data);
       return;
     }
   };
@@ -127,6 +137,8 @@ export default function LoginPage({ onLogin, onBack }) {
           <h1>CMGC Portal Login</h1>
           <p>Community Model Girls College</p>
         </div>
+
+        {__DEMO__ && <DemoLogins onPick={handleLogin} />}
 
         <div className="login__roles">
           {ROLES.map((r) => (
@@ -159,7 +171,7 @@ export default function LoginPage({ onLogin, onBack }) {
 
         {error && <p className="login__error"><AlertCircle size={13} /> {error}</p>}
 
-        <button onClick={handleLogin} className="login__submit" disabled={loading}>
+        <button onClick={() => handleLogin()} className="login__submit" disabled={loading}>
           <Lock size={16} /> {loading ? "Logging in..." : "Login"}
         </button>
         <p className="login__forgot">Forgot Password?</p>

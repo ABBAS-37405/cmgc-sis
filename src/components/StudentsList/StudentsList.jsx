@@ -13,7 +13,7 @@ import "./StudentsList.css";
 
 // Used only until the fee_plans rows load, or if a group has no plan yet.
 // The real amounts live in the fee_plans table and are edited from Fee Settings.
-const FALLBACK_ADMISSION_FEE = 12500;
+const FALLBACK_ADMISSION_FEE = 4000;
 const FALLBACK_MONTHLY_FEE = 3000;
 
 const DOCUMENTS = [
@@ -140,7 +140,7 @@ const shareCredentials = (application, rollNo, password, waWindowRef) => {
   return true;
 };
 
-export default function StudentsList({ allowedPrograms = [] }) {
+export default function StudentsList({ allowedPrograms = [], adminProfile = null }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
 
@@ -207,6 +207,58 @@ export default function StudentsList({ allowedPrograms = [] }) {
     setLoading(false);
   };
 
+  /* ---------- Bulk promotion / passout helpers ---------- */
+  const markSecondYearPassout = async () => {
+    if (!adminProfile?.is_super_admin) { alert('Only a super admin may mark passout.'); return; }
+    if (!window.confirm('Are you sure? This will mark all current 2nd Year students as passout and archive them.')) return;
+    setBusyRow('passout');
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('students')
+      .update({ is_passout: true, passout_at: now, deleted_at: now })
+      .eq('year_of_study', '2nd Year')
+      .is('deleted_at', null)
+      .select('id');
+    setBusyRow(null);
+    if (error) {
+      alert('Failed to mark passout: ' + error.message);
+      return;
+    }
+    await Promise.all([fetchStudents(), fetchDeleted(), fetchPendingRequestCount()]);
+    alert((data || []).length + ' students marked as passout and archived.');
+  };
+
+  const promoteFirstYearToSecond = async () => {
+    if (!adminProfile?.is_super_admin) { alert('Only a super admin may perform bulk promotions.'); return; }
+    if (!window.confirm('Are you sure? This will promote all 1st Year students to 2nd Year if no active 2nd Year students remain.')) return;
+    setBusyRow('promote');
+    const { count: open2Count } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true })
+      .eq('year_of_study', '2nd Year')
+      .is('deleted_at', null)
+      .not('is_passout', 'is', true);
+    if (open2Count && open2Count > 0) {
+      setBusyRow(null);
+      alert('Cannot promote: there are still ' + open2Count + ' active 2nd Year students. Mark them passout first.');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('students')
+      .update({ year_of_study: '2nd Year' })
+      .eq('year_of_study', '1st Year')
+      .is('deleted_at', null)
+      .select('id');
+    setBusyRow(null);
+    if (error) {
+      alert('Failed to promote students: ' + error.message);
+      return;
+    }
+    await Promise.all([fetchStudents(), fetchPendingRequestCount()]);
+    alert((data || []).length + ' students promoted to 2nd Year.');
+  };
+
   const fetchStudents = async () => {
     const { data } = await supabase
       .from("students")
@@ -252,6 +304,10 @@ export default function StudentsList({ allowedPrograms = [] }) {
   // record, so restoring puts it back exactly where it was.
   const softDelete = async (table, row, name) => {
     const label = table === "applications" ? "application" : "enrolled student";
+    if (!adminProfile?.is_super_admin) {
+      alert('Only a super admin may delete records.');
+      return;
+    }
     if (!window.confirm(
       `Delete the ${label} "${name}"?\n\n` +
       "It will move to the Deleted Items tab and disappear from this list. " +
@@ -279,6 +335,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
   };
 
   const restore = async (table, row) => {
+    if (!adminProfile?.is_super_admin) { alert('Only a super admin may restore deleted records.'); return; }
     setBusyRow(row.id);
     const { data: hit, error } = await supabase
       .from(table).update({ deleted_at: null }).eq("id", row.id).select("id");
@@ -317,6 +374,10 @@ export default function StudentsList({ allowedPrograms = [] }) {
   // attendance, results and class test marks along with her — see
   // supabase_soft_delete.sql.
   const permanentDelete = async (table, row, name) => {
+    if (!adminProfile?.is_super_admin) {
+      alert('Only a super admin may permanently delete records.');
+      return;
+    }
     const isStudent = table === "students";
     const sourceApp = isStudent ? await findSourceApplication(row) : null;
 
@@ -782,6 +843,7 @@ export default function StudentsList({ allowedPrograms = [] }) {
   };
 
   const changeYear = async (student, newYear) => {
+    if (!adminProfile?.is_super_admin) { alert('Only a super admin can change a student\'s year.'); return; }
     const confirmed = window.confirm(
       "Confirm year change for " + student.name + "?\n" +
       "Current: " + (student.year_of_study || "1st Year") + "\n" +
@@ -1099,9 +1161,33 @@ export default function StudentsList({ allowedPrograms = [] }) {
           </div>
         )}
         {activeTab === "students" && (
-          <button onClick={() => setShowAddForm(!showAddForm)} className="sl-add-btn">
-            {showAddForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Student</>}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => setShowAddForm(!showAddForm)} className="sl-add-btn">
+              {showAddForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Student</>}
+            </button>
+            {adminProfile?.is_super_admin && (
+              <button
+              onClick={async () => {
+                if (!window.confirm('Mark all current 2nd Year students as passout and archive them?')) return;
+                await markSecondYearPassout();
+              }}
+                className="sl-action-btn sl-passout-btn"
+              >
+                Mark 2nd Year as Passout
+              </button>
+            )}
+            {adminProfile?.is_super_admin && (
+              <button
+              onClick={async () => {
+                if (!window.confirm('Promote all 1st Year students to 2nd Year? This will only run if there are no active 2nd Year students (they should be marked passout first).')) return;
+                await promoteFirstYearToSecond();
+              }}
+                className="sl-action-btn sl-promote-btn"
+              >
+                Promote 1st → 2nd (bulk)
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1130,14 +1216,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
                   <td>{statusBadge(a.status)}</td>
                   <td className="sl-row-actions">
                     <button onClick={() => { setSearch(""); setDocReview({}); setSelected(a); }} className="sl-view-btn"><Eye size={14} /> View</button>
-                    <button
-                      onClick={() => softDelete("applications", a, a.student_name)}
-                      disabled={busyRow === a.id}
-                      className="sl-delete-btn"
-                      title="Move to Deleted Items"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {adminProfile?.is_super_admin ? (
+                      <button
+                        onClick={() => softDelete("applications", a, a.student_name)}
+                        disabled={busyRow === a.id}
+                        className="sl-delete-btn"
+                        title="Move to Deleted Items"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -1303,6 +1391,8 @@ export default function StudentsList({ allowedPrograms = [] }) {
                           value={s.year_of_study || "1st Year"}
                           onChange={(e) => changeYear(s, e.target.value)}
                           className="sl-year-select"
+                          disabled={!adminProfile?.is_super_admin}
+                          title={adminProfile?.is_super_admin ? "Change year" : "Only super admin can change year"}
                         >
                           <option>1st Year</option>
                           <option>2nd Year</option>
@@ -1328,14 +1418,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
                         <button onClick={() => sendStudentCredentialsWhatsApp(s)} className="sl-whatsapp-btn" title="Send login ID & password via WhatsApp">
                           <WhatsappIcon />
                         </button>
-                        <button
-                          onClick={() => softDelete("students", s, s.name)}
-                          disabled={busyRow === s.id}
-                          className="sl-delete-btn"
-                          title="Move to Deleted Items"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {adminProfile?.is_super_admin ? (
+                          <button
+                            onClick={() => softDelete("students", s, s.name)}
+                            disabled={busyRow === s.id}
+                            className="sl-delete-btn"
+                            title="Move to Deleted Items"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -1390,12 +1482,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
                             <td>{statusBadge(a.status)}</td>
                             <td>{new Date(a.deleted_at).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</td>
                             <td className="sl-row-actions">
-                              <button onClick={() => restore("applications", a)} disabled={busyRow === a.id} className="sl-restore-btn">
-                                <ArrowLeft size={13} /> Restore
-                              </button>
-                              <button onClick={() => permanentDelete("applications", a, a.student_name)} disabled={busyRow === a.id} className="sl-purge-btn">
-                                <X size={13} /> Delete Permanently
-                              </button>
+                              {adminProfile?.is_super_admin ? (
+                                <>
+                                  <button onClick={() => restore("applications", a)} disabled={busyRow === a.id} className="sl-restore-btn">
+                                    <ArrowLeft size={13} /> Restore
+                                  </button>
+                                  <button onClick={() => permanentDelete("applications", a, a.student_name)} disabled={busyRow === a.id} className="sl-purge-btn">
+                                    <X size={13} /> Delete Permanently
+                                  </button>
+                                </>
+                              ) : null}
                             </td>
                           </tr>
                         ))}
@@ -1423,12 +1519,16 @@ export default function StudentsList({ allowedPrograms = [] }) {
                             <td>{s.year_of_study || "1st Year"}</td>
                             <td>{new Date(s.deleted_at).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</td>
                             <td className="sl-row-actions">
-                              <button onClick={() => restore("students", s)} disabled={busyRow === s.id} className="sl-restore-btn">
-                                <ArrowLeft size={13} /> Restore
-                              </button>
-                              <button onClick={() => permanentDelete("students", s, s.name)} disabled={busyRow === s.id} className="sl-purge-btn">
-                                <X size={13} /> Delete Permanently
-                              </button>
+                              {adminProfile?.is_super_admin ? (
+                                <>
+                                  <button onClick={() => restore("students", s)} disabled={busyRow === s.id} className="sl-restore-btn">
+                                    <ArrowLeft size={13} /> Restore
+                                  </button>
+                                  <button onClick={() => permanentDelete("students", s, s.name)} disabled={busyRow === s.id} className="sl-purge-btn">
+                                    <X size={13} /> Delete Permanently
+                                  </button>
+                                </>
+                              ) : null}
                             </td>
                           </tr>
                         ))}

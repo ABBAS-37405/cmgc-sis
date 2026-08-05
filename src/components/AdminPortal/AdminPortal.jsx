@@ -25,7 +25,7 @@ export default function AdminPortal({ adminProfile, onExit }) {
       <AdminSidebar active={active} setActive={goToTab} onLogout={onExit} adminProfile={adminProfile} />
       <main className="admin-portal__main">
         {active === "overview" && <AdminOverview />}
-        {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} />}
+        {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "attendance" && hasPermission(adminProfile, "attendance") && <MarkAttendance allowedPrograms={allowedPrograms} />}
         {active === "results" && hasPermission(adminProfile, "results") && <EnterResults allowedPrograms={allowedPrograms} />}
         {active === "fee" && hasPermission(adminProfile, "fee") && <FeeVerification />}

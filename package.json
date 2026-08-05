@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "dev:demo": "vite --mode demo",
+    "build:demo": "vite build --mode demo",
     "optimize:images": "node optimize-gallery.mjs",
     "optimize:logo": "node optimize-logo.mjs"
   },

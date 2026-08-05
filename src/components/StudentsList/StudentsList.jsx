@@ -714,7 +714,6 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
       father_name: form.father_name,
       cnic: formatBForm(form.cnic),
       program: form.program,
-      group_selected: form.program,
       subject_combination: selectedCombo ? formatCombination(selectedCombo) : null,
       phone: form.phone,
       // Falls back to the phone so she is at least reachable; the admin can

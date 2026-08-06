@@ -19,6 +19,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { pushStep, useTabHistory } from "../../lib/backStack";
 import "./Portal.css";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 export default function Portal({ onExit }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
@@ -47,6 +49,52 @@ export default function Portal({ onExit }) {
     setStudentData(null);
     setAdminProfile(null);
     setTeacherData(null);
+  };
+
+  const changeStudentPassword = async () => {
+    if (!studentData?.id) return;
+
+    const current = window.prompt("Enter your current password:", "");
+    if (current === null) return;
+    const currentPassword = current.trim();
+    if (currentPassword.length === 0) {
+      alert("Current password is required.");
+      return;
+    }
+
+    const next = window.prompt("Enter your new password (minimum 6 characters):", "");
+    if (next === null) return;
+    const password = next.trim();
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/student/password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentData.id,
+          rollNo: studentData.roll_no,
+          currentPassword,
+          password,
+        }),
+      });
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        const text = await response.text();
+        throw new Error(text || "Failed to change password.");
+      }
+
+      if (!response.ok) throw new Error(result?.error || "Failed to change password.");
+      setStudentData((prev) => prev ? ({ ...prev, password }) : prev);
+      alert("Your password has been updated successfully.");
+    } catch (err) {
+      alert("Could not change password: " + err.message);
+    }
   };
 
   const handleLogin = (r, id, data) => {
@@ -110,7 +158,7 @@ export default function Portal({ onExit }) {
         userLabel={`${studentData?.name || "Student"} (${role})`}
       />
       <main className="portal__main">
-        {activeTab === "overview" && <Overview student={studentData} onNavigate={goToTab} />}
+        {activeTab === "overview" && <Overview student={studentData} onNavigate={goToTab} onChangePassword={changeStudentPassword} />}
         {activeTab === "attendance" && <Attendance studentId={studentData?.id} />}
         {activeTab === "classtests" && <ClassTests studentId={studentData?.id} />}
         {activeTab === "assignments" && <Assignments student={studentData} />}

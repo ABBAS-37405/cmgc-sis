@@ -11,6 +11,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Convert JSON parse errors into JSON responses so API clients can handle them.
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON payload.' });
+  }
+  next(err);
+});
+
 const PORT = process.env.PORT || 3001;
 
 const supabaseAdmin = (process.env.VITE_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -365,6 +373,45 @@ app.post('/api/teacher/password', async (req, res) => {
   }
 
   const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(teacherRow.user_id, { password });
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message });
+  }
+
+  return res.json({ success: true });
+});
+
+app.post('/api/student/password', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Student password reset is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
+  }
+
+  const { studentId, rollNo, currentPassword, password } = req.body || {};
+  if (!studentId || !rollNo || !currentPassword || !password) {
+    return res.status(400).json({ error: 'studentId, rollNo, currentPassword and new password are required.' });
+  }
+  if (String(password).trim().length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+
+  const { data: student, error: lookupError } = await supabaseAdmin
+    .from('students')
+    .select('id, roll_no, password, deleted_at')
+    .eq('id', studentId)
+    .maybeSingle();
+
+  if (lookupError) {
+    return res.status(500).json({ error: lookupError.message });
+  }
+
+  if (!student || student.deleted_at !== null || student.roll_no !== rollNo || student.password !== currentPassword) {
+    return res.status(403).json({ error: 'Student not found or current password is incorrect.' });
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from('students')
+    .update({ password: String(password).trim() })
+    .eq('id', studentId);
+
   if (updateError) {
     return res.status(500).json({ error: updateError.message });
   }

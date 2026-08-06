@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen } from "lucide-react";
+import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock } from "lucide-react";
 import Sidebar from "../Sidebar/Sidebar";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
@@ -32,6 +32,23 @@ export default function TeacherPortal({ teacher, onLogout }) {
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
 
+  const handleChangePassword = async () => {
+    const next = window.prompt(`Set a new login password for ${teacher?.name || teacher?.email} (minimum 6 characters):`, "");
+    if (next === null) return;
+    const password = next.trim();
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      alert("Could not change password: " + error.message);
+      return;
+    }
+    alert("Your password has been updated successfully.");
+  };
+
   return (
     <div className="portal">
       <Sidebar
@@ -49,6 +66,11 @@ export default function TeacherPortal({ teacher, onLogout }) {
               {teacher?.email}
               {teacher?.qualification ? ` · ${teacher.qualification}` : ""}
             </p>
+          </div>
+          <div className="teacher-portal__actions">
+            <button type="button" className="teacher-portal__change-password" onClick={handleChangePassword}>
+              <Lock size={14} /> Change Password
+            </button>
           </div>
           <div className="teacher-portal__tags">
             {subjects.length === 0 ? (

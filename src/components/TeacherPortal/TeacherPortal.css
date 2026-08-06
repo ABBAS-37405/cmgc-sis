@@ -1,5 +1,9 @@
 .teacher-portal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
 .teacher-portal__name { font-size: 16px; font-weight: 700; color: var(--text); }
+.teacher-portal__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.teacher-portal__change-password { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.teacher-portal__change-password:hover { background: var(--card); }
+.teacher-portal__change-password svg { color: var(--accent); }
 .teacher-portal__meta { font-size: 12px; color: var(--subtext); margin-top: 3px; }
 .teacher-portal__tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .teacher-portal__tag { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--bg); border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; }

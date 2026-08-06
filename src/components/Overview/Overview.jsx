@@ -1,7 +1,7 @@
-import { CalendarCheck, Clock, Wallet, Award, Bell, GraduationCap } from "lucide-react";
+import { CalendarCheck, Clock, Wallet, Award, Bell, GraduationCap, Lock } from "lucide-react";
 import "./Overview.css";
 
-export default function Overview({ student, onNavigate }) {
+export default function Overview({ student, onNavigate, onChangePassword }) {
   // Enrolment defaults to 1st Year everywhere else in the app, so a missing
   // value is shown the same way here rather than as a dash.
   const classYear = student?.year_of_study || "1st Year";
@@ -24,9 +24,16 @@ export default function Overview({ student, onNavigate }) {
             <h2>{student?.name || "Student"}</h2>
             <p className="overview__meta">{student?.program} • {classYear} • Roll No: {student?.roll_no}</p>
           </div>
-          {student?.profile_picture_url && (
-            <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" loading="lazy" decoding="async" />
-          )}
+          <div className="overview__actions">
+            {onChangePassword && (
+              <button type="button" className="overview__change-pass" onClick={onChangePassword}>
+                <Lock size={14} /> Change Password
+              </button>
+            )}
+            {student?.profile_picture_url && (
+              <img src={student.profile_picture_url} alt={student.name} className="overview__profile-pic" loading="lazy" decoding="async" />
+            )}
+          </div>
         </div>
       </div>
 

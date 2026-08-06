@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Save, X, ShieldCheck, Eye, EyeOff, MessageCircle } from "lucide-react";
+import { Plus, Trash2, Save, X, ShieldCheck, Eye, EyeOff, KeyRound, MessageCircle } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import {
   PERMISSION_KEYS,
@@ -158,6 +158,34 @@ export default function ManageAdmins({ adminProfile }) {
     const success = openWhatsApp(number, message);
     if (!success) {
       alert("Could not open WhatsApp. Please check the number and try again.");
+    }
+  };
+
+  const handleResetPassword = async (admin) => {
+    const next = window.prompt(
+      `Set a new login password for ${admin.name || admin.email} (minimum 6 characters):`,
+      "123456"
+    );
+    if (next === null) return;
+    const password = next.trim();
+    if (password.length < 6) {
+      return alert("Password must be at least 6 characters.");
+    }
+
+    try {
+      await updateSubAdmin({
+        targetUserId: admin.user_id,
+        email: admin.email,
+        password,
+        name: admin.name,
+        whatsapp: admin.whatsapp || undefined,
+        permissions: admin.permissions || [],
+        allowedPrograms: admin.allowed_programs || [],
+      });
+      alert(`Password updated. ${admin.name || admin.email} can now sign in with the new password.`);
+      await fetchAdmins();
+    } catch (err) {
+      alert("Could not update password: " + err.message);
     }
   };
 
@@ -354,6 +382,9 @@ export default function ManageAdmins({ adminProfile }) {
                 {!admin.is_super_admin && editingId !== admin.id && (
                   <div className="manage-admins__card-actions">
                     <button onClick={() => startEdit(admin)} className="manage-admins__edit-btn">Edit</button>
+                    <button onClick={() => handleResetPassword(admin)} className="manage-admins__edit-btn">
+                      <KeyRound size={13} /> Reset Password
+                    </button>
                     <button onClick={() => sendCredentials(admin)} className="manage-admins__whatsapp-btn">
                       <MessageCircle size={13} /> Send WhatsApp
                     </button>

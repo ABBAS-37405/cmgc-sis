@@ -10,6 +10,10 @@
    spreading them out on a wide screen. */
 .overview__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
 .overview__stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.overview__actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.overview__change-pass { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.overview__change-pass:hover { background: var(--card); }
+.overview__change-pass svg { color: var(--accent); }
 /* The Attendance card is a <button>, so it needs the text alignment and width a
    div gets for free. */
 .overview__stat-card--link { width: 100%; text-align: left; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }

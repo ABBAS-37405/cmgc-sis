@@ -273,6 +273,9 @@ export default function FeeVerification() {
   const monthTotal = feesUpToMonth.reduce((s, f) => s + Number(f.remaining_amount || 0), 0);
 
   const overallTotal = filteredUnpaidFees.reduce((s, f) => s + Number(f.remaining_amount || 0), 0);
+  const summaryStudentsCount = unpaidView === "monthly" ? monthGroups.length : overallGroups.length;
+  const summaryPendingFeesCount = unpaidView === "monthly" ? feesUpToMonth.length : filteredUnpaidFees.length;
+  const summaryPendingTotal = unpaidView === "monthly" ? monthTotal : overallTotal;
 
   /* ---------- Fee collection (All Transactions tab) ---------- */
 
@@ -656,11 +659,11 @@ export default function FeeVerification() {
 
           <div className="fee-v__summary">
             <div className="fee-v__stat">
-              <p className="fee-v__stat-value">{overallGroups.length}</p>
+              <p className="fee-v__stat-value">{summaryStudentsCount}</p>
               <p className="fee-v__stat-label">Students</p>
             </div>
             <div className="fee-v__stat">
-              <p className="fee-v__stat-value">{filteredUnpaidFees.length}</p>
+              <p className="fee-v__stat-value">{summaryPendingFeesCount}</p>
               <p className="fee-v__stat-label">Pending Fees</p>
             </div>
             <div className="fee-v__stat">
@@ -668,7 +671,7 @@ export default function FeeVerification() {
               <p className="fee-v__stat-label">Months</p>
             </div>
             <div className="fee-v__stat">
-              <p className="fee-v__stat-value">Rs {overallTotal.toLocaleString()}</p>
+              <p className="fee-v__stat-value">Rs {summaryPendingTotal.toLocaleString()}</p>
               <p className="fee-v__stat-label">Total Pending</p>
             </div>
           </div>

@@ -175,7 +175,7 @@ const resetStudentPassword = async (student) => {
 
 export default function StudentsList({ allowedPrograms = [], adminProfile = null }) {
   const isRestricted = allowedPrograms.length > 0;
-  const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+  const initialVisiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
 
   const [applications, setApplications] = useState([]);
   const [students, setStudents] = useState([]);
@@ -189,8 +189,8 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({
     roll_no: "", name: "", father_name: "", cnic: "",
-    program: isRestricted ? (visiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
-    comboIndex: isRestricted ? (groupHasChoice(visiblePrograms[0] || "Pre-Medical") ? null : 0) : 0,
+    program: isRestricted ? (initialVisiblePrograms[0] || "Pre-Medical") : "Pre-Medical",
+    comboIndex: isRestricted ? (groupHasChoice(initialVisiblePrograms[0] || "Pre-Medical") ? null : 0) : 0,
     phone: "", whatsapp: "", password: "", year_of_study: "1st Year",
     ...blankDetails(),
   });
@@ -998,24 +998,6 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   );
 
   const normalizedYear = (value) => value || "1st Year";
-
-  const filteredApps = applications.filter((a) => {
-    const matchesSearch =
-      a.student_name?.toLowerCase().includes(search.toLowerCase()) ||
-      a.program?.toLowerCase().includes(search.toLowerCase()) ||
-      a.phone1?.includes(search);
-    const matchesYear = yearFilter === "Both" || normalizedYear(a.year_of_study) === yearFilter;
-    return matchesSearch && matchesYear;
-  });
-
-  const filteredStudents = students.filter((s) => {
-    const matchesSearch =
-      s.name?.toLowerCase().includes(search.toLowerCase()) ||
-      s.roll_no?.includes(search) ||
-      s.program?.toLowerCase().includes(search.toLowerCase());
-    const matchesYear = yearFilter === "Both" || normalizedYear(s.year_of_study) === yearFilter;
-    return matchesSearch && matchesYear;
-  });
 
   // Application Detail View
   if (selected) {

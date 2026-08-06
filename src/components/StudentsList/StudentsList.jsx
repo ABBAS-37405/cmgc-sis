@@ -252,14 +252,42 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     return matchesSearch && matchesYear;
   }), [applications, search, yearFilter]);
 
-  const filteredStudents = useMemo(() => students.filter((s) => {
-    const matchesSearch =
-      s.name?.toLowerCase().includes(search.toLowerCase()) ||
-      s.roll_no?.includes(search) ||
-      s.program?.toLowerCase().includes(search.toLowerCase());
-    const matchesYear = yearFilter === "Both" || (s.year_of_study || "1st Year") === yearFilter;
-    return matchesSearch && matchesYear;
-  }), [students, search, yearFilter]);
+  const programSortRank = (program) => {
+    const normalized = String(program || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+    if (normalized.includes("pre medical") || normalized.includes("pre medical")) return 0;
+    if (normalized.includes("pre engineering") || normalized.includes("pre engg") || normalized.includes("pre eng")) return 1;
+    if (normalized.includes("ics")) return 2;
+    if (normalized.includes("general science") || normalized.includes("gen sc") || normalized.includes("gen science")) return 3;
+    if (normalized.includes("fa it") || normalized.includes("fait")) return 4;
+    if (normalized.includes("humanities") || normalized.includes("humanities")) return 5;
+    return 999;
+  };
+
+  const rollSortValue = (rollNo) => {
+    const text = String(rollNo || "").trim().toUpperCase();
+    const match = text.match(/(\d+)$/);
+    if (match) return Number(match[1]);
+    return Number.MAX_SAFE_INTEGER;
+  };
+
+  const filteredStudents = useMemo(() => {
+    const matched = students.filter((s) => {
+      const matchesSearch =
+        s.name?.toLowerCase().includes(search.toLowerCase()) ||
+        s.roll_no?.includes(search) ||
+        s.program?.toLowerCase().includes(search.toLowerCase());
+      const matchesYear = yearFilter === "Both" || (s.year_of_study || "1st Year") === yearFilter;
+      return matchesSearch && matchesYear;
+    });
+
+    return [...matched].sort((a, b) => {
+      const rankDiff = programSortRank(a.program) - programSortRank(b.program);
+      if (rankDiff !== 0) return rankDiff;
+      const rollDiff = rollSortValue(a.roll_no) - rollSortValue(b.roll_no);
+      if (rollDiff !== 0) return rollDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+  }, [students, search, yearFilter]);
 
   const applicationCounts = useMemo(() => ({
     pending: applications.filter((a) => a.status === "Pending").length,

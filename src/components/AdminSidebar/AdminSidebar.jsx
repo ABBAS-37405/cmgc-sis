@@ -23,27 +23,42 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
     return hasPermission(adminProfile, it.permission);
   });
 
+  const sidebarItems = [...visibleItems];
+  const manageAdminsIndex = sidebarItems.findIndex((it) => it.id === "admins");
+  const logoutItem = { id: "logout", label: "Logout", icon: LogOut, permission: null, isLogout: true };
+  if (manageAdminsIndex >= 0) {
+    sidebarItems.splice(manageAdminsIndex + 1, 0, logoutItem);
+  } else {
+    sidebarItems.push(logoutItem);
+  }
+
   return (
     <>
       <aside className="admin-sidebar">
         <div className="admin-sidebar__brand"><Logo size={26} /><span>CMGC Admin</span></div>
-        {visibleItems.map((it) => (
-          <button key={it.id} onClick={() => setActive(it.id)} className={`admin-sidebar__item ${active === it.id ? "admin-sidebar__item--active" : ""}`}>
+        {sidebarItems.map((it) => (
+          <button
+            key={it.id}
+            onClick={() => (it.isLogout ? onLogout() : setActive(it.id))}
+            className={`admin-sidebar__item ${active === it.id ? "admin-sidebar__item--active" : ""} ${it.isLogout ? "admin-sidebar__item--logout" : ""}`}
+          >
             <it.icon size={17} /> {it.label}
           </button>
         ))}
         <div className="admin-sidebar__footer">
           <p className="admin-sidebar__user">{adminProfile?.name || adminProfile?.email || "Admin"}</p>
-          <button onClick={onLogout} className="admin-sidebar__logout"><LogOut size={16} /> Logout</button>
         </div>
       </aside>
       <nav className="admin-sidebar__mobile">
-        {visibleItems.map((it) => (
-          <button key={it.id} onClick={() => setActive(it.id)} className={`admin-sidebar__mobile-item ${active === it.id ? "admin-sidebar__mobile-item--active" : ""}`}>
+        {sidebarItems.map((it) => (
+          <button
+            key={it.id}
+            onClick={() => (it.isLogout ? onLogout() : setActive(it.id))}
+            className={`admin-sidebar__mobile-item ${active === it.id ? "admin-sidebar__mobile-item--active" : ""} ${it.isLogout ? "admin-sidebar__mobile-item--logout" : ""}`}
+          >
             <it.icon size={16} />{it.label}
           </button>
         ))}
-        <button onClick={onLogout} className="admin-sidebar__mobile-item admin-sidebar__mobile-item--logout"><LogOut size={16} /> Exit</button>
       </nav>
     </>
   );

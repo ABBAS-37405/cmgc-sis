@@ -5,7 +5,7 @@ import { PROGRAMS, SUBJECTS } from "../../lib/academics";
 import {
   DETAIL_GROUPS, DOCUMENT_FIELDS, detailsFrom, detailsToRow, matricPercentage,
 } from "../../lib/studentFields";
-import { findBFormClash, describeUniqueViolation } from "../../lib/bform";
+import { findBFormClash, describeUniqueViolation, normalizeBForm } from "../../lib/bform";
 import "./StudentDetail.css";
 
 const YEARS = ["1st Year", "2nd Year"];
@@ -93,11 +93,17 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
 
     setSaving(true);
     if (core.cnic.trim()) {
-      // Her own row is excluded, otherwise she clashes with herself.
-      const clash = await findBFormClash(core.cnic, { ignoreStudentId: student.id });
-      if (clash) {
-        setSaving(false);
-        return setError(clash);
+      const normalizedNewCnic = normalizeBForm(core.cnic);
+      const normalizedOldCnic = normalizeBForm(student.cnic);
+
+      // Skip the clash check when the B-Form has not changed; the student may
+      // already have an approved application recording the same number.
+      if (normalizedNewCnic !== normalizedOldCnic) {
+        const clash = await findBFormClash(core.cnic, { ignoreStudentId: student.id });
+        if (clash) {
+          setSaving(false);
+          return setError(clash);
+        }
       }
     }
 

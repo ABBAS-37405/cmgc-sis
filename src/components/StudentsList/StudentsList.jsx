@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, Image as ImageIcon } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, KeyRound, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, combinationsFor, formatCombination, groupHasChoice } from "../../lib/academics";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
@@ -140,6 +140,39 @@ const shareCredentials = (application, rollNo, password, waWindowRef) => {
   return true;
 };
 
+const resetStudentPassword = async (student) => {
+  if (!student) return;
+  const next = window.prompt(
+    `Set a new login password for ${student.name || "this student"} (minimum 6 characters):`,
+    "123456"
+  );
+  if (next === null) return;
+  const password = next.trim();
+  if (password.length < 6) {
+    alert("Password must be at least 6 characters.");
+    return;
+  }
+
+  setBusyRow(student.id);
+  const { error } = await supabase
+    .from("students")
+    .update({ password })
+    .eq("id", student.id);
+  setBusyRow(null);
+
+  if (error) {
+    alert("Could not reset password: " + error.message);
+    return;
+  }
+
+  setStudents((prev) => prev.map((s) => s.id === student.id ? { ...s, password } : s));
+  if (detailStudent?.student?.id === student.id) {
+    setDetailStudent((prev) => prev ? ({ ...prev, student: { ...prev.student, password } }) : prev);
+  }
+
+  alert(`${student.name || "Student"}'s password has been updated.`);
+};
+
 export default function StudentsList({ allowedPrograms = [], adminProfile = null }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
@@ -200,10 +233,39 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   // The plan that applies to the application currently open for review — drives
   // the admission-fee figure shown in the confirmation modal and the WhatsApp
   // message, so those can never drift from what is actually charged.
-  const selectedProgram = selected?.group_selected || selected?.program;
-  const selectedYear = selected?.year_of_study || "1st Year";
-  const activePlan = findPlan(feePlans, selectedYear, selectedProgram);
+  const selectedProgram = useMemo(() => selected?.group_selected || selected?.program, [selected]);
+  const selectedYear = useMemo(() => selected?.year_of_study || "1st Year", [selected]);
+  const activePlan = useMemo(() => findPlan(feePlans, selectedYear, selectedProgram), [feePlans, selectedYear, selectedProgram]);
   const admissionFee = Number(activePlan?.admission_fee ?? FALLBACK_ADMISSION_FEE);
+
+  const visiblePrograms = useMemo(
+    () => (isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS),
+    [isRestricted, allowedPrograms]
+  );
+
+  const filteredApps = useMemo(() => applications.filter((a) => {
+    const matchesSearch =
+      a.student_name?.toLowerCase().includes(search.toLowerCase()) ||
+      a.program?.toLowerCase().includes(search.toLowerCase()) ||
+      a.phone1?.includes(search);
+    const matchesYear = yearFilter === "Both" || (a.year_of_study || "1st Year") === yearFilter;
+    return matchesSearch && matchesYear;
+  }), [applications, search, yearFilter]);
+
+  const filteredStudents = useMemo(() => students.filter((s) => {
+    const matchesSearch =
+      s.name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.roll_no?.includes(search) ||
+      s.program?.toLowerCase().includes(search.toLowerCase());
+    const matchesYear = yearFilter === "Both" || (s.year_of_study || "1st Year") === yearFilter;
+    return matchesSearch && matchesYear;
+  }), [students, search, yearFilter]);
+
+  const applicationCounts = useMemo(() => ({
+    pending: applications.filter((a) => a.status === "Pending").length,
+    approved: applications.filter((a) => a.status === "Approved").length,
+    rejected: applications.filter((a) => a.status === "Rejected").length,
+  }), [applications]);
 
   // Every list below filters on deleted_at: a deleted row must vanish from both
   // the Applications and Enrolled tabs, and appear only in Deleted Items.
@@ -524,10 +586,7 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
 
     const year = new Date().getFullYear();
     const rollNo = "CMGC-" + year + "-" + String(Date.now()).slice(-5);
-    const defaultPassword = selected.bform
-      ? selected.bform.replace(/-/g, "").slice(-6)
-      : "cmgc123";
-
+    const defaultPassword = "123456";
     const { data: newStudent, error: studentError } = await supabase
       .from("students")
       .insert({
@@ -1172,9 +1231,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
         </div>
         {activeTab === "applications" && (
           <div className="sl-counts">
-            <span className="sl-badge sl-badge--pending"><Clock size={11} /> {applications.filter(a => a.status === "Pending").length} Pending</span>
-            <span className="sl-badge sl-badge--approved"><CheckCircle size={11} /> {applications.filter(a => a.status === "Approved").length} Approved</span>
-            <span className="sl-badge sl-badge--rejected"><XCircle size={11} /> {applications.filter(a => a.status === "Rejected").length} Rejected</span>
+            <span className="sl-badge sl-badge--pending"><Clock size={11} /> {applicationCounts.pending} Pending</span>
+            <span className="sl-badge sl-badge--approved"><CheckCircle size={11} /> {applicationCounts.approved} Approved</span>
+            <span className="sl-badge sl-badge--rejected"><XCircle size={11} /> {applicationCounts.rejected} Rejected</span>
           </div>
         )}
         {activeTab === "students" && (
@@ -1440,6 +1499,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
                         </button>
                         <button onClick={() => setDetailStudent({ student: s, edit: true })} className="sl-edit-btn">
                           <Save size={13} /> Edit
+                        </button>
+                        <button onClick={() => resetStudentPassword(s)} className="sl-reset-btn">
+                          <KeyRound size={13} /> Reset Password
                         </button>
                         <button onClick={() => openFeeModal(s)} className="sl-fee-btn">
                           <DollarSign size={13} /> Fee

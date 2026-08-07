@@ -54,6 +54,10 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
   const [program, setProgram] = useState(isRestricted ? (visiblePrograms[0] || ALL_PROGRAMS) : "Pre-Medical");
   const [yearFilter, setYearFilter] = useState("Both");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [downloadMonth, setDownloadMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -163,6 +167,168 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
 
   const absentees = students.filter((s) => records[s.id] === "Absent" || records[s.id] === "Leave");
 
+  const monthLabel = (monthKey) => {
+    const [year, month] = monthKey.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString("en-PK", { month: "long", year: "numeric" });
+  };
+
+  const monthOptions = () => {
+    const options = [];
+    const today = new Date();
+    for (let i = 0; i < 12; i += 1) {
+      const dt = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+      options.push({ key, label: monthLabel(key) });
+    }
+    return options;
+  };
+
+  const csvCell = (value) => `"${String(value || "").replace(/"/g, '""')}"`;
+
+  const downloadCsv = (rows, filename) => {
+    const csv = rows.map((row) => row.join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const fetchStudentsForSheet = async () => {
+    let query = supabase
+      .from("students")
+      .select("id, name, roll_no, program, year_of_study")
+      .is("deleted_at", null)
+      .order("program", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (program !== ALL_PROGRAMS) {
+      query = query.eq("program", program);
+    } else if (allowedPrograms.length > 0) {
+      query = query.in("program", visiblePrograms);
+    }
+
+    if (yearFilter !== "Both") {
+      query = query.eq("year_of_study", yearFilter);
+    }
+
+    const { data } = await query;
+    return data || [];
+  };
+
+  const fetchAttendanceForMonth = async (studentIds) => {
+    const [year, month] = downloadMonth.split("-").map(Number);
+    const dateFrom = `${year}-${String(month).padStart(2, "0")}-01`;
+    const dayCount = new Date(year, month, 0).getDate();
+    const dateTo = `${year}-${String(month).padStart(2, "0")}-${String(dayCount).padStart(2, "0")}`;
+
+    const { data } = await supabase
+      .from("attendance")
+      .select("student_id, date, status")
+      .in("student_id", studentIds)
+      .gte("date", dateFrom)
+      .lte("date", dateTo);
+
+    return data || [];
+  };
+
+  const buildAttendanceRows = (studentsList, attendanceData, emptySheet) => {
+    const [year, month] = downloadMonth.split("-").map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const attendanceMap = new Map();
+
+    attendanceData.forEach((row) => {
+      const day = Number(row.date.slice(8, 10));
+      attendanceMap.set(`${row.student_id}:${day}`, row.status);
+    });
+
+    const grouped = new Map();
+    const order = visiblePrograms.length > 0 ? visiblePrograms : PROGRAMS;
+    order.forEach((programKey) => grouped.set(programKey, []));
+    studentsList.forEach((student) => {
+      if (!grouped.has(student.program)) grouped.set(student.program, []);
+      grouped.get(student.program).push(student);
+    });
+
+    const rows = [];
+    grouped.forEach((studentsInProgram, programKey) => {
+      if (studentsInProgram.length === 0) return;
+      rows.push([csvCell(`${programKey}`), ...Array(daysInMonth + 5).fill("")]);
+      studentsInProgram.forEach((student) => {
+        const dayCells = [];
+        let present = 0;
+        let absent = 0;
+        let leave = 0;
+
+        for (let day = 1; day <= daysInMonth; day += 1) {
+          const status = attendanceMap.get(`${student.id}:${day}`);
+          let value = "";
+          if (!emptySheet && status) {
+            value = status === "Present" ? "P" : status === "Absent" ? "A" : status === "Leave" ? "L" : "";
+            if (value === "P") present += 1;
+            if (value === "A") absent += 1;
+            if (value === "L") leave += 1;
+          }
+          dayCells.push(csvCell(value));
+        }
+
+        rows.push([
+          csvCell(student.name),
+          csvCell(student.roll_no),
+          csvCell(student.program),
+          ...dayCells,
+          csvCell(""),
+          csvCell(emptySheet ? "" : present),
+          csvCell(emptySheet ? "" : absent),
+          csvCell(emptySheet ? "" : leave),
+        ]);
+      });
+      rows.push([]);
+    });
+
+    return rows;
+  };
+
+  const downloadAttendanceSheet = async (emptySheet = false) => {
+    const studentsList = await fetchStudentsForSheet();
+
+    if (studentsList.length === 0) {
+      alert("No students found for the selected year/program scope.");
+      return;
+    }
+
+    const attendanceData = emptySheet ? [] : await fetchAttendanceForMonth(studentsList.map((s) => s.id));
+    const [year, month] = downloadMonth.split("-").map(Number);
+    const title = emptySheet ? "Blank Attendance Sheet" : "Attendance Sheet";
+    const sheetTitle = `${title} - ${monthLabel(downloadMonth)} ${yearFilter}`;
+
+    const headerRows = [
+      [csvCell("Community Model Girls College")],
+      [csvCell(sheetTitle)],
+      [csvCell(`Month: ${monthLabel(downloadMonth)}`), csvCell(`Year filter: ${yearFilter}`)],
+      [csvCell(`Generated: ${new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}`)],
+      [],
+    ];
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => csvCell(String(i + 1)));
+    const headerRow = [
+      csvCell("Name"),
+      csvCell("Roll No"),
+      csvCell("Program"),
+      ...dayHeaders,
+      csvCell("Holiday"),
+      csvCell("Present"),
+      csvCell("Absent"),
+      csvCell("Leave"),
+    ];
+
+    const rows = [...headerRows, headerRow, ...buildAttendanceRows(studentsList, attendanceData, emptySheet)];
+    const filename = `${title.replace(/ /g, "_")}_${downloadMonth}_${yearFilter.replace(/ /g, "_")}.csv`;
+
+    downloadCsv(rows, filename);
+  };
+
   const notifyAbsentees = () => {
     if (absentees.length === 0) {
       alert("No students are marked Absent or Leave for this date.");
@@ -226,6 +392,14 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
         <div className="mark-attendance__field">
           <label>Date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="mark-attendance__field">
+          <label>Download month</label>
+          <select value={downloadMonth} onChange={(e) => setDownloadMonth(e.target.value)}>
+            {monthOptions().map((option) => (
+              <option key={option.key} value={option.key}>{option.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -296,6 +470,22 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
               disabled={absentees.length === 0}
               className="mark-attendance__notify-btn">
               <WhatsappIcon /> Notify Absent/Leave Parents ({absentees.length})
+            </button>
+          </div>
+          <div className="mark-attendance__download-controls">
+            <button
+              type="button"
+              onClick={() => downloadAttendanceSheet(false)}
+              className="mark-attendance__btn mark-attendance__download-btn"
+            >
+              Download Filled Attendance Sheet
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadAttendanceSheet(true)}
+              className="mark-attendance__btn mark-attendance__download-btn"
+            >
+              Download Blank Attendance Sheet
             </button>
           </div>
 

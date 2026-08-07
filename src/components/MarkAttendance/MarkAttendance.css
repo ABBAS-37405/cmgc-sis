@@ -45,3 +45,6 @@
 .mark-attendance__save { width: 100%; margin-top: 16px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
 .mark-attendance__save:disabled { opacity: 0.6; cursor: not-allowed; }
 .mark-attendance__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+.mark-attendance__download-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.mark-attendance__download-btn { font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
+.mark-attendance__download-btn:hover { background: var(--card); }

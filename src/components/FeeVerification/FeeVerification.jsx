@@ -279,7 +279,12 @@ export default function FeeVerification() {
 
   /* ---------- Fee collection (All Transactions tab) ---------- */
 
-  const successful = allTransactions.filter((t) => t.status === "Success");
+  const filteredTransactions =
+    yearFilter === "Both"
+      ? allTransactions
+      : allTransactions.filter((t) => t.fees?.students?.year_of_study === yearFilter);
+
+  const successful = filteredTransactions.filter((t) => t.status === "Success");
   const txMonthKeyOf = (t) => (t.created_at ? t.created_at.slice(0, 7) : "no-date");
   const txMonths = [...new Set(successful.map(txMonthKeyOf))].sort().reverse();
 
@@ -287,7 +292,9 @@ export default function FeeVerification() {
 
   // Collection is per month, not cumulative: "how much came in during September".
   const shownTransactions =
-    txView === "overall" ? allTransactions : allTransactions.filter((t) => txMonthKeyOf(t) === activeTxMonth);
+    txView === "overall"
+      ? filteredTransactions
+      : filteredTransactions.filter((t) => txMonthKeyOf(t) === activeTxMonth);
   const shownSuccessful = shownTransactions.filter((t) => t.status === "Success");
   const collected = shownSuccessful.reduce((s, t) => s + Number(t.amount || 0), 0);
   const payingStudents = new Set(
@@ -723,7 +730,17 @@ export default function FeeVerification() {
       {activeTab === "all" && (
         <div className="fee-v__unpaid">
           <div className="fee-v__filters">
-            <span className="fee-v__month-picker-label">Fee collection</span>
+            <div className="fee-v__year-filters" role="group" aria-label="Filter by class year">
+              {['1st Year', '2nd Year', 'Both'].map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setYearFilter(y)}
+                  className={"fee-v__year-btn " + (yearFilter === y ? "fee-v__year-btn--active" : "")}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
             <div className="fee-v__view-toggle" role="group" aria-label="Collection view">
               <button
                 onClick={() => setTxView("overall")}

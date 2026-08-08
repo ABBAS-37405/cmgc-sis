@@ -258,13 +258,18 @@ export default function FeeVerification() {
   // Every month that has something outstanding, oldest first.
   const unpaidMonths = [...new Set(filteredUnpaidFees.map(monthKeyOf))].sort();
 
+  // Get current month in YYYY-MM format
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
   // Picking a month answers "what is outstanding by the end of this month?", so
   // it accumulates everything due up to and including it. Later months are
   // deliberately excluded — those are what the Overall view is for. Derived
   // rather than stored, so the choice stays valid when the year filter changes.
   const activeUnpaidMonth = unpaidMonths.includes(unpaidMonth)
     ? unpaidMonth
-    : unpaidMonths[unpaidMonths.length - 1] || null;
+    : unpaidMonths.includes(currentMonth)
+      ? currentMonth
+      : unpaidMonths[unpaidMonths.length - 1] || null;
 
   const feesUpToMonth = activeUnpaidMonth
     ? filteredUnpaidFees.filter((f) => monthKeyOf(f) <= activeUnpaidMonth)

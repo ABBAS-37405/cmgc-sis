@@ -34,5 +34,23 @@ export default defineConfig(({ mode }) => {
     define: {
       __DEMO__: JSON.stringify(demo),
     },
+
+    // Dev server only — this has no effect on `npm run build`.
+    //
+    // These three are reached ONLY through `import()` inside a handler
+    // (`loadPdfLib()` in reportPdf.js/payslipPdf.js, `buildReportsZip()`), which
+    // is deliberate: they are ~500 kB together and must not sit in the portal
+    // chunks. But Vite's startup scanner only follows static imports, so it does
+    // not pre-bundle them — it discovers them the first time someone clicks
+    // "Download", re-runs the optimizer, and the page that is already open then
+    // fails that very import with "Failed to fetch dynamically imported module:
+    // .../deps/jspdf.js?v=<old hash>", because the hash it asked for has just
+    // been replaced.
+    //
+    // Naming them here pre-bundles them at server start, so the first click
+    // works instead of costing a reload.
+    optimizeDeps: {
+      include: ['jspdf', 'jspdf-autotable', 'jszip'],
+    },
   }
 })

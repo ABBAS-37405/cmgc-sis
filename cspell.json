@@ -1,0 +1,96 @@
+{
+  // Project dictionary for the Code Spell Checker (cSpell) editor extension.
+  //
+  // Nothing in this file changes how the app builds or runs — cSpell is an
+  // editor aid only. It exists because without it the extension reports a few
+  // hundred "Unknown word" warnings across the repo, and a warning list that is
+  // 100% false positives is a list nobody reads, which is how a real typo gets
+  // through.
+  //
+  // Every word below was collected by actually running cSpell over the repo,
+  // then checked by hand. They fall into six groups, and the first two are the
+  // ones that matter: "correcting" a Postgres catalog column or a DOM/library
+  // property name does not fix a typo, it breaks working code.
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    // --- PostgreSQL system catalogs and SQL keywords -------------------
+    // Real identifiers from pg_constraint / pg_attribute / pg_class. These are
+    // spelled by Postgres, not by us: pg_get_constraintdef(), c.conname, and so
+    // on. Renaming any of them breaks the migration files.
+    "attname", "attnum", "attrelid", "confdeltype", "confrelid", "conkey",
+    "conname", "conrelid", "constraintdef", "contype", "regclass", "relname",
+    "tablename", "timestamptz", "plpgsql", "ilike",
+    "upsert", "upserted", "upserts",
+    "PGRST", // PostgREST error codes, e.g. PGRST116 / PGRST205
+    // Needed as a whole word: cSpell splits on camelCase, so without this entry
+    // "PostgREST" is checked as "Postg" + "REST" and the first half is unknown.
+    "PostgREST", "Postgres",
+
+    // --- Web platform, libraries and build tooling --------------------
+    // DOM and library API names. `noopener`/`noreferrer` are rel values,
+    // `popstate` is the event backStack.js listens for, `halign` is a jspdf
+    // -autotable cell style, `youtu`/`videoseries` come from YouTube URLs.
+    "autotable", "halign", "noopener", "noreferrer", "popstate",
+    "preconnects", "videoseries", "youtu", "Supabase",
+
+    // --- This project's own identifiers -------------------------------
+    // Component and module shorthands used as CSS prefixes or local names.
+    "backguard", "bform", "classtests", "engg", "lmsm", "mrep", "myform",
+    "Pcts", "rollups", "srep", "tabnav", "tsalary", "txns",
+    "untick", "unticked", "unreviewed",
+
+    // --- Pakistani education, finance and administration --------------
+    "CMGC",                      // Community Model Girls College
+    "BISE", "FBISE", "HSSC",     // examination boards and certificate
+    "cnic",                      // national ID number
+    "Islamiat", "marksheet", "matric", "Numericals", "Passout",
+    "BAHL", "Easypaisa", "IBAN", "Raast",   // payment rails on the fee screens
+
+    // --- Urdu and Roman Urdu ------------------------------------------
+    // Some comments in this codebase are in Roman Urdu; that is normal here and
+    // documented in CLAUDE.md. The rest are words that appear in messages sent
+    // to parents, or job titles on the staff register.
+    "Assalamualaikum", "Chowkidar", "Naib", "Qasid",
+    "Jamia", "Mohallah", "Chak", "Ramzan", "Fitr", "Quaid",
+    "baqaya", "dekhein", "karein", "Kisi", "liye", "Mukammal", "Naya", "Nazm",
+    "Pehle",
+    "rabta", "sawal", "Tarjama", "tashreeh", "tayyar",
+
+    // --- British spellings --------------------------------------------
+    // Deliberate and consistent throughout the codebase, not slips.
+    "behaviour", "colour", "colours", "initialised", "instalments", "Itemised",
+    "memorise", "normalise", "normalised", "Parameterised", "Practise",
+    "recognised", "recognises", "summarise", "summarises", "unrecognised",
+
+    // --- Names and places ---------------------------------------------
+    // Staff and the invented students in the demo seed, plus Pakistani cities
+    // and districts used in address fields and board names.
+    "Aiman", "Akram", "Aleena", "Alishba", "Amna", "Anaya", "Anum", "Aqsa",
+    "Areeba", "Arooj", "Ashraf", "Aslam", "Ayat", "Barira", "Bibi", "Bisma",
+    "Chaudhry", "Ditta", "Duaa", "Emaan", "Eman", "Fiza", "Ghafoor", "Ghulam",
+    "Gulzar", "Habib", "Habiba", "Hafsa", "Haleema", "Hania", "Hina", "Hira",
+    "Hooria", "Humayun", "Hussain", "Ifra", "Ilyas", "Iman", "Iqra", "Javeria",
+    "Kainat", "Khadija", "Kinza", "Laiba", "Mahnoor", "Malik", "Manahil",
+    "Maryam", "Mehak", "Mehmood", "Minahil", "Mishal", "Momina", "Murtaza",
+    "Mustafa", "Nasreen", "Nawaz", "Nayab", "Nazir", "Neha", "Nimra", "Noor",
+    "Pervaiz", "Qaiser", "Rameen", "Rana", "Rehman", "Riaz", "Rida", "Rimsha",
+    "Sadia", "Sahar", "Sajjad", "Sakina", "Sarfraz", "Sawera", "Shahid",
+    "Shanza", "Siddiqa", "Sumaiya", "Tariq", "Tooba", "Warda", "Younas",
+    "Zahid", "Zainab", "Zoha", "Zoya", "Zulfiqar", "Zunaira",
+
+    "Abbottabad", "Bahawalpur", "Baltistan", "Bannu", "Gilgit", "Gulshan",
+    "Islampura", "Kohat", "Larkana", "Malakand", "Mardan", "Mirpur",
+    "Mirpurkhas", "Muzaffarabad", "Quetta", "Sahiwal", "Sargodha", "Sukkur"
+  ],
+
+  // Generated output and vendored code — never worth spell-checking.
+  "ignorePaths": [
+    "node_modules/**",
+    "dist/**",
+    "package-lock.json",
+    "public/images/**",
+    "_original-photos/**",
+    ".vite/**"
+  ]
+}

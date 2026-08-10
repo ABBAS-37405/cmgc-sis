@@ -29,6 +29,23 @@ export const GROUP_COMBINATIONS = {
 
 export const PROGRAMS = Object.keys(GROUP_COMBINATIONS);
 
+// Short forms for the few places a full group name will not fit — the printed
+// attendance sheet's Group column above all, where the days of the month
+// already eat the width. Display only: nothing is ever stored in this form, so
+// `students.program` and the RLS policies still see the full name.
+export const GROUP_SHORT = {
+  "Pre-Engineering": "Engg",
+  "Pre-Medical": "Med",
+  "ICS": "ICS",
+  "General Science": "G.Sc",
+  "FA-IT": "FA-IT",
+  "Humanities": "Hum",
+};
+
+export function shortGroup(group) {
+  return GROUP_SHORT[group] || group || "";
+}
+
 // Everything a group might study: every elective across its combinations, plus
 // the compulsory subjects. Marks-entry screens use this, because a teacher may
 // need to record any subject the group offers — not just one student's picks.

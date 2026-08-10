@@ -220,6 +220,16 @@ Three things about that tab:
 - **`reportPdf.js` is `import()`ed inside the download handler**, not at the top of the file. Portal statically imports every student tab, so a static import would put the PDF layer in the portal chunk for every student who never opens Reports.
 - **"Already shared by the college" comes from storage, not `report_log`.** The log is staff-only under RLS and the student is `anon`, so `fetchSharedReport()` asks the bucket instead: the path `monthly/<YYYY-MM>/<uuid>.pdf` is deterministic, so one `list` scoped to her own file name answers it without exposing anyone else's. Best effort like `fetchReportLog()` — a refused list just drops the line. That file carries whichever sections the admin ticked, which is why it is offered alongside the generated one rather than instead of it.
 
+### Spreadsheet downloads
+
+`src/lib/xlsx.js` writes a real `.xlsx` — an OOXML package assembled by hand and zipped with JSZip. It exists because the monthly attendance register is worked on in Google Sheets, and a CSV arrives there with no column widths, no frozen headings, no merged cells and no bold, so the sheet had to be re-formatted by hand every month.
+
+It follows the same two rules as `reportPdf.js` and `payslipPdf.js`: it **imports nothing that reaches `supabaseClient`** (so it can be driven from plain Node against fixtures), and **JSZip is `import()`ed inside `buildXlsxBlob`**, never at module top level — 96 kB has no business in the admin chunk for an admin who downloads nothing.
+
+Cells are primitives or `{ v, s }`, where `s` is an index into `S` — the style ids match the order of `cellXfs` in the styles part, so adding a style means appending to both. Two things about the format are unforgiving: the child elements of `<worksheet>` and `<styleSheet>` must appear in schema order (`sheetViews`, `sheetFormatPr`, `cols`, `sheetData`, `mergeCells`, `pageMargins`, `pageSetup`), and fill index 0 must be `none` with index 1 `gray125` before any fill of your own. Excel rejects the file outright rather than degrading if either is wrong.
+
+`MarkAttendance` is the only caller: **Attendance → Download Filled/Blank Attendance Sheet**. Its columns are `Rno` (last three digits — the rest of `CMGC-YYYY-NNNNN` is identical for everyone and costs three day columns of width), `Name`, `Group` (short forms from `GROUP_SHORT` in `academics.js`), then one column per day of the month under two merged heading rows — the date above, its weekday below, Sundays tinted — and P/A/L totals at the end. Nothing is stored in short form; `students.program` and the RLS policies still see the full group name.
+
 ### WhatsApp
 
 `src/lib/whatsapp.js` is the only place that builds a WhatsApp link — `StudentsList`, `MarkAttendance` and `FeeVerification` all go through it, and none of them keeps a local number normalizer.

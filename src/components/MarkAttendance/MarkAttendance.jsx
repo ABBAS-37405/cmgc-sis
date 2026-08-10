@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Check, UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS } from "../../lib/academics";
+import { PROGRAMS, shortGroup } from "../../lib/academics";
+import { downloadXlsx, S, columnRef } from "../../lib/xlsx";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import "./MarkAttendance.css";
 
@@ -187,17 +188,16 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     return options;
   };
 
-  const csvCell = (value) => `"${String(value || "").replace(/"/g, '""')}"`;
-
-  const downloadCsv = (rows, filename) => {
-    const csv = rows.map((row) => row.join(",")).join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  // The register is read column by column, so the roll number is shown as its
+  // last three digits — the part that actually differs between two girls in the
+  // same class. The full CMGC-YYYY-NNNNN is the same prefix for all of them and
+  // would cost the width three day columns need.
+  const shortRollNo = (rollNo) => {
+    const digits = String(rollNo || "").replace(/\D/g, "");
+    return digits ? digits.slice(-3) : String(rollNo || "");
   };
+
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const fetchStudentsForSheet = async () => {
     let query = supabase
@@ -237,9 +237,7 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     return data || [];
   };
 
-  const buildAttendanceRows = (studentsList, attendanceData, emptySheet) => {
-    const [year, month] = downloadMonth.split("-").map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
+  const buildAttendanceRows = (studentsList, attendanceData, emptySheet, daysInMonth) => {
     const attendanceMap = new Map();
 
     attendanceData.forEach((row) => {
@@ -258,7 +256,12 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     const rows = [];
     grouped.forEach((studentsInProgram, programKey) => {
       if (studentsInProgram.length === 0) return;
-      rows.push([csvCell(`${programKey}`), ...Array(daysInMonth + 5).fill("")]);
+      // Banded across the whole width, otherwise the group name reads as a
+      // stray grey cell in column A.
+      rows.push([
+        { v: programKey, s: S.BAND },
+        ...Array.from({ length: daysInMonth + 5 }, () => ({ v: "", s: S.BAND })),
+      ]);
       studentsInProgram.forEach((student) => {
         const dayCells = [];
         let present = 0;
@@ -274,18 +277,19 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
             if (value === "A") absent += 1;
             if (value === "L") leave += 1;
           }
-          dayCells.push(csvCell(value));
+          // Styled even when empty: a blank sheet still needs its boxes to
+          // write into by hand.
+          dayCells.push({ v: value, s: S.CENTER });
         }
 
         rows.push([
-          csvCell(student.name),
-          csvCell(student.roll_no),
-          csvCell(student.program),
+          { v: shortRollNo(student.roll_no), s: S.CENTER },
+          { v: student.name, s: S.TEXT },
+          { v: shortGroup(student.program), s: S.CENTER },
           ...dayCells,
-          csvCell(""),
-          csvCell(emptySheet ? "" : present),
-          csvCell(emptySheet ? "" : absent),
-          csvCell(emptySheet ? "" : leave),
+          { v: emptySheet ? "" : present, s: S.CENTER },
+          { v: emptySheet ? "" : absent, s: S.CENTER },
+          { v: emptySheet ? "" : leave, s: S.CENTER },
         ]);
       });
       rows.push([]);
@@ -304,33 +308,81 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
 
     const attendanceData = emptySheet ? [] : await fetchAttendanceForMonth(studentsList.map((s) => s.id));
     const [year, month] = downloadMonth.split("-").map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
     const title = emptySheet ? "Blank Attendance Sheet" : "Attendance Sheet";
     const sheetTitle = `${title} - ${monthLabel(downloadMonth)} ${yearFilter}`;
 
     const headerRows = [
-      [csvCell("Community Model Girls College")],
-      [csvCell(sheetTitle)],
-      [csvCell(`Month: ${monthLabel(downloadMonth)}`), csvCell(`Year filter: ${yearFilter}`)],
-      [csvCell(`Generated: ${new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}`)],
+      [{ v: "Community Model Girls College", s: S.TITLE }],
+      [{ v: sheetTitle, s: S.LABEL }],
+      [`Month: ${monthLabel(downloadMonth)}`, `Year filter: ${yearFilter}`],
+      [`Generated: ${new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}`],
       [],
     ];
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => csvCell(String(i + 1)));
-    const headerRow = [
-      csvCell("Name"),
-      csvCell("Roll No"),
-      csvCell("Program"),
-      ...dayHeaders,
-      csvCell("Holiday"),
-      csvCell("Present"),
-      csvCell("Absent"),
-      csvCell("Leave"),
+
+    // Two heading rows: the date on top, its weekday underneath. Rno / Name /
+    // Group are merged down through both. Sundays are tinted so a blank sheet
+    // shows at a glance which columns are not working days.
+    const dayNumbers = [];
+    const dayLabels = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const weekday = new Date(year, month - 1, day).getDay();
+      const style = weekday === 0 ? S.HEAD_OFF : S.HEAD;
+      dayNumbers.push({ v: day, s: style });
+      dayLabels.push({ v: DAY_NAMES[weekday], s: style });
+    }
+
+    const dateRow = [
+      { v: "Rno", s: S.HEAD },
+      { v: "Name", s: S.HEAD },
+      { v: "Group", s: S.HEAD },
+      ...dayNumbers,
+      { v: "P", s: S.HEAD },
+      { v: "A", s: S.HEAD },
+      { v: "L", s: S.HEAD },
+    ];
+    const weekdayRow = [
+      { v: "", s: S.HEAD },
+      { v: "", s: S.HEAD },
+      { v: "", s: S.HEAD },
+      ...dayLabels,
+      { v: "", s: S.HEAD },
+      { v: "", s: S.HEAD },
+      { v: "", s: S.HEAD },
     ];
 
-    const rows = [...headerRows, headerRow, ...buildAttendanceRows(studentsList, attendanceData, emptySheet)];
-    const filename = `${title.replace(/ /g, "_")}_${downloadMonth}_${yearFilter.replace(/ /g, "_")}.csv`;
+    const rows = [
+      ...headerRows,
+      dateRow,
+      weekdayRow,
+      ...buildAttendanceRows(studentsList, attendanceData, emptySheet, daysInMonth),
+    ];
 
-    downloadCsv(rows, filename);
+    // Rows are 1-indexed in the file; the two heading rows are the 6th and 7th.
+    const headRow = headerRows.length + 1;
+    const spannedColumns = [0, 1, 2, daysInMonth + 3, daysInMonth + 4, daysInMonth + 5];
+    const merges = spannedColumns.map((c) => `${columnRef(c)}${headRow}:${columnRef(c)}${headRow + 1}`);
+
+    const columns = [
+      { width: 6 },
+      { width: 26 },
+      { width: 8 },
+      ...Array.from({ length: daysInMonth }, () => ({ width: 3.8 })),
+      { width: 5 },
+      { width: 5 },
+      { width: 5 },
+    ];
+
+    const filename = `${title.replace(/ /g, "_")}_${downloadMonth}_${yearFilter.replace(/ /g, "_")}.xlsx`;
+
+    await downloadXlsx(filename, {
+      sheetName: monthLabel(downloadMonth),
+      rows,
+      columns,
+      merges,
+      // Below the headings, right of the Group column.
+      freeze: { row: headRow + 1, col: 3 },
+    });
   };
 
   const notifyAbsentees = () => {

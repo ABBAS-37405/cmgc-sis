@@ -109,6 +109,9 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   };
 
   useEffect(() => {
+    // Loading the list for the chosen filters is the point of this effect; the
+    // spinner it raises first is deliberate, not a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssignments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.join("|"), year, subject]);

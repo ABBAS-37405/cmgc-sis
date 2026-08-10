@@ -140,38 +140,59 @@ const shareCredentials = (application, rollNo, password, waWindowRef) => {
   return true;
 };
 
-const resetStudentPassword = async (student) => {
-  if (!student) return;
-  const next = window.prompt(
-    `Set a new login password for ${student.name || "this student"} (minimum 6 characters):`,
-    "123456"
+// Detail-view building blocks. They live outside the component so React keeps
+// the same component type across renders instead of remounting (and losing
+// focus/state) every time StudentsList re-renders.
+const Row = ({ label, value }) => (
+  <div className="sl-detail-row">
+    <span className="sl-detail-label">{label}</span>
+    <span className="sl-detail-value">{value || "—"}</span>
+  </div>
+);
+
+const DocumentRow = ({ label, url, docKey, status, canReview, onReview }) => {
+  if (!url) return null;
+  return (
+    <div className="sl-doc-row">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 {label}</a>
+      {canReview && (
+        <div className="sl-doc-review-btns">
+          <button
+            type="button"
+            onClick={() => onReview((prev) => ({ ...prev, [docKey]: "approved" }))}
+            className={"sl-doc-approve-btn" + (status === "approved" ? " sl-doc-approve-btn--active" : "")}
+          >
+            <CheckCircle size={12} /> Correct
+          </button>
+          <button
+            type="button"
+            onClick={() => onReview((prev) => ({ ...prev, [docKey]: "rejected" }))}
+            className={"sl-doc-reject-btn" + (status === "rejected" ? " sl-doc-reject-btn--active" : "")}
+          >
+            <XCircle size={12} /> Incorrect
+          </button>
+        </div>
+      )}
+    </div>
   );
-  if (next === null) return;
-  const password = next.trim();
-  if (password.length < 6) {
-    alert("Password must be at least 6 characters.");
-    return;
-  }
-
-  setBusyRow(student.id);
-  const { error } = await supabase
-    .from("students")
-    .update({ password })
-    .eq("id", student.id);
-  setBusyRow(null);
-
-  if (error) {
-    alert("Could not reset password: " + error.message);
-    return;
-  }
-
-  setStudents((prev) => prev.map((s) => s.id === student.id ? { ...s, password } : s));
-  if (detailStudent?.student?.id === student.id) {
-    setDetailStudent((prev) => prev ? ({ ...prev, student: { ...prev.student, password } }) : prev);
-  }
-
-  alert(`${student.name || "Student"}'s password has been updated.`);
 };
+
+const ApproveSection = ({ admissionFee, approving, rejecting, onReject, onApprove }) => (
+  <div className="sl-detail-actions">
+    <div className="sl-fee-notice">
+      <DollarSign size={16} />
+      <p>Admission fee of <strong>Rs {admissionFee.toLocaleString()}</strong> must be collected before approving. Mark every document above as Correct/Incorrect first — if any document is Incorrect, the application will be rejected with the reason sent to the student instead of being approved.</p>
+    </div>
+    <div className="sl-action-btns">
+      <button onClick={onReject} disabled={approving || rejecting} className="sl-reject-btn">
+        <XCircle size={16} /> Reject Application
+      </button>
+      <button onClick={onApprove} disabled={approving || rejecting} className="sl-approve-btn">
+        <CheckCircle size={16} /> {approving ? "Processing..." : rejecting ? "Rejecting..." : "Approve & Enroll"}
+      </button>
+    </div>
+  </div>
+);
 
 export default function StudentsList({ allowedPrograms = [], adminProfile = null }) {
   const isRestricted = allowedPrograms.length > 0;
@@ -389,6 +410,7 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchApplications();
     fetchStudents();
     fetchDeleted();
@@ -966,66 +988,48 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     );
   };
 
+  const resetStudentPassword = async (student) => {
+    if (!student) return;
+    const next = window.prompt(
+      `Set a new login password for ${student.name || "this student"} (minimum 6 characters):`,
+      "123456"
+    );
+    if (next === null) return;
+    const password = next.trim();
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
+    }
+
+    setBusyRow(student.id);
+    // RLS answers a refused update with success and zero rows, so ask for the
+    // row back rather than trusting a null error.
+    const { data: hit, error } = await supabase
+      .from("students")
+      .update({ password })
+      .eq("id", student.id)
+      .select("id");
+    setBusyRow(null);
+
+    if (error) {
+      alert("Could not reset password: " + error.message);
+      return;
+    }
+    if (!hit || hit.length === 0) { alert(WRITE_BLOCKED_HINT); return; }
+
+    setStudents((prev) => prev.map((s) => s.id === student.id ? { ...s, password } : s));
+    if (detailStudent?.student?.id === student.id) {
+      setDetailStudent((prev) => prev ? ({ ...prev, student: { ...prev.student, password } }) : prev);
+    }
+
+    alert(`${student.name || "Student"}'s password has been updated.`);
+  };
+
   const statusBadge = (status) => {
     if (status === "Approved") return <span className="sl-badge sl-badge--approved"><CheckCircle size={12} /> Approved</span>;
     if (status === "Rejected") return <span className="sl-badge sl-badge--rejected"><XCircle size={12} /> Rejected</span>;
     return <span className="sl-badge sl-badge--pending"><Clock size={12} /> Pending</span>;
   };
-
-  const Row = ({ label, value }) => (
-    <div className="sl-detail-row">
-      <span className="sl-detail-label">{label}</span>
-      <span className="sl-detail-value">{value || "—"}</span>
-    </div>
-  );
-
-  const DocumentRow = ({ label, url, docKey }) => {
-    if (!url) return null;
-    const status = docReview[docKey];
-    const canReview = selected?.status !== "Approved";
-    return (
-      <div className="sl-doc-row">
-        <a href={url} target="_blank" rel="noopener noreferrer" className="sl-doc-link">📄 {label}</a>
-        {canReview && (
-          <div className="sl-doc-review-btns">
-            <button
-              type="button"
-              onClick={() => setDocReview((prev) => ({ ...prev, [docKey]: "approved" }))}
-              className={"sl-doc-approve-btn" + (status === "approved" ? " sl-doc-approve-btn--active" : "")}
-            >
-              <CheckCircle size={12} /> Correct
-            </button>
-            <button
-              type="button"
-              onClick={() => setDocReview((prev) => ({ ...prev, [docKey]: "rejected" }))}
-              className={"sl-doc-reject-btn" + (status === "rejected" ? " sl-doc-reject-btn--active" : "")}
-            >
-              <XCircle size={12} /> Incorrect
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const ApproveSection = () => (
-    <div className="sl-detail-actions">
-      <div className="sl-fee-notice">
-        <DollarSign size={16} />
-        <p>Admission fee of <strong>Rs {admissionFee.toLocaleString()}</strong> must be collected before approving. Mark every document above as Correct/Incorrect first — if any document is Incorrect, the application will be rejected with the reason sent to the student instead of being approved.</p>
-      </div>
-      <div className="sl-action-btns">
-        <button onClick={handleReject} disabled={approving || rejecting} className="sl-reject-btn">
-          <XCircle size={16} /> Reject Application
-        </button>
-        <button onClick={handleApprove} disabled={approving || rejecting} className="sl-approve-btn">
-          <CheckCircle size={16} /> {approving ? "Processing..." : rejecting ? "Rejecting..." : "Approve & Enroll"}
-        </button>
-      </div>
-    </div>
-  );
-
-  const normalizedYear = (value) => value || "1st Year";
 
   // Application Detail View
   if (selected) {
@@ -1117,19 +1121,32 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
             </div>
             <div className="sl-detail-section">
               <h3>Uploaded Documents</h3>
-              <DocumentRow label="Student Photo" url={selected.photo_url} docKey="photo" />
-              <DocumentRow label="B-Form" url={selected.bform_doc_url} docKey="bform" />
-              <DocumentRow label="Father NIC" url={selected.father_id_doc_url} docKey="father_id" />
-              <DocumentRow label="Matric Marksheet" url={selected.marksheet_url} docKey="marksheet" />
-              <DocumentRow label="NOC" url={selected.noc_url} docKey="noc" />
-              <DocumentRow label="Verified Marksheet" url={selected.verified_marksheet_url} docKey="verified_marksheet" />
+              {DOCUMENTS.map((doc) => (
+                <DocumentRow
+                  key={doc.key}
+                  label={doc.label}
+                  url={selected[doc.urlField]}
+                  docKey={doc.key}
+                  status={docReview[doc.key]}
+                  canReview={selected?.status !== "Approved"}
+                  onReview={setDocReview}
+                />
+              ))}
               {!selected.photo_url && !selected.bform_doc_url && !selected.father_id_doc_url && !selected.marksheet_url && (
                 <p className="sl-no-docs">No documents uploaded</p>
               )}
             </div>
           </div>
 
-          {selected.status === "Pending" && <ApproveSection />}
+          {selected.status === "Pending" && (
+            <ApproveSection
+              admissionFee={admissionFee}
+              approving={approving}
+              rejecting={rejecting}
+              onReject={handleReject}
+              onApprove={handleApprove}
+            />
+          )}
           {selected.status === "Approved" && (
             <div className="sl-already-approved">
               <CheckCircle size={18} /> Student has been enrolled successfully.
@@ -1140,7 +1157,13 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
               <div className="sl-already-rejected">
                 <XCircle size={18} /> This application was rejected.
               </div>
-              <ApproveSection />
+              <ApproveSection
+                admissionFee={admissionFee}
+                approving={approving}
+                rejecting={rejecting}
+                onReject={handleReject}
+                onApprove={handleApprove}
+              />
             </div>
           )}
         </div>

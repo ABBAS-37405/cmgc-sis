@@ -18,10 +18,6 @@ export default function AdminOverview() {
   const [loading, setLoading] = useState(true);
   const [recentApplications, setRecentApplications] = useState([]);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
   const fetchStats = async () => {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
@@ -102,6 +98,11 @@ export default function AdminOverview() {
     if (recentApps) setRecentApplications(recentApps);
     setLoading(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchStats();
+  }, []);
 
   const statCards = [
     { label: "Total 1st Year", value: loading ? "..." : stats.firstYearStudents, icon: Users, cls: "admin-stat--blue" },

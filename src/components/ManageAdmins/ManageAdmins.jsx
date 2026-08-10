@@ -52,6 +52,7 @@ export default function ManageAdmins({ adminProfile }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAdmins();
   }, []);
 

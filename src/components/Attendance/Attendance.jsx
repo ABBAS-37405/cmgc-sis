@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import "./Attendance.css";
 
@@ -6,11 +6,7 @@ export default function Attendance({ studentId }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (studentId) fetchAttendance();
-  }, [studentId]);
-
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("attendance")
@@ -19,7 +15,14 @@ export default function Attendance({ studentId }) {
       .order("date", { ascending: false });
     if (data) setRecords(data);
     setLoading(false);
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    // Loading her records on mount is the whole point of this effect; the
+    // spinner it raises first is deliberate, not a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (studentId) fetchAttendance();
+  }, [studentId, fetchAttendance]);
 
   const present = records.filter((r) => r.status === "Present").length;
   const absent = records.filter((r) => r.status === "Absent").length;

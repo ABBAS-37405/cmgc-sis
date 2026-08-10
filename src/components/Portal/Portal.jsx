@@ -86,7 +86,7 @@ export default function Portal({ onExit }) {
         result = await response.json();
       } catch (parseError) {
         const text = await response.text();
-        throw new Error(text || "Failed to change password.");
+        throw new Error(text || "Failed to change password.", { cause: parseError });
       }
 
       if (!response.ok) throw new Error(result?.error || "Failed to change password.");

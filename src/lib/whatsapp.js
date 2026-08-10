@@ -90,10 +90,10 @@ export function openWhatsApp(number, message, windowRef) {
   const isDemo = (typeof __DEMO__ !== "undefined" && !!__DEMO__) || (typeof window !== "undefined" && !!window.__DEMO__);
   const demoNotice = "This is a demo version — please add a WhatsApp number to send messages.";
   if (isDemo) {
-    try { copyMessage(demoNotice); } catch (e) { /* ignore */ }
+    try { copyMessage(demoNotice); } catch { /* ignore */ }
     try {
       if (typeof window !== "undefined" && window.alert) window.alert(demoNotice);
-    } catch (e) {
+    } catch {
       // ignore
     }
     return true;

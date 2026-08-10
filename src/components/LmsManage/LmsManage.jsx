@@ -65,11 +65,19 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep the subject valid when the group selection changes underneath it.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (subjectOptions.length > 0 && !subjectOptions.includes(subject)) setSubject(subjectOptions[0]);
+    // Deliberately keyed on the group only: re-running when `subject` changes
+    // would fight the admin's own pick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programKey]);
 
   const toggleProgram = (program) => {

@@ -20,4 +20,10 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // server.js runs under Node, not the browser — it needs `process`, and none
+    // of the React rules apply to it.
+    files: ['server.js', '*.config.js', 'scripts/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ])

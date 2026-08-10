@@ -49,7 +49,9 @@ export default function MyForm({ student }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
 
   const canEdit = windowIsOpen(request);

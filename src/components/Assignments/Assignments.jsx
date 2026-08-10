@@ -55,6 +55,7 @@ export default function Assignments({ student }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (student?.id) fetchAssignments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
@@ -69,6 +70,8 @@ export default function Assignments({ student }) {
     setError("");
 
     const safe = file.name.replace(/[^\w.-]/g, "_");
+    // Runs on upload, never during render — Date.now() only keeps the path unique.
+    // eslint-disable-next-line react-hooks/purity
     const path = `submissions/${assignment.id}/${student.id}-${Date.now()}-${safe}`;
     const { error: upErr } = await supabase.storage.from("assignments").upload(path, file);
     if (upErr) {

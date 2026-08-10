@@ -73,6 +73,8 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
     setError("");
 
     const safe = file.name.replace(/[^\w.-]/g, "_");
+    // Runs on upload, never during render — Date.now() only keeps the path unique.
+    // eslint-disable-next-line react-hooks/purity
     const path = `students/${student.id}/${field.key}-${Date.now()}-${safe}`;
     const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, file);
     if (upErr) {

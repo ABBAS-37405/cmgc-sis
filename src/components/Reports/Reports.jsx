@@ -71,6 +71,7 @@ export default function Reports({ student }) {
     let cancelled = false;
     if (!student?.id) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError("");
     buildMonthlyReports([student], month, { examName })
@@ -79,6 +80,9 @@ export default function Reports({ student }) {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
+    // Keyed on her id rather than the whole `student` object, which is a fresh
+    // reference on every render of the portal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id, month, examName]);
 
   // Separate from the build above because it depends only on the month — which
@@ -86,6 +90,7 @@ export default function Reports({ student }) {
   useEffect(() => {
     let cancelled = false;
     if (!student?.id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShared(null);
     fetchSharedReport(student.id, month).then((f) => { if (!cancelled) setShared(f); });
     return () => { cancelled = true; };

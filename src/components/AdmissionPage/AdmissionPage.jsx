@@ -207,6 +207,9 @@ export default function AdmissionPage({ onBack }) {
 
     const uploadedUrls = {};
     if (photo) {
+      // Runs on submit, never during render — Date.now() only keeps the
+      // storage path unique.
+      // eslint-disable-next-line react-hooks/purity
       const path = `photos/${Date.now()}-photo-${photo.name}`;
       const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, photo);
       if (upErr) {
@@ -221,6 +224,7 @@ export default function AdmissionPage({ onBack }) {
     for (const doc of activeDocs) {
       const file = files[doc.key];
       if (!file) continue;
+      // eslint-disable-next-line react-hooks/purity
       const path = `docs/${Date.now()}-${doc.key}-${file.name}`;
       const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, file);
       if (upErr) {

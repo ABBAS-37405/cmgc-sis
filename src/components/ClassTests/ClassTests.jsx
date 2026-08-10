@@ -31,6 +31,7 @@ export default function ClassTests({ studentId }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (studentId) fetchTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);

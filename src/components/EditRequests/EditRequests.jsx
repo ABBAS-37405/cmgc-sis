@@ -43,7 +43,11 @@ export default function EditRequests({ allowedPrograms = [], onCountChange }) {
     if (onCountChange) onCountChange(scoped.filter((r) => r.status === "Pending").length);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const decide = async (request, decision, adminNote) => {
     setBusyId(request.id);

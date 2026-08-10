@@ -69,14 +69,6 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
   // first message. Each click here is a real user gesture, so nothing is blocked.
   const [waQueue, setWaQueue] = useState(null); // { list, index }
 
-  useEffect(() => {
-    fetchStudents();
-  }, [program, yearFilter]);
-
-  useEffect(() => {
-    loadAttendanceForDate();
-  }, [date, students, classesHeld]);
-
   const fetchStudents = async () => {
     setLoading(true);
     let query = supabase
@@ -129,6 +121,18 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     setAlreadyMarked(Object.keys(saved).length > 0);
     setSaved(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program, yearFilter]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAttendanceForDate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, students, classesHeld]);
 
   const setStatus = (id, status) => {
     setRecords((p) => ({ ...p, [id]: status }));

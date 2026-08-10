@@ -23,6 +23,7 @@ export default function Lms({ student }) {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchMaterialsForStudent(student).then((rows) => {
       if (cancelled) return;
@@ -30,6 +31,9 @@ export default function Lms({ student }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
+    // Keyed on the three fields the query actually uses, not the whole object —
+    // a fresh `student` reference each render would refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id, student?.program, student?.year_of_study]);
 
   // Only subjects that actually carry something — an empty tab per subject

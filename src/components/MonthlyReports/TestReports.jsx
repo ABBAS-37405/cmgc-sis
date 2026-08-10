@@ -48,6 +48,7 @@ export default function TestReports({ allowedPrograms = [] }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program, year]);

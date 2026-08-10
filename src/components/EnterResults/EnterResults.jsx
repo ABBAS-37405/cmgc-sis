@@ -53,19 +53,8 @@ export default function EnterResults({ allowedPrograms = [] }) {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchStudents();
-  }, [program, yearFilter]);
-
-  useEffect(() => {
     localStorage.setItem(EXAM_SELECTION_KEY, JSON.stringify({ examType, examDate, examMonth }));
   }, [examType, examDate, examMonth]);
-
-  // Re-load marks for the currently selected student whenever the exam
-  // changes, so marks typed under one exam never get saved under another.
-  useEffect(() => {
-    if (selected) selectStudent(selected);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examName]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -126,6 +115,20 @@ export default function EnterResults({ allowedPrograms = [] }) {
       setTotalMarks(emptyTotal);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program, yearFilter]);
+
+  // Re-load marks for the currently selected student whenever the exam
+  // changes, so marks typed under one exam never get saved under another.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (selected) selectStudent(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examName]);
 
   const saveResults = async () => {
     if (!selected) return;

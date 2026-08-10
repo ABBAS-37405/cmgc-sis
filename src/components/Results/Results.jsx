@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import "./Results.css";
 
@@ -8,11 +8,7 @@ export default function Results({ studentId }) {
   const [selectedExam, setSelectedExam] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (studentId) fetchResults();
-  }, [studentId]);
-
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("results")
@@ -27,7 +23,12 @@ export default function Results({ studentId }) {
       if (uniqueExams.length > 0) setSelectedExam(uniqueExams[0]);
     }
     setLoading(false);
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (studentId) fetchResults();
+  }, [studentId, fetchResults]);
 
   const filtered = results.filter((r) => r.exam_name === selectedExam);
   const totalObtained = filtered.reduce((a, r) => a + (r.marks_obtained || 0), 0);

@@ -110,6 +110,9 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
   };
 
   useEffect(() => {
+    // Loading the list for the chosen filters is the point of this effect; the
+    // spinner it raises first is deliberate, not a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.join("|"), year, subject]);

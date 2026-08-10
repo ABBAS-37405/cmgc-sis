@@ -19,10 +19,6 @@ export default function Notices() {
   const [category, setCategory] = useState("General");
   const [posting, setPosting] = useState(false);
 
-  useEffect(() => {
-    fetchNotices();
-  }, []);
-
   const fetchNotices = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -32,6 +28,11 @@ export default function Notices() {
     if (!error) setNotices(data);
     setLoading(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchNotices();
+  }, []);
 
   const addNotice = async () => {
     if (!newTitle.trim()) return;

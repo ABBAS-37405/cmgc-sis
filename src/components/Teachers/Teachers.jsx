@@ -1,19 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users } from "lucide-react";
+import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users, Wallet, HardHat } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
 import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher } from "../../lib/teacherAuth";
+import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
+import AdminStaff from "../AdminStaff/AdminStaff";
+import StaffPayroll from "../StaffPayroll/StaffPayroll";
 import "./Teachers.css";
 
 const emptyForm = {
   name: "",
   qualification: "",
   phone: "",
+  whatsapp: "",
   email: "",
   password: "",
+  employment_type: "Regular",
+  monthly_salary: "",
+  per_day_salary: "",
+  joining_date: "",
   subjects: [],
   programs: [],
   rights: ["class_tests"],
@@ -22,6 +30,8 @@ const emptyForm = {
 
 const SUB_TABS = [
   { id: "list", label: "Teachers", icon: Users },
+  { id: "staff", label: "Admin Staff", icon: HardHat },
+  { id: "payroll", label: "Attendance & Salary", icon: Wallet },
   { id: "tests", label: "Class Tests", icon: ClipboardList },
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "report", label: "Report", icon: BarChart3 },
@@ -37,6 +47,8 @@ const fmtDate = (d) =>
 export default function Teachers({ allowedPrograms = [] }) {
   const [tab, setTab] = useState("list");
   const [teachers, setTeachers] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [showPassword, setShowPassword] = useState(false);
@@ -59,8 +71,24 @@ export default function Teachers({ allowedPrograms = [] }) {
     setLoading(false);
   };
 
+  // The non-teaching register. Loaded here rather than inside AdminStaff because
+  // the payroll tab next door is built from the same list.
+  const fetchStaff = async () => {
+    setStaffLoading(true);
+    const { data, error: dbError } = await supabase
+      .from("staff")
+      .select("*")
+      .order("department")
+      .order("name");
+    if (dbError) setError(dbError.message);
+    setStaff(data || []);
+    setStaffLoading(false);
+  };
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTeachers();
+    fetchStaff();
   }, []);
 
   const resetForm = () => {
@@ -76,8 +104,13 @@ export default function Teachers({ allowedPrograms = [] }) {
       name: t.name || "",
       qualification: t.qualification || "",
       phone: t.phone || "",
+      whatsapp: t.whatsapp || "",
       email: t.email || "",
       password: "",
+      employment_type: employmentTypeOf(t),
+      monthly_salary: t.monthly_salary != null ? String(t.monthly_salary) : "",
+      per_day_salary: t.per_day_salary != null ? String(t.per_day_salary) : "",
+      joining_date: t.joining_date || "",
       subjects: Array.isArray(t.subjects) ? t.subjects : [],
       programs: Array.isArray(t.programs) ? t.programs : [],
       rights: Array.isArray(t.rights) ? t.rights : [],
@@ -94,12 +127,34 @@ export default function Teachers({ allowedPrograms = [] }) {
     if (!form.name.trim()) return setError("Teacher name is required.");
     if (form.subjects.length === 0) return setError("Select at least one subject this teacher teaches.");
 
+    // A pay rate is required, not optional: the salary screen has no way to guess
+    // one, and a teacher silently sitting at Rs 0 is worse than a blocked save.
+    const isVisiting = form.employment_type === "Visiting";
+    const rate = Number(isVisiting ? form.per_day_salary : form.monthly_salary);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      return setError(
+        isVisiting
+          ? "Enter the per-day salary for a Visiting teacher."
+          : "Enter the monthly salary for a Regular teacher."
+      );
+    }
+
     const needsLogin = !editing || !hasLogin;
     if (needsLogin) {
       if (!form.email.trim()) return setError("Login email is required.");
       if (!form.password.trim()) return setError("Login password is required.");
       if (form.password.trim().length < 6) return setError("Password must be at least 6 characters.");
     }
+
+    // Only the rate that belongs to the chosen type is kept — leaving the other one
+    // populated makes the Teachers list read as if she is on two pay shapes at once.
+    const pay = {
+      employment_type: form.employment_type,
+      monthly_salary: isVisiting ? null : rate,
+      per_day_salary: isVisiting ? rate : null,
+      joining_date: form.joining_date || null,
+      whatsapp: form.whatsapp.trim() || null,
+    };
 
     setSaving(true);
     try {
@@ -116,6 +171,7 @@ export default function Teachers({ allowedPrograms = [] }) {
           subjects: form.subjects,
           programs: form.programs,
           rights: form.rights,
+          ...pay,
         });
       } else {
         const { error: dbError } = await supabase
@@ -129,6 +185,7 @@ export default function Teachers({ allowedPrograms = [] }) {
             rights: form.rights,
             is_active: form.is_active,
             subject: form.subjects[0] || null,
+            ...pay,
           })
           .eq("id", editing.id);
         if (dbError) throw new Error(dbError.message);
@@ -201,6 +258,64 @@ export default function Teachers({ allowedPrograms = [] }) {
                 <div className="teachers__field">
                   <label>Phone</label>
                   <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="03XXXXXXXXX" />
+                </div>
+              </div>
+
+              <div className="teachers__form-row">
+                <div className="teachers__field">
+                  <label>WhatsApp (for salary slips)</label>
+                  <input
+                    value={form.whatsapp}
+                    onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                    placeholder="Leave blank to use the phone above"
+                  />
+                </div>
+                <div className="teachers__field">
+                  <label>Joining Date</label>
+                  <input type="date" value={form.joining_date} onChange={(e) => setForm({ ...form, joining_date: e.target.value })} />
+                </div>
+                <div className="teachers__field">
+                  <label>Employment Status *</label>
+                  <select
+                    value={form.employment_type}
+                    onChange={(e) => setForm({ ...form, employment_type: e.target.value })}
+                  >
+                    {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Only the rate that applies is shown — a Regular teacher has no per-day
+                  rate to enter, and a Visiting one has no monthly salary. */}
+              <div className="teachers__form-row">
+                {form.employment_type === "Visiting" ? (
+                  <div className="teachers__field">
+                    <label>Per Day Salary (Rs) *</label>
+                    <input
+                      type="number" min="0" step="any"
+                      value={form.per_day_salary}
+                      onChange={(e) => setForm({ ...form, per_day_salary: e.target.value })}
+                      placeholder="e.g. 1500"
+                    />
+                  </div>
+                ) : (
+                  <div className="teachers__field">
+                    <label>Monthly Salary (Rs) *</label>
+                    <input
+                      type="number" min="0" step="any"
+                      value={form.monthly_salary}
+                      onChange={(e) => setForm({ ...form, monthly_salary: e.target.value })}
+                      placeholder="e.g. 35000"
+                    />
+                  </div>
+                )}
+                <div className="teachers__field teachers__pay-note">
+                  <label>&nbsp;</label>
+                  <p className="teachers__hint">
+                    {form.employment_type === "Visiting"
+                      ? "Paid for the days she actually taught — holidays and absences are simply unpaid, so nothing is deducted."
+                      : `Full monthly salary. The first leave or absence each month is free; after that one day's pay (salary ÷ that month's working days) is deducted per day. Holidays never deduct.`}
+                  </p>
                 </div>
               </div>
 
@@ -323,6 +438,14 @@ export default function Teachers({ allowedPrograms = [] }) {
                     <div className="teachers__card-info">
                       <p className="teachers__name">
                         {t.name}
+                        <span className={`teachers__tag teachers__tag--${employmentTypeOf(t).toLowerCase()}`}>
+                          {employmentTypeOf(t)}
+                        </span>
+                        <span className="teachers__tag teachers__tag--pay">
+                          {employmentTypeOf(t) === "Visiting"
+                            ? `${formatMoney(t.per_day_salary)} / day`
+                            : `${formatMoney(t.monthly_salary)} / month`}
+                        </span>
                         {!t.user_id && <span className="teachers__tag teachers__tag--off">No login</span>}
                         {t.user_id && t.is_active === false && <span className="teachers__tag teachers__tag--off">Login disabled</span>}
                       </p>
@@ -330,6 +453,7 @@ export default function Teachers({ allowedPrograms = [] }) {
                         {t.email || "no login email"}
                         {t.qualification ? ` · ${t.qualification}` : ""}
                         {t.phone ? ` · ${t.phone}` : ""}
+                        {t.joining_date ? ` · joined ${fmtDate(t.joining_date)}` : ""}
                       </p>
                       <div className="teachers__tags">
                         <BookOpen size={12} className="teachers__tags-icon" />
@@ -378,6 +502,12 @@ export default function Teachers({ allowedPrograms = [] }) {
           </div>
         </>
       )}
+
+      {tab === "staff" && (
+        <AdminStaff staff={staff} loading={staffLoading} onChanged={fetchStaff} />
+      )}
+
+      {tab === "payroll" && <StaffPayroll teachers={teachers} staff={staff} />}
 
       {tab === "tests" && (
         <ClassTestEntry teacher={null} allowedPrograms={allowedPrograms} teacherOptions={teachers} />
@@ -429,6 +559,7 @@ function TeacherReport({ teachers }) {
   // Nothing is rendered from `tests`/`marks` while no teacher is picked, so they are
   // only refreshed on the async path — never cleared synchronously in the effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (teacherId) loadReport(teacherId);
   }, [teacherId]);
 

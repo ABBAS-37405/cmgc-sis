@@ -83,7 +83,9 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
-Tables in use: `students`, `admin_profiles`, `teachers`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
+- `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
+
+Tables in use: `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
 
 ### Fee flow
 
@@ -131,6 +133,43 @@ Class tests are two tables on purpose: `class_tests` is one row per test conduct
 A test can span groups: picking `"All Programs"` stores that literal in `class_tests.program` and the concrete groups it covered in `class_tests.programs[]`. Always build the roster from `programs[]`, falling back to `[program]` — reading `program` alone silently returns nobody for a combined test.
 
 `ClassTestEntry` is shared: pass a `teacher` and it locks to her subjects/programs and stamps her id on new tests; pass `teacher={null}` plus `teacherOptions` and it becomes the admin's full-range view.
+
+### Staff payroll — two rosters, one calculation
+
+The sidebar's **Teachers & Staff** tab covers everyone the college pays. There are **two rosters and they are separate tables on purpose**:
+
+- `teachers` — teaching staff, with subjects, programs, rights and a Supabase Auth login.
+- `staff` — everyone else: accounts, office, security, maintenance, transport. Guards, peons, drivers and sweepers live here. No `user_id`, no login, no subjects.
+
+A guard is not a `teachers` row with blank columns. Putting him there would drop him into every screen that builds a teacher dropdown by reading `teachers` — class tests, LMS, assignments, the class-test report. `src/lib/staff.js` owns the vocabulary: `STAFF_DEPARTMENTS` is fixed (the salary sheet groups by it), while `designation` is free text offered as a datalist, because a fixed job-title list would be the first thing to need a migration.
+
+**Only the payroll is shared**, and it works because nothing in `src/lib/payroll.js` reads a subject, a program or a right — an accountant and a physics teacher price identically. That is why its functions take a `person`, not a `teacher`, and why `ownerColumnFor(person)` (keyed on `person.kind`) is the single place that decides whether a row is written against `teacher_id` or `staff_id`. `staff_attendance` and `staff_salaries` each carry both columns with a **check constraint that exactly one is set**.
+
+`payroll.js` **imports nothing that reaches `supabaseClient`** — same discipline as `reportPdf.js`, and for the same reason: the arithmetic is the part that quietly goes wrong, so it has to be drivable from plain Node against fixtures in a repo with no test runner.
+
+Everyone is either **Regular** (fixed `monthly_salary`) or **Visiting** (a `per_day_salary` — the college's word, and the same arrangement as a daily-wage sweeper). The two are priced by different rules, not one rule with a parameter:
+
+- **Regular** — absence is a *deduction*. The first leave-or-absence each month is free (`FREE_ABSENCE_DAYS`); every day after costs `monthly_salary ÷ that month's working days`.
+- **Visiting** — `present days × per_day_salary`. There is no deduction, because nothing was owed for a day not worked.
+
+Working days are the month minus Sundays (`WEEKLY_OFF_DAY`, applied in code — Sundays are never rows) minus `college_holidays`. That one definition is what produces the asymmetry the college asked for: a holiday cannot touch a Regular salary because it was never a working day, and is unpaid for a Visiting employee because they were not present. Neither is a special case in the code.
+
+Four rules that are easy to break:
+
+- **An unmarked day is not an absence.** It is counted as `unmarkedDays` and shown, but never deducted. Reading "nobody filled the register" as "they didn't come" takes money off someone who was at work — the same principle as `notMarked` never printing as 0 in a test report.
+- **Saving the register is two upserts, not one.** A teacher row conflicts on `(teacher_id, date)` and a staff row on `(staff_id, date)`, and PostgREST takes one conflict target per request. `DailyRegister.save()` splits the batch for exactly this reason; merging it silently drops one side.
+- **Everything on the Salary screen is recomputed from `staff_attendance` on open.** `staff_salaries` stores only what cannot be derived — `bonus`, `other_deduction`, `notes` — plus the payment record and a snapshot of what was shown. Correcting an attendance mark therefore corrects the payslip immediately.
+- **`status` is derived and written back** from `paid_amount` against `net_payable`, exactly like a fee's. `salaryStatusFor()` is the only definition; do not re-derive it in a component.
+
+**The teacher portal has a "My Salary" tab** (`src/components/TeacherSalary/TeacherSalary.jsx`), so a teacher can see her own attendance, the working behind her figure, her payment history and download her payslip. Three things about it:
+
+- **It is not in `NAV_ITEMS` and is never filtered by `hasTeacherRight`.** A right is something the admin grants; her own pay is not the admin's to withhold. It is appended to the nav unconditionally, and it is checked before the "no duties assigned" branch so a teacher with no rights yet still lands on a working portal.
+- **It needed no new policy.** `staff_attendance_select` and `staff_salaries_select` already allow `is_this_teacher(teacher_id)`, so her queries return her rows and nobody else's — the database scopes this, not the UI.
+- **It recomputes rather than reads.** Same `computeSalary()` on the same attendance rows as the admin sheet, so the slip she downloads cannot disagree with the sheet the office works from — neither of them stores the answer.
+
+`src/lib/payslipPdf.js` renders the slip and follows both `reportPdf.js` rules: **jsPDF is `import()`ed inside the handler**, never at module top level (it is ~400 kB, and both the teacher portal and the admin portal statically import their tabs — a top-level import would put the PDF engine in both chunks for everyone who never downloads one), and it **reaches nothing that touches `supabaseClient`**, taking a finished `calc` so it can be driven from plain Node against fixtures. The admin's "Payslip" button on each salary card calls the identical function, so the office and the employee hand out the same document.
+
+Three screens, all sub-tabs of Teachers & Staff and all gated by the existing `teachers` permission (no new `PERMISSION_KEYS` entry, so the RLS built on it is unchanged): `Teachers.jsx` (teaching roster, and it owns the `staff` fetch because payroll needs the same list), `AdminStaff/AdminStaff.jsx` (non-teaching roster — plain Supabase writes, no server round trip, since nobody in it has a login), and `StaffPayroll/StaffPayroll.jsx` (the daily register plus the monthly sheet). Writes go through `.select(...)` and treat zero rows as failure — a refused RLS write returns success, see `WRITE_BLOCKED_HINT`. Bulk WhatsApp is a **queue, not a loop**, like every other bulk send in the project. `buildSalaryMessage()` spells out the working rather than just the total, because a slip that only states a figure invites the argument it exists to prevent.
 
 ### Reports
 

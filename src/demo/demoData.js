@@ -17,6 +17,9 @@
  */
 
 import { PROGRAMS, SUBJECTS, YEARS } from "../lib/academics";
+// Safe to import, unlike lib/feePlans below: payroll reaches nothing that touches
+// the Supabase client, so there is no cycle back into the client being built.
+import { computeSalary, salaryRowFor } from "../lib/payroll";
 
 /* --------------------------------------------------------------- plumbing */
 
@@ -120,26 +123,32 @@ export function buildDemoDatabase() {
     attendance: [], results: [], class_tests: [], class_test_marks: [],
     assignments: [], assignment_submissions: [], fees: [], payment_transactions: [],
     notices: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
-    report_log: [],
+    report_log: [], staff: [], staff_attendance: [], college_holidays: [], staff_salaries: [],
   };
 
   /* ------------------------------------------------------------- staff */
 
+  // Both pay shapes are represented on purpose — a payroll screen showing only
+  // Regular staff demonstrates half the feature.
   const teacherSeed = [
     { name: "Ayesha Siddiqa", email: "ayesha.teacher@cmgc.demo", subject: "Physics",
       subjects: ["Physics", "Chemistry"], programs: ["Pre-Engineering", "Pre-Medical"],
-      rights: ["class_tests", "view_students", "attendance", "results", "lms"], qualification: "M.Phil Physics" },
+      rights: ["class_tests", "view_students", "attendance", "results", "lms"], qualification: "M.Phil Physics",
+      employment_type: "Regular", monthly_salary: 48000 },
     { name: "Fatima Noor", email: "fatima.teacher@cmgc.demo", subject: "English",
       subjects: ["English", "Urdu", "Islamiat"], programs: [],
-      rights: ["class_tests", "view_students", "lms"], qualification: "M.A English" },
+      rights: ["class_tests", "view_students", "lms"], qualification: "M.A English",
+      employment_type: "Regular", monthly_salary: 36000 },
     { name: "Hina Tariq", email: "hina.teacher@cmgc.demo", subject: "Computer Science",
       subjects: ["Computer Science", "Mathematics"], programs: ["ICS", "General Science", "FA-IT"],
-      rights: ["class_tests", "view_students", "attendance", "results", "lms"], qualification: "MCS" },
+      rights: ["class_tests", "view_students", "attendance", "results", "lms"], qualification: "MCS",
+      employment_type: "Visiting", per_day_salary: 1800 },
     // No user_id: a teacher on the register who has never been given a login.
     // The Teachers tab shows "Create Login" for exactly this row.
     { name: "Sadia Iqbal", email: null, subject: "Biology",
       subjects: ["Biology"], programs: ["Pre-Medical"],
-      rights: ["class_tests"], qualification: "M.Sc Botany", noLogin: true },
+      rights: ["class_tests"], qualification: "M.Sc Botany", noLogin: true,
+      employment_type: "Visiting", per_day_salary: 1500 },
   ];
 
   teacherSeed.forEach((t, i) => {
@@ -154,8 +163,55 @@ export function buildDemoDatabase() {
       rights: t.rights,
       qualification: t.qualification,
       phone: `0300${between(rand, 1000000, 9999999)}`,
+      whatsapp: null,
+      employment_type: t.employment_type,
+      monthly_salary: t.monthly_salary ?? null,
+      per_day_salary: t.per_day_salary ?? null,
+      joining_date: iso(daysAgo(400 + i * 60)),
       is_active: true,
       created_at: at(daysAgo(400)),
+    });
+  });
+
+  // Non-teaching staff — a separate register, not `teachers` rows. Every
+  // department is represented once so the payroll filter has something to filter,
+  // and both pay shapes appear: salaried office staff, daily-wage support staff.
+  const staffSeed = [
+    { name: "Muhammad Aslam", designation: "Accountant", department: "Accounts",
+      employment_type: "Regular", monthly_salary: 42000 },
+    { name: "Nasreen Bibi", designation: "Office Clerk", department: "Administration",
+      employment_type: "Regular", monthly_salary: 26000 },
+    { name: "Abdul Rehman", designation: "Librarian", department: "Academic Support",
+      employment_type: "Regular", monthly_salary: 24000 },
+    { name: "Ghulam Murtaza", designation: "Security Guard", department: "Security",
+      employment_type: "Regular", monthly_salary: 22000 },
+    { name: "Allah Ditta", designation: "Peon (Naib Qasid)", department: "Maintenance",
+      employment_type: "Visiting", per_day_salary: 900 },
+    { name: "Sakina Bibi", designation: "Sweeper", department: "Maintenance",
+      employment_type: "Visiting", per_day_salary: 750 },
+    { name: "Muhammad Younas", designation: "Driver", department: "Transport",
+      employment_type: "Regular", monthly_salary: 28000 },
+  ];
+
+  staffSeed.forEach((s, i) => {
+    db.staff.push({
+      id: uid(50 + i),
+      name: s.name,
+      father_name: pick(rand, FATHER_NAMES),
+      cnic: `35202-${between(rand, 1000000, 9999999)}-${between(rand, 1, 9)}`,
+      designation: s.designation,
+      department: s.department,
+      phone: `0301${between(rand, 1000000, 9999999)}`,
+      whatsapp: null,
+      address: pick(rand, CITY_AREAS),
+      emergency_contact: null,
+      employment_type: s.employment_type,
+      monthly_salary: s.monthly_salary ?? null,
+      per_day_salary: s.per_day_salary ?? null,
+      joining_date: iso(daysAgo(between(rand, 200, 900))),
+      is_active: true,
+      notes: null,
+      created_at: at(daysAgo(300)),
     });
   });
 
@@ -589,6 +645,89 @@ export function buildDemoDatabase() {
       created_at: at(daysAgo(20)),
     });
   });
+
+  /* ------------------------------------------------------ staff payroll */
+
+  // One declared holiday last month, because it is the clearest way to show what
+  // a holiday does: nothing at all to a Regular teacher's salary, one unpaid day
+  // to a Visiting one. Sundays are never seeded — the weekly off lives in code.
+  const holidayDate = iso(new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 14));
+  db.college_holidays.push({ date: holidayDate, title: "Public Holiday", created_at: at(daysAgo(45)) });
+
+  const now = today();
+  const payrollMonths = [lastMonth, new Date(now.getFullYear(), now.getMonth(), 1)];
+
+  // Teachers and staff share one register, distinguished only by which foreign
+  // key is filled in — the same shape the database enforces.
+  const payrollPeople = [
+    ...db.teachers.map((t) => ({ row: t, kind: "teacher", column: "teacher_id" })),
+    ...db.staff.map((s) => ({ row: s, kind: "staff", column: "staff_id" })),
+  ];
+
+  payrollPeople.forEach(({ row: person, column }, ti) => {
+    payrollMonths.forEach((monthStart) => {
+      const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const d = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+        if (d > now) break;              // the running month is only marked up to today
+        if (d.getDay() === 0) continue;  // Sunday — the weekly off is never a row
+        const date = iso(d);
+        if (date === holidayDate) continue;
+
+        // Enough absence to make the free-day and deduction rules visible without
+        // making the staff look unreliable — a day or two off each month.
+        const roll = rand();
+        let status = "Present";
+        if (roll > 0.97) status = "Absent";
+        else if (roll > 0.945) status = "Leave";
+        else if (roll > 0.935) status = "Half Day";
+
+        db.staff_attendance.push({
+          id: uid(40 + ti),
+          teacher_id: null,
+          staff_id: null,
+          [column]: person.id,
+          date,
+          status,
+          remarks: null,
+          created_at: at(d),
+        });
+      }
+    });
+  });
+
+  // Last month is half settled: a few are paid, the rest are outstanding so the
+  // Salary screen opens with something left to do. One teacher and one staff
+  // member are among the paid, so both sides of the sheet are represented. The
+  // figures come from the app's own calculation — the demo cannot disagree with
+  // itself.
+  [payrollPeople[0], payrollPeople[1], payrollPeople[4], payrollPeople[5]]
+    .filter(Boolean)
+    .forEach(({ row: personRow, kind }) => {
+      const person = { ...personRow, kind };
+      const attendance = {};
+      db.staff_attendance
+        .filter((r) => (kind === "staff" ? r.staff_id : r.teacher_id) === person.id && r.date.startsWith(monthKey))
+        .forEach((r) => { attendance[r.date] = r.status; });
+
+      const calc = computeSalary({ person, attendance, monthKey, holidays: [holidayDate] });
+
+      db.staff_salaries.push({
+        id: uid(41),
+        teacher_id: null,
+        staff_id: null,
+        ...salaryRowFor(person, calc, {
+          paid_amount: calc.netPayable,
+          status: "Paid",
+          paid_on: iso(daysAgo(between(rand, 3, 9))),
+          payment_method: "Cash",
+          notes: null,
+          recorded_by: db.admin_profiles[0].user_id,
+        }),
+        created_at: at(daysAgo(10)),
+        updated_at: at(daysAgo(10)),
+      });
+    });
 
   db.students.forEach((s) => delete s._enrolledDaysAgo);
   return db;

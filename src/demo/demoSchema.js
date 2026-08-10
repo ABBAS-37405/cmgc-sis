@@ -32,6 +32,10 @@ export const TABLES = [
   "profile_edit_requests",
   "fee_plans",
   "report_log",
+  "staff",
+  "staff_attendance",
+  "college_holidays",
+  "staff_salaries",
 ];
 
 /**
@@ -82,6 +86,17 @@ export const RELATIONS = {
   report_log: {
     students: { kind: "one", table: "students", localKey: "student_id", foreignKey: "id" },
   },
+  // Both carry teacher_id AND staff_id, exactly one of them set per row. Only
+  // the teacher side is embeddable here because that is the only one any query
+  // embeds; the payroll screen joins nothing, it merges the two rosters in JS.
+  staff_attendance: {
+    teachers: { kind: "one", table: "teachers", localKey: "teacher_id", foreignKey: "id" },
+    staff: { kind: "one", table: "staff", localKey: "staff_id", foreignKey: "id" },
+  },
+  staff_salaries: {
+    teachers: { kind: "one", table: "teachers", localKey: "teacher_id", foreignKey: "id" },
+    staff: { kind: "one", table: "staff", localKey: "staff_id", foreignKey: "id" },
+  },
 };
 
 /** Columns stamped with the current time on insert, per table. */
@@ -102,4 +117,8 @@ export const TIMESTAMP_DEFAULTS = {
   lms_materials: ["created_at"],
   profile_edit_requests: ["created_at"],
   report_log: ["created_at"],
+  staff: ["created_at"],
+  staff_attendance: ["created_at"],
+  college_holidays: ["created_at"],
+  staff_salaries: ["created_at"],
 };

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock } from "lucide-react";
+import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet } from "lucide-react";
 import Sidebar from "../Sidebar/Sidebar";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
 import LmsManage from "../LmsManage/LmsManage";
 import MarkAttendance from "../MarkAttendance/MarkAttendance";
 import EnterResults from "../EnterResults/EnterResults";
+import TeacherSalary from "../TeacherSalary/TeacherSalary";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
@@ -23,12 +24,22 @@ const NAV_ITEMS = [
   { id: "results", label: "Results", icon: FileText },
 ];
 
+/**
+ * Her own pay. Deliberately NOT in NAV_ITEMS and never filtered by
+ * `hasTeacherRight`: a right is something the admin grants, and a teacher's own
+ * salary is not the admin's to withhold. The scoping that matters is in the
+ * database — `staff_salaries_select` only returns rows where
+ * `is_this_teacher(teacher_id)`, so she sees hers and nobody else's.
+ */
+const SALARY_ITEM = { id: "salary", label: "My Salary", icon: Wallet };
+
 export default function TeacherPortal({ teacher, onLogout }) {
   const allowedPrograms = teacherPrograms(teacher);
   const subjects = teacherSubjects(teacher);
 
-  const items = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
-  const [active, setActive] = useState(items[0]?.id || "none");
+  const dutyItems = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
+  const items = [...dutyItems, SALARY_ITEM];
+  const [active, setActive] = useState(dutyItems[0]?.id || SALARY_ITEM.id);
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
 
@@ -86,7 +97,11 @@ export default function TeacherPortal({ teacher, onLogout }) {
           </div>
         </div>
 
-        {items.length === 0 ? (
+        {/* Salary is checked first: it is always available, so a teacher with no
+            duties assigned yet still has a working portal rather than a dead end. */}
+        {active === "salary" ? (
+          <TeacherSalary teacher={teacher} />
+        ) : dutyItems.length === 0 ? (
           <div className="teacher-portal__blocked">
             <p>No duties have been assigned to your account yet.</p>
             <p className="teacher-portal__blocked-hint">Ask the admin to give you rights from the Teachers tab.</p>
@@ -140,6 +155,7 @@ function TeacherStudents({ allowedPrograms }) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program, yearFilter]);

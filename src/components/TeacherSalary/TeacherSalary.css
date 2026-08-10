@@ -1,0 +1,59 @@
+.tsalary { display: flex; flex-direction: column; gap: 14px; }
+
+.tsalary__toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.tsalary__field { display: flex; flex-direction: column; gap: 4px; min-width: 190px; }
+.tsalary__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
+.tsalary__field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+.tsalary__download { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 8px; background: var(--accent); color: #fff; }
+.tsalary__download:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.tsalary__error { color: #dc2626; font-size: 13px; line-height: 1.5; }
+.tsalary__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 28px 0; }
+
+.tsalary__card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.tsalary__card--empty { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--subtext); padding: 40px 20px; }
+.tsalary__card--empty p { font-size: 14px; color: var(--text); }
+
+.tsalary__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tsalary__label { font-size: 12px; color: var(--subtext); }
+.tsalary__net { font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1.2; margin-top: 2px; }
+.tsalary__terms { font-size: 12px; color: var(--subtext); margin-top: 8px; line-height: 1.6; }
+.tsalary__terms--due { color: #b45309; font-weight: 600; }
+
+.tsalary__badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; border-radius: 999px; padding: 4px 11px; border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
+.tsalary__badge--paid { color: #15803d; border-color: #86efac; background: #f0fdf4; }
+.tsalary__badge--unpaid { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+.tsalary__badge--partially-paid { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+
+.tsalary__section-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+
+.tsalary__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.tsalary__stat { border: 1px solid var(--border); border-radius: 10px; padding: 12px 10px; background: var(--bg); text-align: center; }
+.tsalary__stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+.tsalary__stat-value--p { color: #16a34a; }
+.tsalary__stat-value--a { color: #b91c1c; }
+.tsalary__stat-value--l { color: #b45309; }
+.tsalary__stat-value--h { color: #6d28d9; }
+.tsalary__stat-label { font-size: 11px; color: var(--subtext); margin-top: 3px; }
+
+.tsalary__note { font-size: 12px; color: var(--subtext); line-height: 1.6; margin-top: 12px; }
+
+.tsalary__table-wrap { overflow-x: auto; }
+.tsalary__table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tsalary__table td { padding: 9px 4px; color: var(--text); border-bottom: 1px solid var(--border); }
+.tsalary__table td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+.tsalary__table tr:last-child td { border-bottom: none; }
+.tsalary__table-total td { border-top: 2px solid var(--accent); border-bottom: none !important; padding-top: 11px; font-size: 15px; font-weight: 700; color: var(--accent); }
+.tsalary__amount--minus { color: #b91c1c; }
+.tsalary__amount--plus { color: #16a34a; }
+
+.tsalary__table--history { min-width: 520px; }
+.tsalary__table--history th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--subtext); font-weight: 600; padding: 9px 4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tsalary__table--history th:last-child, .tsalary__table--history td:last-child { text-align: left; font-weight: 400; }
+.tsalary__table--history td { white-space: nowrap; font-weight: 400; }
+.tsalary__table--history td:nth-child(2), .tsalary__table--history td:nth-child(3) { font-weight: 600; }
+
+@media (max-width: 640px) {
+  .tsalary__net { font-size: 26px; }
+  .tsalary__download { width: 100%; justify-content: center; }
+}

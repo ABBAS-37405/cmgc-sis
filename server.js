@@ -297,7 +297,10 @@ app.post('/api/teacher/create', async (req, res) => {
     return res.status(500).json({ error: 'Teacher management is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.' });
   }
 
-  const { accessToken, teacherId, email, password, name, qualification, phone, subjects, programs, rights } = req.body || {};
+  const {
+    accessToken, teacherId, email, password, name, qualification, phone, subjects, programs, rights,
+    employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+  } = req.body || {};
 
   const callerId = await requireTeacherManager(accessToken);
   if (!callerId) {
@@ -332,6 +335,13 @@ app.post('/api/teacher/create', async (req, res) => {
     rights: Array.isArray(rights) ? rights : [],
     // Keep the legacy single-subject column populated for anything still reading it.
     subject: Array.isArray(subjects) && subjects.length > 0 ? subjects[0] : null,
+    // Payroll. `employment_type` is constrained to these two values in the database,
+    // so anything else is coerced rather than allowed to fail the insert.
+    employment_type: employment_type === 'Visiting' ? 'Visiting' : 'Regular',
+    monthly_salary: monthly_salary == null || monthly_salary === '' ? null : Number(monthly_salary),
+    per_day_salary: per_day_salary == null || per_day_salary === '' ? null : Number(per_day_salary),
+    joining_date: joining_date || null,
+    whatsapp: whatsapp || null,
   };
 
   const { data: teacherRow, error: rowError } = teacherId

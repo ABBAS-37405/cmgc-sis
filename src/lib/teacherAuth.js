@@ -70,9 +70,16 @@ async function callTeacherApi(path, body) {
 }
 
 // `teacherId` attaches a login to a teacher record that already exists; omit it to
-// create the login and the record together.
-export function createTeacherLogin({ teacherId, email, password, name, qualification, phone, subjects, programs, rights }) {
-  return callTeacherApi("/api/teacher/create", { teacherId, email, password, name, qualification, phone, subjects, programs, rights });
+// create the login and the record together. The pay fields travel with it because
+// this route, not the browser, is what writes the row in that case.
+export function createTeacherLogin({
+  teacherId, email, password, name, qualification, phone, subjects, programs, rights,
+  employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+}) {
+  return callTeacherApi("/api/teacher/create", {
+    teacherId, email, password, name, qualification, phone, subjects, programs, rights,
+    employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+  });
 }
 
 export function resetTeacherPassword(teacherId, password) {

@@ -11,7 +11,9 @@ const NAV_ITEMS = [
   { id: "fee", label: "Fee Verification", icon: Wallet, permission: "fee" },
   { id: "notices", label: "Notices", icon: Bell, permission: "notices" },
   { id: "lms", label: "LMS", icon: BookOpen, permission: "lms" },
-  { id: "teachers", label: "Teachers", icon: BookOpen, permission: "teachers" },
+  // Also holds the non-teaching register and payroll — same `teachers` permission,
+  // so no new key was added to PERMISSION_KEYS or the RLS policies built on it.
+  { id: "teachers", label: "Teachers & Staff", icon: BookOpen, permission: "teachers" },
   { id: "reports", label: "Monthly Reports", icon: FileBarChart, permission: "reports" },
   { id: "admins", label: "Manage Admins", icon: ShieldCheck, permission: "__super_admin_only__" },
 ];

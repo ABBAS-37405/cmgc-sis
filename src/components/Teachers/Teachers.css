@@ -39,6 +39,10 @@
 .teachers__tag--muted { color: var(--subtext); }
 .teachers__tag--right { color: var(--accent); border-color: var(--accent); }
 .teachers__tag--off { color: #b91c1c; border-color: #f87171; background: #fef2f2; }
+.teachers__tag--regular { color: var(--accent); border-color: var(--accent); }
+.teachers__tag--visiting { color: #6d28d9; border-color: #c4b5fd; }
+.teachers__tag--pay { color: var(--subtext); }
+.teachers__pay-note { grid-column: span 2; justify-content: flex-end; }
 .teachers__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .teachers__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
 .teachers__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }

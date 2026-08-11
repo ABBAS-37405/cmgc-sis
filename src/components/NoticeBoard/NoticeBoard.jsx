@@ -2,15 +2,19 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import "./NoticeBoard.css";
 
+// Must stay in step with CATEGORIES in Notices.jsx — a category the admin can
+// post but this file does not know renders with no icon and an unstyled tag.
 const CATEGORY_ICON = {
-  General: "📢", Exam: "📝", Holiday: "🎉", Event: "🎭",
+  General: "📢", Exam: "📝", Fee: "💰", Holiday: "🎉", Event: "🎭", Academic: "📚",
 };
 
 const CATEGORY_COLOR = {
   General: "noticeboard__tag--general",
   Exam: "noticeboard__tag--exam",
+  Fee: "noticeboard__tag--fee",
   Holiday: "noticeboard__tag--holiday",
   Event: "noticeboard__tag--event",
+  Academic: "noticeboard__tag--academic",
 };
 
 export default function NoticeBoard() {
@@ -39,7 +43,7 @@ export default function NoticeBoard() {
         <p className="noticeboard__subheading">Latest announcements from CMGC</p>
 
         <div className="noticeboard__filters">
-          {["All", "Exam", "Holiday", "Event", "General"].map((f) => (
+          {["All", "Exam", "Fee", "Holiday", "Event", "Academic", "General"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={`noticeboard__filter ${filter === f ? "noticeboard__filter--active" : ""}`}>
               {CATEGORY_ICON[f] || "🔍"} {f}
             </button>

@@ -83,9 +83,10 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
+- `supabase_expenses.sql` — the `expenses` table behind Reports → Accounts. Adds nothing else: income is read from `payment_transactions` and the wage bill from `staff_salaries`, both of which already exist. Gated on `can_manage_teachers()`, and the reason is written up in the file — see the Accounts section below.
 - `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
 
-Tables in use: `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
+Tables in use: `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`, `expenses`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
 
 ### Fee flow
 
@@ -173,11 +174,12 @@ Three screens, all sub-tabs of Teachers & Staff and all gated by the existing `t
 
 ### Reports
 
-The `reports` tab holds three screens, all gated by the `reports` permission and scoped by `allowed_programs` like every other admin screen.
+The `reports` tab holds four screens, all gated by the `reports` permission. The first three are scoped by `allowed_programs` like every other admin screen; the fourth is about the college rather than any student.
 
 - **Monthly Reports** — one PDF per girl for a month: attendance, class tests, assignments, fee position. Class tests only; this tab never touches `results`.
 - **Exam Reports** — one PDF per girl for one term exam: its marksheet, plus the same attendance/assignments/fee context.
 - **Test Reports** — one class test across a class: a result sheet with positions, grades and class statistics, then a page per girl to send home. `src/lib/testReport.js` owns it.
+- **Accounts** — fee income against salaries and running costs, month by month and for the year. See below.
 
 **Monthly and Exam are the same component.** `ReportsPane.jsx` takes `mode="monthly" | "exam"`; `MonthlyReports.jsx` is only the tab shell. They differ in exactly one thing — whether an examination is part of the report — and everything else (month/group/class filters, section ticks, the two bulk downloads, the per-student PDF, the WhatsApp queue) is deliberately identical. Splitting them into two files would be four hundred duplicated lines that drift apart the first time either is touched. The shell passes `key={tab}` so switching modes remounts the pane rather than carrying the other one's filters and half-finished send queue.
 
@@ -220,6 +222,27 @@ Three things about that tab:
 - **`reportPdf.js` is `import()`ed inside the download handler**, not at the top of the file. Portal statically imports every student tab, so a static import would put the PDF layer in the portal chunk for every student who never opens Reports.
 - **"Already shared by the college" comes from storage, not `report_log`.** The log is staff-only under RLS and the student is `anon`, so `fetchSharedReport()` asks the bucket instead: the path `monthly/<YYYY-MM>/<uuid>.pdf` is deterministic, so one `list` scoped to her own file name answers it without exposing anyone else's. Best effort like `fetchReportLog()` — a refused list just drops the line. That file carries whichever sections the admin ticked, which is why it is offered alongside the generated one rather than instead of it.
 
+### Accounts — the college's own books
+
+The fourth Reports screen (`MonthlyReports/Accounts.jsx`, arithmetic in `src/lib/accounts.js`) answers what the other three cannot: did the college make money this month, and this year.
+
+**Two of its three inputs are not stored anywhere new.** Income is the sum of `payment_transactions.amount` where `status = 'Success'`; the wage bill is the sum of `staff_salaries.paid_amount`. Both are written by screens the office already uses daily, so the ledger cannot drift from Fee Verification or the salary sheet — and correcting either one corrects this page immediately. The only table this tab owns is `expenses`, for the bills, rent and repairs that live nowhere else.
+
+**The ledger is cash basis on both sides**, and that is the decision everything else follows from. Income is money received, not fees invoiced; salary cost is `paid_amount`, not `net_payable`. Billing one side and cash the other is how a college with a term of unpaid fees convinces itself it had a good year. What is still owed to staff is carried as `salaryPayable` and shown, but it never enters the net.
+
+**A salary must never be entered as a misc expense.** It is already counted from `staff_salaries`, so it would be charged twice. There is deliberately no "Salaries" entry in `EXPENSE_CATEGORIES`, the form says so, and `supabase_expenses.sql` repeats it — this is the one input that produces a confidently wrong total.
+
+Four more things that are easy to break:
+
+- **The tab is gated on the `teachers` permission, and that is correctness, not policy.** Most of the expense side is payroll, `staff_salaries_select` is `can_manage_teachers()`, and **RLS refuses reads silently** exactly like it refuses writes. An admin without it would be shown the full fee income against an empty wage bill and told the college is in profit. `MonthlyReports.jsx` filters the tab out, `expenses` carries the matching policy, and the salary query's error is surfaced rather than swallowed. No new `PERMISSION_KEYS` entry, same as the payroll screens.
+- **A month with nothing in it is not a month that broke even.** `buildLedger` marks it `empty`, and the table prints "—" rather than a confident Rs 0 profit — the same principle as `notMarked` never printing as 0 in a test report.
+- **Rows dated outside the period are dropped, not folded into the nearest month**, so the year total always equals the sum of the rows on screen.
+- **`monthKeyOf` slices the date string; it must not use `new Date()`.** `expenses.spent_on` is a plain `date` — parsed as UTC midnight it moves anything spent on the 1st into the month before. And when the office records a cash payment, `created_at` is written as the chosen day's UTC midnight, so slicing hands back exactly the date the admin picked. Reading either in local time is what breaks them.
+
+Salaries are charged to the **month worked** (`staff_salaries.month`), not the day the wage was handed over, so an April salary paid in May is April's cost. Income is dated by the day of payment. The period selector offers both a calendar year and Pakistan's July–June fiscal year rather than guessing which the college keeps.
+
+`accounts.js` **imports nothing that reaches `supabaseClient`** — same discipline as `payroll.js`, `reportPdf.js` and `xlsx.js`, and for the same reason: the arithmetic is the part that quietly goes wrong, so it has to be drivable from plain Node against fixtures in a repo with no test runner.
+
 ### Spreadsheet downloads
 
 `src/lib/xlsx.js` writes a real `.xlsx` — an OOXML package assembled by hand and zipped with JSZip. It exists because the monthly attendance register is worked on in Google Sheets, and a CSV arrives there with no column widths, no frozen headings, no merged cells and no bold, so the sheet had to be re-formatted by hand every month.
@@ -236,9 +259,22 @@ Cells are primitives or `{ v, s }`, where `s` is an index into `S` — the style
 
 - `whatsappNumberFor(person)` reads `whatsapp` first and falls back to `phone`. Never message `phone` directly: the two are often different numbers and the phone on file may have no WhatsApp on it.
 - `whatsappUrl()` sends desktop straight to `web.whatsapp.com/send` and mobile to `wa.me`. `wa.me` on a laptop is a redirect hop that frequently lands on the "download WhatsApp" interstitial and loses the prefilled text — that is what made laptop sending unreliable.
-- Bulk sending is a **queue, not a loop**. `window.open` fired repeatedly in one tick gets blocked after the first tab, and WhatsApp Web drops chats pushed at it in the same second. `MarkAttendance` holds a `waQueue` and opens one chat per click; `openWhatsAppQueue()` is the shared helper for the same pattern.
+- Bulk sending is a **queue, not a loop**. `window.open` fired repeatedly in one tick gets blocked after the first tab, and WhatsApp Web drops chats pushed at it in the same second.
 
 Click-to-chat can only pre-fill — a human must press Send. Actual automated delivery needs the WhatsApp Business API: `POST /api/send-credentials` in `server.js` (email via SMTP, WhatsApp via Twilio) is wired for it but `SMTP_*` / `TWILIO_*` are not set in `.env`, so the deep-link path is the one in use.
+
+**`components/WhatsAppQueue` is the whole of bulk sending**, and it is one implementation on purpose — the popup and focus handling below is subtle enough that a second copy would drift within a term. `useWhatsAppQueue()` is the machine, `<WhatsAppQueue>` is its banner, and `MarkAttendance` (absence reminders) and `Notices` (forwarding a notice) both drive it. `openWhatsAppQueue()` in `lib/whatsapp.js` is the older click-per-chat helper and is no longer used by anything.
+
+**The queue advances by itself**, because a class of thirty meant thirty clicks in the portal on top of thirty presses of Send. The admin answers a single `confirm` and never touches the tab again. Four things make that work, and each one is load-bearing:
+
+- **One window is reserved inside the confirm click** and held in `windowRef`; every later chat is a `location.href` assignment on it. Navigating a window you already own is not a popup, so it needs no gesture — that is the whole reason the queue can move without a click. Losing the reserved window (she closes the tab) is detected by `openAt` returning false, which stops the run rather than falling through to a `window.open` that would be blocked.
+- **The advance trigger is `blur`/`focus` on `window`, not `visibilitychange`.** They are not interchangeable: an admin running the portal and WhatsApp side by side in two windows never hides either tab, so `visibilitychange` would never fire. Losing focus covers that and the tab-switch case both.
+- **`armedRef` is a ref, and the effect has no dependency array.** No deps means the listener never closes over a stale queue; the ref means an unrelated re-render while she is away in WhatsApp cannot disarm it. Arming is what stops the very first return — the one caused by opening the tab — from skipping a recipient.
+- **Entries arrive already screened and already carrying their message.** Anything that could raise a modal has to be resolved before `start` — `sendAbsenceWhatsApp`'s prompt for a missing number is right for a single-row button and fatal for a queue, where one dialog half way through strands every recipient after it. Whoever cannot be messaged goes in `skipped` and is named when the run finishes.
+
+The cost of this design is that returning from *any* other window advances the queue, which the banner says out loud alongside a Stop button. Removing that ambiguity means the Business API, not more event plumbing. **A screen that hides the banner must also stop the run** — the hook lives in the screen, not the banner, so `Notices.closeSendPanel()` calls `wa.stop()`; without that the queue keeps opening chats with nothing on screen saying so.
+
+**Notices → the WhatsApp button on a notice** forwards it to students, filtered by year (1st / 2nd / both) and group, scoped by `allowed_programs` so a clerk cannot reach outside her own groups. The message is built around the notice but the body is **editable before sending** — a board headline and a sentence to a parent are not always the same thing — and each parent's copy names her own daughter. **Copy message** hands over the generic version instead, without a girl's name in it, because pasting one message into a class WhatsApp group is faster than thirty chats and is what the queue cannot beat. `CATEGORIES` in `Notices.jsx` and the icon/colour maps in `NoticeBoard.jsx` must stay in step: a category the admin can post but the public board does not know renders with no icon and an unstyled tag.
 
 ### Campus photos
 

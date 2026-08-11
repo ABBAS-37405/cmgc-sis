@@ -24,6 +24,18 @@
 const isMobile = () =>
   typeof navigator !== "undefined" && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
 
+/**
+ * The demo build never opens a real chat. Callers that reserve a window or drive
+ * a queue need to know this *before* they start, otherwise the demo pops a blank
+ * tab and then stalls waiting for a tab switch that never happens.
+ */
+export function isDemoMode() {
+  return (
+    (typeof __DEMO__ !== "undefined" && !!__DEMO__) ||
+    (typeof window !== "undefined" && !!window.__DEMO__)
+  );
+}
+
 /** 03001234567 / +923001234567 / 923001234567 -> 923001234567 */
 export function normalizeWhatsAppNumber(value) {
   if (!value) return "";
@@ -87,9 +99,8 @@ export function copyMessage(message) {
 export function openWhatsApp(number, message, windowRef) {
   // Demo mode: do not attempt to open real chats. Inform the user instead
   // and copy a demo notice to the clipboard so they can paste it.
-  const isDemo = (typeof __DEMO__ !== "undefined" && !!__DEMO__) || (typeof window !== "undefined" && !!window.__DEMO__);
   const demoNotice = "This is a demo version — please add a WhatsApp number to send messages.";
-  if (isDemo) {
+  if (isDemoMode()) {
     try { copyMessage(demoNotice); } catch { /* ignore */ }
     try {
       if (typeof window !== "undefined" && window.alert) window.alert(demoNotice);

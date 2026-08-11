@@ -4,6 +4,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, shortGroup } from "../../lib/academics";
 import { downloadXlsx, S, columnRef } from "../../lib/xlsx";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import WhatsAppQueue, { WhatsappIcon } from "../WhatsAppQueue/WhatsAppQueue";
+import { useWhatsAppQueue } from "../WhatsAppQueue/useWhatsAppQueue";
 import "./MarkAttendance.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -23,16 +25,12 @@ const buildAbsenceMessage = (studentName, rollNo, status, dateStr) => {
   ].join("\n");
 };
 
-function WhatsappIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-      <path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.46 0 .09 5.37.09 11.95c0 2.11.55 4.09 1.51 5.81L0 24l6.4-1.68a11.86 11.86 0 0 0 5.64 1.43h.01c6.58 0 11.95-5.37 11.95-11.95 0-3.19-1.24-6.19-3.48-8.32ZM12.05 21.3h-.01a9.3 9.3 0 0 1-4.74-1.3l-.34-.2-3.53.93.94-3.44-.22-.35a9.3 9.3 0 0 1-1.43-4.99c0-5.14 4.19-9.33 9.34-9.33 2.49 0 4.83.97 6.59 2.73a9.26 9.26 0 0 1 2.73 6.6c0 5.15-4.19 9.35-9.33 9.35Zm5.34-6.98c-.29-.15-1.72-.85-1.99-.94-.27-.1-.46-.15-.66.15-.2.29-.76.94-.93 1.13-.17.2-.34.22-.63.07-.29-.15-1.22-.45-2.33-1.44-.86-.77-1.44-1.72-1.61-2.01-.17-.29-.02-.45.13-.6.14-.14.3-.36.45-.54.15-.18.2-.31.3-.51.1-.2.05-.37-.03-.51-.08-.15-.6-1.46-.82-2-.22-.53-.44-.46-.6-.47-.16-.01-.34-.01-.52-.01-.18 0-.47.07-.72.34-.25.27-.96.94-.96 2.3 0 1.36.99 2.67 1.13 2.86.14.18 1.86 2.84 4.5 3.87 2.65 1.03 2.65.69 3.12.64.47-.05 1.5-.61 1.71-1.2.21-.59.21-1.1.15-1.2-.06-.1-.24-.16-.53-.31Z" />
-    </svg>
-  );
-}
-
 // Her WhatsApp number first, phone only as a fallback — the two are often
 // different, and a number on file may have no WhatsApp on it at all.
+//
+// This is the single-row button, and the prompt is why it is not what the bulk
+// run uses: a modal half way through a queue strands every recipient after it.
+// The queue screens for usable numbers before it starts instead.
 const sendAbsenceWhatsApp = (student, status, date) => {
   let number = whatsappNumberFor(student);
   if (!isValidWhatsAppNumber(number)) {
@@ -64,11 +62,10 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
   const [saved, setSaved] = useState(false);
   const [alreadyMarked, setAlreadyMarked] = useState(false);
   const [classesHeld, setClassesHeld] = useState(true);
-  // Reminders are opened one at a time. Firing window.open in a loop gets most
-  // of the tabs blocked by the browser, and WhatsApp Web drops chats pushed at
-  // it in the same second — which is why bulk notify used to deliver only the
-  // first message. Each click here is a real user gesture, so nothing is blocked.
-  const [waQueue, setWaQueue] = useState(null); // { list, index }
+  // The admin confirms once and then never touches this tab again — the queue
+  // walks itself as she comes back from each chat. Everything about how that
+  // works lives in useWhatsAppQueue; the Notices tab drives the same one.
+  const wa = useWhatsAppQueue();
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -390,16 +387,27 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
       alert("No students are marked Absent or Leave for this date.");
       return;
     }
-    setWaQueue({ list: absentees.slice(), index: 0 });
-  };
 
-  const sendNextReminder = () => {
-    if (!waQueue) return;
-    const student = waQueue.list[waQueue.index];
-    sendAbsenceWhatsApp(student, records[student.id], date);
-    const next = waQueue.index + 1;
-    if (next >= waQueue.list.length) setWaQueue(null);
-    else setWaQueue({ list: waQueue.list, index: next });
+    // Screened here rather than inside the run: the queue must never stop on a
+    // prompt, so anyone without a usable number is set aside up front and named
+    // when it finishes.
+    const entries = [];
+    const skipped = [];
+    absentees.forEach((s) => {
+      const number = whatsappNumberFor(s);
+      if (!isValidWhatsAppNumber(number)) {
+        skipped.push(s);
+        return;
+      }
+      entries.push({
+        id: s.id,
+        name: s.name,
+        number,
+        message: buildAbsenceMessage(s.name, s.roll_no, records[s.id], date),
+      });
+    });
+
+    wa.start({ entries, skipped, what: "the absence message", recipientNoun: "parent" });
   };
 
   const saveAttendance = async () => {
@@ -545,25 +553,7 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
             </button>
           </div>
 
-          {waQueue && (
-            <div className="mark-attendance__wa-queue">
-              <div className="mark-attendance__wa-queue-text">
-                <strong>{waQueue.list[waQueue.index]?.name}</strong>
-                <span> — chat {waQueue.index + 1} of {waQueue.list.length}. Open it, press <b>Send</b> in WhatsApp, then come back for the next one.</span>
-                <span className="mark-attendance__wa-queue-tip">
-                  The message is also copied to your clipboard — if WhatsApp opens the chat empty, just press Ctrl+V.
-                </span>
-              </div>
-              <div className="mark-attendance__wa-queue-actions">
-                <button type="button" className="mark-attendance__notify-btn" onClick={sendNextReminder}>
-                  <WhatsappIcon /> Open chat {waQueue.index + 1} of {waQueue.list.length}
-                </button>
-                <button type="button" className="mark-attendance__wa-queue-stop" onClick={() => setWaQueue(null)}>
-                  Stop
-                </button>
-              </div>
-            </div>
-          )}
+          <WhatsAppQueue queue={wa.queue} onNext={wa.next} onStop={wa.stop} />
 
           {students.map((s) => (
             <div key={s.id} className="mark-attendance__row">

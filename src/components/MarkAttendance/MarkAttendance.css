@@ -36,12 +36,8 @@
 .mark-attendance__notify-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; color: #16a34a; border: 1px solid #86efac; background: #f0fdf4; }
 .mark-attendance__notify-btn:hover:not(:disabled) { background: #dcfce7; }
 .mark-attendance__notify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.mark-attendance__wa-queue { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 4px; padding: 10px 14px; border: 1px solid #86efac; background: #f0fdf4; border-radius: 10px; }
-.mark-attendance__wa-queue-text { font-size: 12px; color: #166534; flex: 1 1 240px; }
-.mark-attendance__wa-queue-text strong { display: block; font-size: 13px; }
-.mark-attendance__wa-queue-tip { display: block; margin-top: 4px; font-size: 11px; color: #15803d; opacity: 0.85; }
-.mark-attendance__wa-queue-actions { display: flex; align-items: center; gap: 8px; }
-.mark-attendance__wa-queue-stop { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; color: var(--subtext); border: 1px solid var(--border); background: var(--card); }
+/* The running-queue banner moved to components/WhatsAppQueue — the Notices tab
+   drives the same queue, and one copy of it is the point. */
 .mark-attendance__save { width: 100%; margin-top: 16px; background: var(--accent); color: white; font-weight: 600; font-size: 14px; padding: 10px; border-radius: 8px; }
 .mark-attendance__save:disabled { opacity: 0.6; cursor: not-allowed; }
 .mark-attendance__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }

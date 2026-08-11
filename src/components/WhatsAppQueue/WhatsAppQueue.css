@@ -1,0 +1,12 @@
+/* The running-queue banner. The green is WhatsApp's own and deliberately does
+   not follow the accent hue a visitor picked — it is telling her which app she
+   is about to be handed to. */
+
+.waq { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 4px; padding: 10px 14px; border: 1px solid #86efac; background: #f0fdf4; border-radius: 10px; }
+.waq__text { font-size: 12px; color: #166534; flex: 1 1 240px; }
+.waq__text strong { display: block; font-size: 13px; }
+.waq__tip { display: block; margin-top: 4px; font-size: 11px; color: #15803d; opacity: 0.85; }
+.waq__actions { display: flex; align-items: center; gap: 8px; }
+.waq__next { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; color: #fff; background: #16a34a; border: 1px solid #16a34a; }
+.waq__next:hover { background: #15803d; }
+.waq__stop { font-size: 12px; font-weight: 600; padding: 5px 13px; border-radius: 999px; color: var(--subtext); border: 1px solid var(--border); background: var(--card); }

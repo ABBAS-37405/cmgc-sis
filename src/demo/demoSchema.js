@@ -36,6 +36,7 @@ export const TABLES = [
   "staff_attendance",
   "college_holidays",
   "staff_salaries",
+  "expenses",
 ];
 
 /**
@@ -121,4 +122,5 @@ export const TIMESTAMP_DEFAULTS = {
   staff_attendance: ["created_at"],
   college_holidays: ["created_at"],
   staff_salaries: ["created_at"],
+  expenses: ["created_at"],
 };

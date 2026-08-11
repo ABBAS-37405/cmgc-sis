@@ -30,6 +30,7 @@ It is deliberately messy in the places a demo needs to be:
 | Fee Verification → Pending | 32 payments with proof, waiting to be approved |
 | Fee Verification → Unpaid | 64 unpaid and 21 part-paid charges |
 | Teachers | 3 with logins, 1 with none — the "Create Login" case |
+| Reports → Accounts | ten months of bills, rent and repairs against the fee income |
 | Manage Admins | a super admin, and a clerk limited to two groups |
 
 The numbers above come from a fixed seed, so every person you send the link to

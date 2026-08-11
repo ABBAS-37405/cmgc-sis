@@ -124,6 +124,7 @@ export function buildDemoDatabase() {
     assignments: [], assignment_submissions: [], fees: [], payment_transactions: [],
     notices: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
     report_log: [], staff: [], staff_attendance: [], college_holidays: [], staff_salaries: [],
+    expenses: [],
   };
 
   /* ------------------------------------------------------------- staff */
@@ -728,6 +729,66 @@ export function buildDemoDatabase() {
         updated_at: at(daysAgo(10)),
       });
     });
+
+  /* ---------------------------------------------------------- expenses */
+
+  // The third input to the Accounts screen. Fee income and the wage bill are
+  // read from tables seeded above; this is everything else the college pays
+  // for. Spread across the last ten months so the month-wise profit and loss
+  // has a shape rather than one spike.
+  //
+  // Never a salary. Salaries are counted from staff_salaries, so seeding one
+  // here would demonstrate the exact double-count the real screen warns about.
+  //
+  // The amounts are scaled to the fee income this seed actually produces, not
+  // to a real college's bills. A demo that opens on a heavy annual loss reads
+  // as a broken screen rather than a working one, and the seeded roster is
+  // sixty girls with a deliberately messy fee ledger behind them.
+  const expenseSeed = [
+    { category: "Rent", description: "Building rent", lo: 9000, hi: 9000, every: true },
+    { category: "Utility Bills", description: "Electricity bill", lo: 4000, hi: 9000, every: true },
+    { category: "Utility Bills", description: "Gas and water charges", lo: 900, hi: 1800, every: true },
+    { category: "Internet & Phone", description: "Broadband and phone line", lo: 2000, hi: 2800, every: true },
+    { category: "Stationery & Printing", description: "Exam papers and registers", lo: 1200, hi: 4000 },
+    { category: "Repairs & Maintenance", description: "Fan and wiring repairs", lo: 700, hi: 2600 },
+    { category: "Repairs & Maintenance", description: "Whitewash and classroom repairs", lo: 2500, hi: 7000 },
+    { category: "Transport & Fuel", description: "College van fuel", lo: 2500, hi: 5500 },
+    { category: "Furniture & Equipment", description: "Desks and chairs", lo: 3000, hi: 10000 },
+    { category: "Marketing & Advertising", description: "Admission banners and pamphlets", lo: 1500, hi: 5000 },
+    { category: "Events & Functions", description: "Annual prize distribution", lo: 4000, hi: 9000 },
+    { category: "Government & Legal", description: "Board affiliation and registration fees", lo: 2500, hi: 7000 },
+    { category: "Other", description: "Tea, cleaning supplies and sundries", lo: 500, hi: 1500 },
+  ];
+
+  for (let back = 9; back >= 0; back -= 1) {
+    // A negative month rolls into the previous year on its own, which is what
+    // makes the January-to-December table fill in for a demo opened in March.
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+
+    expenseSeed.forEach((item, ei) => {
+      // The fixed running costs land every month; the rest turn up now and then,
+      // the way repairs and functions actually do.
+      if (!item.every && rand() > 0.4) return;
+
+      const day = Math.min(between(rand, 1, 26), daysInMonth);
+      const spent = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+      if (spent > now) return; // nothing is spent in the future
+
+      db.expenses.push({
+        id: uid(50 + ei),
+        spent_on: iso(spent),
+        category: item.category,
+        description: item.description,
+        amount: between(rand, item.lo, item.hi),
+        payment_method: pick(rand, ["Cash", "Bank Transfer", "Cheque"]),
+        notes: null,
+        recorded_by: db.admin_profiles[0].user_id,
+        created_at: at(spent),
+        updated_at: at(spent),
+      });
+    });
+  }
 
   db.students.forEach((s) => delete s._enrolledDaysAgo);
   return db;

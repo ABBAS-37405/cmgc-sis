@@ -35,6 +35,7 @@ export const EXPENSE_CATEGORIES = [
   "Marketing & Advertising",
   "Events & Functions",
   "Government & Legal",
+  "FTF Fund",
   "Other",
 ];
 

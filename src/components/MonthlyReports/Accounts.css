@@ -54,5 +54,27 @@
 .acct__cats-total { border-bottom: none !important; font-weight: 700; }
 .acct__cats-total span { color: var(--text) !important; }
 
-.acct__del { display: inline-flex; align-items: center; justify-content: center; padding: 5px; border-radius: 6px; color: #dc2626; border: 1px solid var(--border); background: var(--bg); }
-.acct__del:hover { background: #fee2e2; border-color: #fecaca; }
+.acct__rowbtns { display: inline-flex; align-items: center; gap: 6px; }
+
+.acct__del, .acct__edit-btn, .acct__save, .acct__cancel { display: inline-flex; align-items: center; justify-content: center; padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+.acct__del:disabled, .acct__edit-btn:disabled, .acct__save:disabled, .acct__cancel:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.acct__del { color: #dc2626; }
+.acct__del:hover:not(:disabled) { background: #fee2e2; border-color: #fecaca; }
+
+.acct__edit-btn { color: var(--subtext); }
+.acct__edit-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+
+.acct__save { color: #fff; background: var(--accent); border-color: var(--accent); }
+.acct__save:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.acct__cancel { color: var(--subtext); }
+.acct__cancel:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
+
+/* The row being corrected, edited in place rather than in a modal: the figures
+   around it are the context that tells her which row is the wrong one. */
+.acct__row--editing > td { background: var(--bg); vertical-align: middle; }
+.acct__edit { width: 100%; min-width: 110px; font-size: 12.5px; font-family: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; }
+.acct__edit:focus { outline: none; border-color: var(--accent); }
+.acct__edit--num { text-align: right; font-variant-numeric: tabular-nums; min-width: 90px; }
+.acct__row--editing .acct__desc { min-width: 200px; }

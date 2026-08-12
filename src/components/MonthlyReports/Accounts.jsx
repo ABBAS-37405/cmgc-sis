@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Plus, Trash2, AlertCircle, Wallet } from "lucide-react";
+import { RefreshCw, Plus, Trash2, Pencil, Check, X, AlertCircle, Wallet } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import {
@@ -59,6 +59,8 @@ export default function Accounts({ adminProfile }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  // The row being corrected, as a draft. Null when nothing is being edited.
+  const [editing, setEditing] = useState(null);
 
   const months = monthsOfPeriod(year, mode);
   const ledger = buildLedger({ months, payments, salaries, expenses });
@@ -66,6 +68,8 @@ export default function Accounts({ adminProfile }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    // Whatever was half-typed belongs to the rows about to be replaced.
+    setEditing(null);
 
     const { from, to } = periodRangeOf(year, mode);
     const periodMonths = monthsOfPeriod(year, mode);
@@ -117,27 +121,37 @@ export default function Accounts({ adminProfile }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, mode]);
 
-  const addExpense = async (e) => {
-    e.preventDefault();
-    const amount = Number(form.amount);
+  /**
+   * The checks an expense has to pass, and they are the same whether it is
+   * being added or corrected — a typo fixed into a zero, or a date moved out of
+   * the period on screen, is exactly as wrong on an edit as on an insert.
+   * Returns false when the admin should be sent back to what she was typing.
+   */
+  const expenseIsUsable = (draft) => {
+    const amount = Number(draft.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("Enter an amount greater than zero.");
-      return;
+      return false;
     }
-    if (!form.spent_on) {
+    if (!draft.spent_on) {
       alert("Pick the date the money was spent.");
-      return;
+      return false;
     }
-
     // Outside the period on screen the row would save and then vanish, which
     // reads as a failed save. Better to say so than to let her wonder.
-    if (!months.includes(monthKeyOf(form.spent_on))) {
-      const carryOn = window.confirm(
-        `${form.spent_on} is outside ${periodLabelOf(year, mode)}, so this expense will not appear in the table below. ` +
+    if (!months.includes(monthKeyOf(draft.spent_on))) {
+      return window.confirm(
+        `${draft.spent_on} is outside ${periodLabelOf(year, mode)}, so this expense will not appear in the table below. ` +
         "Save it anyway?"
       );
-      if (!carryOn) return;
     }
+    return true;
+  };
+
+  const addExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseIsUsable(form)) return;
+    const amount = Number(form.amount);
 
     setSaving(true);
     const { data, error: insertError } = await supabase
@@ -168,6 +182,51 @@ export default function Accounts({ adminProfile }) {
     await load();
   };
 
+  const startEdit = (row) => {
+    setEditing({
+      id: row.id,
+      spent_on: row.spent_on,
+      category: row.category,
+      description: row.description || "",
+      amount: String(row.amount ?? ""),
+      payment_method: row.payment_method || "",
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !expenseIsUsable(editing)) return;
+
+    setSaving(true);
+    const { data, error: updateError } = await supabase
+      .from("expenses")
+      .update({
+        spent_on: editing.spent_on,
+        category: editing.category,
+        description: editing.description.trim() || null,
+        amount: Number(editing.amount),
+        payment_method: editing.payment_method || null,
+        // No trigger keeps this current, so an edit has to stamp it itself —
+        // otherwise the column says the row was last touched when it was typed.
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", editing.id)
+      .select("id");
+
+    setSaving(false);
+
+    if (updateError) {
+      alert("Could not save the correction: " + updateError.message);
+      return;
+    }
+    // A refused write comes back as a plain success with no rows.
+    if (!data || data.length === 0) {
+      alert(WRITE_BLOCKED_HINT);
+      return;
+    }
+
+    await load();
+  };
+
   const removeExpense = async (row) => {
     const ok = window.confirm(
       `Delete this expense?\n\n${row.category} — ${formatMoney(row.amount)} on ${row.spent_on}` +
@@ -194,6 +253,13 @@ export default function Accounts({ adminProfile }) {
 
   const netClass = (n) => (n > 0 ? "acct__pos" : n < 0 ? "acct__neg" : "");
   const { totals } = ledger;
+
+  // A row saved under a category or method that has since been renamed or
+  // dropped from the list would render as a blank select and then be silently
+  // rewritten to something else on save. Carry the row's own value into the
+  // options so an edit changes only what the admin actually changed.
+  const withCurrent = (list, current) =>
+    current && !list.includes(current) ? [current, ...list] : list;
 
   return (
     <div className="mrep__pane">
@@ -419,6 +485,11 @@ export default function Accounts({ adminProfile }) {
         {expenses.length === 0 ? (
           <p className="acct__panel-sub">Nothing yet. Add the first one above.</p>
         ) : (
+          <>
+          <p className="acct__panel-sub">
+            Something typed wrong? Use the pencil to correct the row in place — date, category,
+            description, method or amount — then tick to save. The totals above follow at once.
+          </p>
           <div className="acct__tablewrap">
             <table className="acct__table">
               <thead>
@@ -433,29 +504,120 @@ export default function Accounts({ adminProfile }) {
                 </tr>
               </thead>
               <tbody>
-                {expenses.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.spent_on}</td>
-                    <td>{monthLabelOf(monthKeyOf(row.spent_on))}</td>
-                    <td>{row.category}</td>
-                    <td className="acct__desc">{row.description || "—"}</td>
-                    <td>{row.payment_method || "—"}</td>
-                    <td className="acct__num">{formatMoney(row.amount)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="acct__del"
-                        onClick={() => removeExpense(row)}
-                        title="Delete this expense"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {expenses.map((row) =>
+                  editing?.id === row.id ? (
+                    <tr key={row.id} className="acct__row--editing">
+                      <td>
+                        <input
+                          type="date"
+                          className="acct__edit"
+                          value={editing.spent_on}
+                          onChange={(e) => setEditing((d) => ({ ...d, spent_on: e.target.value }))}
+                        />
+                      </td>
+                      <td>{editing.spent_on ? monthLabelOf(monthKeyOf(editing.spent_on)) : "—"}</td>
+                      <td>
+                        <select
+                          className="acct__edit"
+                          value={editing.category}
+                          onChange={(e) => setEditing((d) => ({ ...d, category: e.target.value }))}
+                        >
+                          {withCurrent(EXPENSE_CATEGORIES, editing.category).map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="acct__desc">
+                        <input
+                          type="text"
+                          className="acct__edit"
+                          value={editing.description}
+                          onChange={(e) => setEditing((d) => ({ ...d, description: e.target.value }))}
+                          placeholder="e.g. WASA bill for June"
+                        />
+                      </td>
+                      <td>
+                        <select
+                          className="acct__edit"
+                          value={editing.payment_method}
+                          onChange={(e) => setEditing((d) => ({ ...d, payment_method: e.target.value }))}
+                        >
+                          <option value="">Not recorded</option>
+                          {withCurrent(PAYMENT_METHODS, editing.payment_method).map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="acct__num">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          className="acct__edit acct__edit--num"
+                          value={editing.amount}
+                          onChange={(e) => setEditing((d) => ({ ...d, amount: e.target.value }))}
+                        />
+                      </td>
+                      <td>
+                        <div className="acct__rowbtns">
+                          <button
+                            type="button"
+                            className="acct__save"
+                            onClick={saveEdit}
+                            disabled={saving}
+                            title="Save this correction"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="acct__cancel"
+                            onClick={() => setEditing(null)}
+                            disabled={saving}
+                            title="Cancel — leave the row as it was"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={row.id}>
+                      <td>{row.spent_on}</td>
+                      <td>{monthLabelOf(monthKeyOf(row.spent_on))}</td>
+                      <td>{row.category}</td>
+                      <td className="acct__desc">{row.description || "—"}</td>
+                      <td>{row.payment_method || "—"}</td>
+                      <td className="acct__num">{formatMoney(row.amount)}</td>
+                      <td>
+                        <div className="acct__rowbtns">
+                          <button
+                            type="button"
+                            className="acct__edit-btn"
+                            onClick={() => startEdit(row)}
+                            disabled={saving}
+                            title="Correct this expense"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="acct__del"
+                            onClick={() => removeExpense(row)}
+                            disabled={saving}
+                            title="Delete this expense"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 

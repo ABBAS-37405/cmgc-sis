@@ -41,11 +41,22 @@ export const EXPENSE_CATEGORIES = [
 
 export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Cheque", "Card", "Other"];
 
-/** Jan–Dec, or Pakistan's July–June fiscal year. */
+/**
+ * Jan–Dec, or the college's own year, which runs May to April — not Pakistan's
+ * July–June government fiscal year, because the college keeps its books to its
+ * own session.
+ *
+ * `startMonth` is the entire definition of a period. `monthsOfPeriod` and
+ * `periodLabelOf` both read it rather than testing the id, so moving a year's
+ * boundary is this one number and nothing else.
+ */
 export const PERIOD_MODES = [
-  { id: "calendar", label: "Calendar year (Jan–Dec)" },
-  { id: "fiscal", label: "Fiscal year (Jul–Jun)" },
+  { id: "calendar", label: "Calendar year (Jan–Dec)", startMonth: 1 },
+  { id: "fiscal", label: "Financial year (May–Apr)", startMonth: 5 },
 ];
+
+const startMonthOf = (mode) =>
+  PERIOD_MODES.find((p) => p.id === mode)?.startMonth || 1;
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -100,11 +111,11 @@ export function shortMonthOf(key) {
 /**
  * The twelve months of a period, in order.
  *
- * A fiscal year is named for the calendar year it starts in: 2026 means
- * July 2026 through June 2027.
+ * A financial year is named for the calendar year it starts in: 2026 means
+ * May 2026 through April 2027.
  */
 export function monthsOfPeriod(year, mode = "calendar") {
-  const startMonth = mode === "fiscal" ? 7 : 1;
+  const startMonth = startMonthOf(mode);
   const out = [];
   for (let i = 0; i < 12; i += 1) {
     const m = startMonth + i;
@@ -115,9 +126,11 @@ export function monthsOfPeriod(year, mode = "calendar") {
   return out;
 }
 
-/** Human name for a period, e.g. 'FY 2026–27'. */
+/** Human name for a period, e.g. 'FY 2026–27' for May 2026 – April 2027. */
 export function periodLabelOf(year, mode = "calendar") {
-  return mode === "fiscal" ? `FY ${year}–${String(year + 1).slice(2)}` : String(year);
+  return startMonthOf(mode) === 1
+    ? String(year)
+    : `FY ${year}–${String(year + 1).slice(2)}`;
 }
 
 /** The first and last day of a period, as 'YYYY-MM-DD' — for query bounds. */

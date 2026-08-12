@@ -239,7 +239,7 @@ Four more things that are easy to break:
 - **Rows dated outside the period are dropped, not folded into the nearest month**, so the year total always equals the sum of the rows on screen.
 - **`monthKeyOf` slices the date string; it must not use `new Date()`.** `expenses.spent_on` is a plain `date` — parsed as UTC midnight it moves anything spent on the 1st into the month before. And when the office records a cash payment, `created_at` is written as the chosen day's UTC midnight, so slicing hands back exactly the date the admin picked. Reading either in local time is what breaks them.
 
-Salaries are charged to the **month worked** (`staff_salaries.month`), not the day the wage was handed over, so an April salary paid in May is April's cost. Income is dated by the day of payment. The period selector offers both a calendar year and Pakistan's July–June fiscal year rather than guessing which the college keeps.
+Salaries are charged to the **month worked** (`staff_salaries.month`), not the day the wage was handed over, so an April salary paid in May is April's cost. Income is dated by the day of payment. The period selector offers both a calendar year and the college's own May–April financial year rather than guessing which it keeps — deliberately not Pakistan's July–June government year. A period is defined by `startMonth` on its `PERIOD_MODES` entry, which `monthsOfPeriod` and `periodLabelOf` both read, so moving a boundary is one number.
 
 `accounts.js` **imports nothing that reaches `supabaseClient`** — same discipline as `payroll.js`, `reportPdf.js` and `xlsx.js`, and for the same reason: the arithmetic is the part that quietly goes wrong, so it has to be drivable from plain Node against fixtures in a repo with no test runner.
 

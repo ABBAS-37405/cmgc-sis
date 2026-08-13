@@ -6,6 +6,8 @@ import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../li
 import "./FeeVerification.css";
 
 const PAYMENT_METHODS = ["Easypaisa", "Bank Al Habib", "Raast", "Cash in College Office"];
+// Admin ye screen zyada tar office counter pe cash lene ke liye use karti hai.
+const DEFAULT_PAYMENT_METHOD = "Cash in College Office";
 
 const buildFeeReminderMessage = (studentName, rollNo, amount, dueDate) => {
   const lines = [
@@ -457,7 +459,7 @@ export default function FeeVerification() {
   };
 
   const todayStr = () => new Date().toISOString().split("T")[0];
-  const getPaymentMethod = (feeId) => paymentMethodByFee[feeId] || PAYMENT_METHODS[0];
+  const getPaymentMethod = (feeId) => paymentMethodByFee[feeId] || DEFAULT_PAYMENT_METHOD;
   const getPaymentDate = (feeId) => paymentDateByFee[feeId] || todayStr();
   const getPaymentAmount = (fee) => {
     const stored = paymentAmountByFee[fee.id];

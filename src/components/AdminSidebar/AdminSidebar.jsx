@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut, FileBarChart } from "lucide-react";
+import { LayoutDashboard, Users, UserSearch, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut, FileBarChart } from "lucide-react";
 import Logo from "../Logo/Logo";
 import { hasPermission } from "../../lib/adminAuth";
 import "./AdminSidebar.css";
@@ -6,6 +6,10 @@ import "./AdminSidebar.css";
 const NAV_ITEMS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, permission: null },
   { id: "students", label: "Students", icon: Users, permission: "students" },
+  // One girl's whole record on screen. Same `students` permission — the roster it
+  // opens with is read through the very policy that key gates, so an admin
+  // without it would only ever see an empty list here.
+  { id: "progress", label: "Student Report", icon: UserSearch, permission: "students" },
   { id: "attendance", label: "Attendance", icon: CalendarCheck, permission: "attendance" },
   { id: "results", label: "Results", icon: FileText, permission: "results" },
   { id: "fee", label: "Fee Verification", icon: Wallet, permission: "fee" },

@@ -243,7 +243,15 @@ function assembleReport({ student, range, month, attendance, testMarks, assignme
   };
 }
 
-function summariseAttendance(rows) {
+/*
+ * The four summarisers below are exported because studentProgress.js runs the
+ * same arithmetic over a whole career rather than one month. They are pure —
+ * rows in, summary out — so the only thing that differs between the two callers
+ * is which rows they were handed. Duplicating them would be two definitions of
+ * "how a fee's paid amount is derived", which is exactly the drift CLAUDE.md
+ * warns about for the Fee.jsx / FeeVerification.jsx recompute.
+ */
+export function summariseAttendance(rows) {
   const count = (s) => rows.filter((r) => r.status === s).length;
   const present = count("Present");
   const absent = count("Absent");
@@ -266,7 +274,7 @@ function summariseAttendance(rows) {
 }
 
 /** One entry per subject, mirroring how the student's own ClassTests tab groups them. */
-function summariseTests(rows) {
+export function summariseTests(rows) {
   const map = new Map();
 
   rows.forEach((r) => {
@@ -308,7 +316,7 @@ function summariseTests(rows) {
   };
 }
 
-function summariseAssignments(student, allAssignments, submissions) {
+export function summariseAssignments(student, allAssignments, submissions) {
   const byId = {};
   submissions.forEach((s) => { byId[s.assignment_id] = s; });
 
@@ -380,7 +388,7 @@ function summariseResult(rows) {
  * `Success` transactions, exactly as Fee.jsx and FeeVerification.jsx do — the
  * stored `status` is a cache of that sum, not the source of truth.
  */
-function summariseFee(fees) {
+export function summariseFee(fees) {
   const rows = fees
     .map((f) => {
       const paid = (f.payment_transactions || [])

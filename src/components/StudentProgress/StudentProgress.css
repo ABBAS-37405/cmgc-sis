@@ -1,0 +1,99 @@
+.sprog { display: flex; flex-direction: column; gap: 16px; }
+
+.sprog__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sprog__title { font-size: 18px; font-weight: 700; color: var(--text); }
+.sprog__sub { font-size: 12.5px; color: var(--subtext); line-height: 1.55; max-width: 620px; margin-top: 4px; }
+
+.sprog__refresh, .sprog__btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); white-space: nowrap; }
+.sprog__refresh:disabled, .sprog__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.sprog__spin { animation: sprog-spin 0.9s linear infinite; }
+@keyframes sprog-spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- filters */
+
+.sprog__filters { display: flex; flex-wrap: wrap; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.sprog__field { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+.sprog__field--grow { flex: 1; min-width: 220px; }
+.sprog__field span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--subtext); font-weight: 500; }
+.sprog__field select, .sprog__field input { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+
+.sprog__count { font-size: 13px; color: var(--subtext); }
+.sprog__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; }
+.sprog__error { display: flex; align-items: center; gap: 6px; color: #dc2626; font-size: 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 9px 12px; }
+
+/* ------------------------------------------------------------ the roster */
+
+.sprog__cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.sprog__card { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); cursor: pointer; }
+.sprog__card:hover { border-color: var(--accent); }
+.sprog__card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sprog__card-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sprog__card-roll { font-size: 12px; color: var(--subtext); }
+.sprog__card-meta { font-size: 11.5px; color: var(--subtext); }
+
+.sprog__avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--border); }
+.sprog__avatar--none { display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--subtext); font-size: 17px; font-weight: 700; text-transform: uppercase; }
+.sprog__avatar--lg { width: 66px; height: 66px; font-size: 24px; }
+
+/* --------------------------------------------------------- one student */
+
+.sprog__student-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sprog__student-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.sprog__identity { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.sprog__identity-meta { font-size: 12.5px; color: var(--subtext); margin-top: 3px; }
+
+.sprog__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.sprog__tile { display: flex; flex-direction: column; gap: 3px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.sprog__tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--subtext); font-weight: 600; }
+.sprog__tile-value { font-size: 21px; font-weight: 700; color: var(--text); }
+.sprog__tile-note { font-size: 11.5px; color: var(--subtext); line-height: 1.4; }
+
+.sprog__section { display: flex; flex-direction: column; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.sprog__section-title { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: var(--text); }
+.sprog__section-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--subtext); }
+.sprog__sub-head { font-size: 12px; font-weight: 700; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 4px; }
+
+.sprog__none { font-size: 13px; color: var(--subtext); }
+.sprog__blocked { display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; line-height: 1.55; color: var(--subtext); background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; }
+
+.sprog__inline-stats { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--subtext); }
+.sprog__inline-stats strong { font-size: 14px; color: var(--text); margin-right: 4px; }
+.sprog__inline-stats .sprog__pct--good strong, .sprog__inline-stats .sprog__pct--low strong, .sprog__inline-stats .sprog__pct--mid strong { color: inherit; }
+
+/* ------------------------------------------------------------ tables */
+
+.sprog__table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.sprog__table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+.sprog__table th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--subtext); font-weight: 600; padding: 9px 10px; background: var(--bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.sprog__table td { padding: 9px 10px; color: var(--text); border-bottom: 1px solid var(--border); }
+.sprog__table tbody tr:last-child td { border-bottom: none; }
+
+.sprog__tag { display: inline-block; margin-left: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--subtext); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; }
+
+/* -------------------------------------------------- class tests & exams */
+
+.sprog__subjects { display: flex; flex-direction: column; gap: 10px; }
+.sprog__subject { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg); }
+.sprog__subject-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sprog__subject-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.sprog__subject-pct { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; }
+
+.sprog__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sprog__chip { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: var(--subtext); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
+.sprog__chip strong { font-size: 12.5px; color: var(--text); }
+.sprog__chip--absent strong { color: #b91c1c; }
+
+.sprog__exam { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.sprog__exam-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sprog__exam-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.sprog__exam-meta { font-size: 11.5px; color: var(--subtext); }
+
+.sprog__pct--good { color: #15803d; }
+.sprog__pct--mid { color: #b45309; }
+.sprog__pct--low { color: #b91c1c; }
+
+@media (max-width: 768px) {
+  .sprog__cards { grid-template-columns: 1fr; }
+  .sprog__identity { flex-direction: column; align-items: flex-start; text-align: left; }
+}

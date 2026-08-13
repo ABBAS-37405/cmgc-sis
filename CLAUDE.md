@@ -113,6 +113,19 @@ The design exists because **students have no Supabase Auth** — every request f
 
 The residual risk is stated in the SQL file and is deliberate: during an open window, anyone who knows that student's UUID could write those same columns. Closing it properly means giving students real auth accounts.
 
+### Student Report — one girl's whole record
+
+The sidebar's **Student Report** tab (`StudentProgress/StudentProgress.jsx`, aggregation in `src/lib/studentProgress.js`) answers the question asked at the office counter: pick a student, see how she has done since admission — attendance month by month, every class test by subject, every exam sitting, assignments, fee charges and payments — without opening five screens and reading them against each other.
+
+It is **the mirror image of `monthlyReport.js`**, and that is the whole design: that file takes a whole roster for one month, this one takes one student for her whole career. So the arithmetic is not rewritten — `summariseAttendance`, `summariseTests`, `summariseAssignments` and `summariseFee` are exported from `monthlyReport.js` and imported here. Duplicating them would mean two definitions of "how a fee's paid amount is derived", which is exactly the drift the `Fee.jsx` / `FeeVerification.jsx` recompute already suffers from. It adds no table and no SQL: every figure comes from tables the other screens already write.
+
+Four things to keep:
+
+- **It writes nothing.** The only mutation reachable from it is the existing `StudentDetail` modal, opened rather than re-implemented — the same admission record the Students tab edits.
+- **The tab is gated on `students`, and the two RLS-gated sections hide rather than show zero.** `attendance` and `results` are readable by an admin only if she holds the matching permission (the program-scoped policies are `for all`, so they govern select too), and **RLS refuses a read as silently as a write**. Running those queries for an admin without the right would return zero rows, and "0% attendance" for a girl who never missed a day is a lie. So the query is skipped and the section says why. Same reasoning as the Accounts gate; the tab itself needs `students` because the roster is read through that very policy. No new `PERMISSION_KEYS` entry, so nothing in the database changed.
+- **Dates are sliced, never parsed.** The month of an attendance mark is `row.date.slice(0, 7)` and date columns are formatted from their own `YYYY-MM-DD` parts — `new Date("2026-08-01")` is UTC midnight and lands in July for anyone east of Greenwich, the same trap `monthKeyOf` avoids in `accounts.js`.
+- **Six queries per student, and Back walks out of the record before it leaves the tab.** Opening a student calls `pushStep`, the "All students" button calls `truncate` — the two rules from the back-stack section. A `requestRef` token drops a slow load that arrives after the admin has moved on.
+
 ### LMS
 
 `lms_materials` is one row per thing a teacher or admin publishes for a subject — a recorded lecture, an old paper, the paper scheme, notes, a link. `LmsManage` writes them — shared by both portals like `ClassTestEntry`, taking a `teacher` for her own subjects or `teacher={null}` plus `allowedPrograms` for the admin's full-range view — `Lms` (student portal) reads them, and `src/lib/lms.js` holds everything the two must agree on: `LMS_CATEGORIES` (the `id` values are stored, so they are not free to rename), and the YouTube helpers.

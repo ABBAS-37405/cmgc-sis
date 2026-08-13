@@ -2,6 +2,7 @@ import { useState } from "react";
 import AdminSidebar from "../AdminSidebar/AdminSidebar";
 import AdminOverview from "../AdminOverview/AdminOverview";
 import StudentsList from "../StudentsList/StudentsList";
+import StudentProgress from "../StudentProgress/StudentProgress";
 import MarkAttendance from "../MarkAttendance/MarkAttendance";
 import EnterResults from "../EnterResults/EnterResults";
 import FeeVerification from "../FeeVerification/FeeVerification";
@@ -26,6 +27,11 @@ export default function AdminPortal({ adminProfile, onExit }) {
       <main className="admin-portal__main">
         {active === "overview" && <AdminOverview />}
         {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
+        {/* Read-only: one student's attendance, tests, exams, assignments and fee
+            in one place. adminProfile is passed rather than a list of flags,
+            because the screen hides the two sections RLS would answer with
+            silence (attendance and results) instead of showing them as zero. */}
+        {active === "progress" && hasPermission(adminProfile, "students") && <StudentProgress allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "attendance" && hasPermission(adminProfile, "attendance") && <MarkAttendance allowedPrograms={allowedPrograms} />}
         {active === "results" && hasPermission(adminProfile, "results") && <EnterResults allowedPrograms={allowedPrograms} />}
         {active === "fee" && hasPermission(adminProfile, "fee") && <FeeVerification />}

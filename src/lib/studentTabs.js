@@ -1,4 +1,4 @@
-import { Home, CalendarCheck, ClipboardList, NotebookPen, FileText, FileBarChart2, Wallet, UserSquare, BookOpen } from "lucide-react";
+import { Home, CalendarCheck, ClipboardList, NotebookPen, FileText, FileBarChart2, Wallet, UserSquare, BookOpen, TrendingUp } from "lucide-react";
 
 /**
  * The student portal's screens, in order.
@@ -16,8 +16,9 @@ export const STUDENT_TABS = [
   { id: "lms", label: "LMS", icon: BookOpen },
   { id: "results", label: "Results", icon: FileText },
   { id: "fee", label: "Fee", icon: Wallet },
-  // After Fee on purpose: the report summarises every screen before it, fee
-  // position included, so it reads as the round-up rather than another section.
+  // The last two both look back over everything above them, which is why they
+  // sit at the end: Performance draws the term, Reports hands it over as a PDF.
+  { id: "performance", label: "Performance", icon: TrendingUp },
   { id: "reports", label: "Reports", icon: FileBarChart2 },
   { id: "myform", label: "My Form", icon: UserSquare },
 ];

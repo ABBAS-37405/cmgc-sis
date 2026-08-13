@@ -8,6 +8,7 @@ import { PROGRAMS, YEARS } from "../../lib/academics";
 import { hasPermission } from "../../lib/adminAuth";
 import { buildStudentProgress } from "../../lib/studentProgress";
 import { pushStep, truncate } from "../../lib/backStack";
+import StudentCharts from "../Performance/StudentCharts";
 import StudentDetail from "../StudentDetail/StudentDetail";
 import "./StudentProgress.css";
 
@@ -322,6 +323,10 @@ export default function StudentProgress({ allowedPrograms = [], adminProfile }) 
       ) : !progress ? null : (
         <>
           <Summary progress={progress} />
+          {/* The charts sit above the sections rather than replacing them: the
+              shape of a term is easier to see drawn, and the exact figure is
+              easier to read in a row. Each chart also carries its own numbers. */}
+          <StudentCharts progress={progress} />
           <AttendanceSection attendance={progress.attendance} />
           <TestsSection tests={progress.tests} />
           <ExamsSection exams={progress.exams} />

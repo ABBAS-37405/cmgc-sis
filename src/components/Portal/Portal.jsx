@@ -9,6 +9,7 @@ import ClassTests from "../ClassTests/ClassTests";
 import Assignments from "../Assignments/Assignments";
 import MyForm from "../MyForm/MyForm";
 import Lms from "../Lms/Lms";
+import MyPerformance from "../Performance/MyPerformance";
 import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
 // A student signing in should not be made to wait for the admin and teacher
@@ -165,6 +166,7 @@ export default function Portal({ onExit }) {
         {activeTab === "lms" && <Lms student={studentData} />}
         {activeTab === "results" && <Results studentId={studentData?.id} />}
         {activeTab === "fee" && <Fee studentId={studentData?.id} />}
+        {activeTab === "performance" && <MyPerformance student={studentData} />}
         {activeTab === "reports" && <Reports student={studentData} />}
         {activeTab === "myform" && <MyForm student={studentData} />}
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReportsPane from "./ReportsPane";
 import TestReports from "./TestReports";
+import ClassPerformance from "../Performance/ClassPerformance";
 import Accounts from "./Accounts";
 import { hasPermission } from "../../lib/adminAuth";
 import "./MonthlyReports.css";
@@ -24,6 +25,7 @@ const TABS = [
   { id: "monthly", label: "Monthly Reports", sub: "One PDF per student for a month — attendance, class tests, assignments and fee position. Send it on WhatsApp, or download the whole class at once." },
   { id: "exam", label: "Exam Reports", sub: "One PDF per student for a term exam — its marksheet, with the same attendance, assignments and fee context. Same sending and downloads as monthly." },
   { id: "tests", label: "Test Reports", sub: "One class test at a time: the result sheet for the notice board, and a page per student to send home." },
+  { id: "performance", label: "Class Performance", sub: "The picture behind the reports: class averages by test, by subject and by teacher, and how the marks are spread across the grade bands." },
   { id: "accounts", label: "Accounts", sub: "Fee income against salaries and running costs — net profit or loss for each month and for the whole year. Record bills, rent and other expenses here.", needs: "teachers" },
 ];
 
@@ -68,6 +70,10 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
           other mode's filters, exam selection and half-finished WhatsApp queue. */}
       {active.id === "tests" ? (
         <TestReports allowedPrograms={allowedPrograms} />
+      ) : active.id === "performance" ? (
+        // teacher={null} puts it in full-range mode: every test in her groups,
+        // and the by-teacher breakdown a single teacher's own screen omits.
+        <ClassPerformance teacher={null} allowedPrograms={allowedPrograms} />
       ) : active.id === "accounts" ? (
         <Accounts adminProfile={adminProfile} />
       ) : (

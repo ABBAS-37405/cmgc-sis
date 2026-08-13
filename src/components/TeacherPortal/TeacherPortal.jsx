@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet } from "lucide-react";
+import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet, TrendingUp } from "lucide-react";
 import Sidebar from "../Sidebar/Sidebar";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
@@ -7,6 +7,7 @@ import LmsManage from "../LmsManage/LmsManage";
 import MarkAttendance from "../MarkAttendance/MarkAttendance";
 import EnterResults from "../EnterResults/EnterResults";
 import TeacherSalary from "../TeacherSalary/TeacherSalary";
+import ClassPerformance from "../Performance/ClassPerformance";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
@@ -33,12 +34,20 @@ const NAV_ITEMS = [
  */
 const SALARY_ITEM = { id: "salary", label: "My Salary", icon: Wallet };
 
+/**
+ * How her classes are doing. Offered to whoever can conduct class tests, because
+ * that right is what produces the marks this screen is drawn from — a teacher
+ * without it would open an empty chart and learn nothing.
+ */
+const PERFORMANCE_ITEM = { id: "performance", label: "Performance", icon: TrendingUp };
+
 export default function TeacherPortal({ teacher, onLogout }) {
   const allowedPrograms = teacherPrograms(teacher);
   const subjects = teacherSubjects(teacher);
 
   const dutyItems = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
-  const items = [...dutyItems, SALARY_ITEM];
+  const canSeePerformance = hasTeacherRight(teacher, "class_tests");
+  const items = [...dutyItems, ...(canSeePerformance ? [PERFORMANCE_ITEM] : []), SALARY_ITEM];
   const [active, setActive] = useState(dutyItems[0]?.id || SALARY_ITEM.id);
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
@@ -108,6 +117,7 @@ export default function TeacherPortal({ teacher, onLogout }) {
           </div>
         ) : (
           <>
+            {active === "performance" && <ClassPerformance teacher={teacher} allowedPrograms={allowedPrograms} />}
             {active === "class_tests" && <ClassTestEntry teacher={teacher} allowedPrograms={allowedPrograms} />}
             {active === "assignments" && <AssignmentEntry teacher={teacher} allowedPrograms={allowedPrograms} />}
             {active === "lms" && <LmsManage teacher={teacher} />}

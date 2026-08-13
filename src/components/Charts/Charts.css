@@ -1,0 +1,131 @@
+/*
+ * Chart colours.
+ *
+ * These are NOT taken from --accent, and that is deliberate: the visitor can set
+ * the accent to any hue she likes (see AccentPicker), and a data colour has to
+ * survive colour-blindness and a contrast floor, which an arbitrary hue does not.
+ * Chrome follows the theme; the data does not.
+ *
+ * The three series steps were validated as a set against this project's own card
+ * surfaces — #f8fafc (light), #ffffff (soft, academic) and #1e293b (dark) — for
+ * the lightness band, the chroma floor, colour-blind separation (worst all-pairs
+ * deutan dE 9.2 light / 9.4 dark, floor 8) and normal-vision separation (24.0 /
+ * 20.9, floor 15). The aqua slot sits at 2.7:1 on the light cards, below the 3:1
+ * bar, which is why every chart ships the "Show the numbers" table: that table is
+ * the documented relief, not an extra.
+ *
+ * Only slot 1 is in use today — nothing here plots two series at once — but the
+ * order is fixed. A fourth series is not a new hue: it is a fold into "Other" or
+ * a second chart, because a generated hue fails the separation checks by design.
+ */
+
+.chart, .meter {
+  --c-series1: #2a78d6;
+  --c-series2: #eb6834;
+  --c-series3: #1baf7a;
+  --c-good: #0ca30c;
+  --c-critical: #d03b3b;
+  /* Chrome comes from the theme, so all four palettes stay coherent. */
+  --c-surface: var(--card);
+  --c-grid: var(--border);
+  --c-ink: var(--text);
+  --c-muted: var(--subtext);
+  /* The unfilled remainder of a meter: a lighter step of the fill's own ramp,
+     never a grey. It is chrome carrying no value, so it sits below the 2:1 the
+     validator asks of an ordinal *mark*. */
+  --c-track: #dbeafe;
+}
+
+[data-theme="dark"] .chart, [data-theme="dark"] .meter {
+  --c-series1: #3987e5;
+  --c-series2: #d95926;
+  --c-series3: #199e70;
+  --c-track: #1c5cab;
+}
+
+/* ------------------------------------------------------------------- card */
+
+.chart { display: flex; flex-direction: column; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.chart__head { display: flex; flex-direction: column; gap: 2px; }
+.chart__title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.chart__subtitle { font-size: 11.5px; color: var(--subtext); line-height: 1.5; }
+.chart__empty { font-size: 12.5px; color: var(--subtext); padding: 18px 0; text-align: center; }
+
+.chart__plot { position: relative; width: 100%; min-width: 0; }
+.chart__svg { display: block; overflow: visible; }
+
+/* ------------------------------------------------------------------ marks */
+
+.chart__mark { fill: var(--c-series1); transition: opacity 0.12s; }
+.chart__mark--series2 { fill: var(--c-series2); }
+.chart__mark--series3 { fill: var(--c-series3); }
+.chart__mark--good { fill: var(--c-good); }
+.chart__mark--critical { fill: var(--c-critical); }
+.chart__mark--active { opacity: 0.82; }
+
+.chart__line { fill: none; stroke: var(--c-series1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* The 2px ring is the surface colour, so a dot stays legible where it crosses
+   the line or another dot. Never a darker outline -- that is ink that is not data. */
+.chart__dot { fill: var(--c-series1); stroke: var(--c-surface); stroke-width: 2; }
+
+.chart__track { fill: var(--c-track); }
+
+/* ----------------------------------------------------------------- chrome */
+
+/* Hairline, solid, one step off the surface. Dashes read as "threshold". */
+.chart__grid { stroke: var(--c-grid); stroke-width: 1; }
+.chart__reference { stroke: var(--c-muted); stroke-width: 1; }
+.chart__reference-label { font-size: 10px; fill: var(--c-muted); font-weight: 600; }
+
+.chart__tick, .chart__axis-label, .chart__axis-sublabel, .chart__row-label, .chart__value {
+  font-family: inherit;
+}
+.chart__tick { font-size: 10px; fill: var(--c-muted); font-variant-numeric: tabular-nums; }
+.chart__axis-label { font-size: 10.5px; fill: var(--c-muted); }
+.chart__axis-sublabel { font-size: 9.5px; fill: var(--c-muted); opacity: 0.8; }
+.chart__row-label { font-size: 11.5px; fill: var(--c-ink); }
+/* Values wear ink, never the series colour -- the mark beside them carries identity. */
+.chart__value { font-size: 11px; font-weight: 700; fill: var(--c-ink); font-variant-numeric: tabular-nums; }
+
+.chart__hit { cursor: pointer; outline: none; }
+.chart__hit:focus-visible { stroke: var(--accent); stroke-width: 2; }
+
+/* --------------------------------------------------------------- tooltip */
+
+.chart__tip {
+  position: absolute; transform: translate(-50%, -100%); margin-top: -10px;
+  display: flex; flex-direction: column; gap: 1px; pointer-events: none; white-space: nowrap;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 9px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); z-index: 5;
+}
+.chart__tip-head { font-size: 11px; color: var(--subtext); }
+.chart__tip-line { font-size: 12.5px; font-weight: 700; color: var(--text); }
+
+/* -------------------------------------------------------- numbers behind */
+
+.chart__numbers { border-top: 1px solid var(--border); padding-top: 8px; }
+.chart__numbers summary { font-size: 11.5px; color: var(--subtext); cursor: pointer; font-weight: 600; }
+.chart__numbers-body { overflow-x: auto; margin-top: 8px; }
+.chart__numbers-body table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.chart__numbers-body th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--subtext); font-weight: 600; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.chart__numbers-body td { padding: 5px 8px; color: var(--text); border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.chart__numbers-body tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------------ meter */
+
+.meter { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.meter__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.meter__label { font-size: 12px; font-weight: 600; color: var(--subtext); }
+.meter__value { font-size: 14px; font-weight: 700; color: var(--text); }
+.meter__track { height: 10px; border-radius: 999px; background: var(--c-track); overflow: hidden; }
+.meter__fill { height: 100%; border-radius: 999px; background: var(--c-series1); transition: width 0.3s ease; }
+.meter__fill--good { background: var(--c-good); }
+.meter__fill--critical { background: var(--c-critical); }
+.meter__note { font-size: 11.5px; color: var(--subtext); }
+
+.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.charts-grid--meters { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .meter__fill { transition: none; }
+}

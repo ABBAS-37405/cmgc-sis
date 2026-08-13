@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AdminSidebar from "../AdminSidebar/AdminSidebar";
 import AdminOverview from "../AdminOverview/AdminOverview";
 import StudentsList from "../StudentsList/StudentsList";
@@ -17,7 +17,18 @@ import "./AdminPortal.css";
 
 export default function AdminPortal({ adminProfile, onExit }) {
   const [active, setActive] = useState("overview");
-  const allowedPrograms = allowedProgramsFor(adminProfile);
+
+  /*
+   * Memoised, because `allowedProgramsFor` builds a new array every time and this
+   * one is passed to nearly every tab. App re-renders whenever the page crosses a
+   * scroll threshold (it tracks scrollY for the landing page, and that effect sits
+   * above the early return that swaps in the portal), so an unmemoised array meant
+   * a fresh identity mid-scroll — and any child that keyed a fetch on it reloaded
+   * itself while the admin was reading. That is exactly what made Student Report
+   * flicker: the list blanked, the page height collapsed, the scroll bounced to
+   * the top and crossed the threshold again.
+   */
+  const allowedPrograms = useMemo(() => allowedProgramsFor(adminProfile), [adminProfile]);
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
 

@@ -63,10 +63,27 @@ const fmtStamp = (value) =>
  *   0 in a test report.
  */
 export default function StudentProgress({ allowedPrograms = [], adminProfile }) {
-  const isRestricted = allowedPrograms.length > 0;
+  /**
+   * The scoped groups, keyed on their contents rather than the array's identity.
+   *
+   * `allowedProgramsFor()` builds a fresh array on every AdminPortal render, and
+   * App re-renders whenever the page crosses a scroll threshold — it tracks
+   * scrollY for the landing page's navbar and back-to-top button, and that effect
+   * is above the early return that swaps in the portal. Keying the roster fetch
+   * on the prop itself therefore reloaded the whole list mid-scroll, which blanked
+   * it, collapsed the page height, bounced the scroll back to the top and crossed
+   * the threshold again — the screen flickering and refusing to stay put.
+   *
+   * AdminPortal now memoises the array as well, so this is belt and braces. It
+   * stays because the fix has to hold whoever passes the prop next.
+   */
+  const programsKey = allowedPrograms.join("|");
+  const programs = useMemo(() => (programsKey ? programsKey.split("|") : []), [programsKey]);
+
+  const isRestricted = programs.length > 0;
   const visiblePrograms = useMemo(
-    () => (isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS),
-    [isRestricted, allowedPrograms]
+    () => (isRestricted ? PROGRAMS.filter((p) => programs.includes(p)) : PROGRAMS),
+    [isRestricted, programs]
   );
 
   const [students, setStudents] = useState([]);
@@ -100,13 +117,13 @@ export default function StudentProgress({ allowedPrograms = [], adminProfile }) 
       .order("name");
 
     // A sub-admin's list is always her own groups, never the whole college.
-    if (isRestricted) query = query.in("program", allowedPrograms);
+    if (isRestricted) query = query.in("program", programs);
 
     const { data, error: dbError } = await query;
     if (dbError) setError(dbError.message);
     setStudents(data || []);
     setLoading(false);
-  }, [isRestricted, allowedPrograms]);
+  }, [isRestricted, programs]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -316,7 +333,7 @@ export default function StudentProgress({ allowedPrograms = [], adminProfile }) 
       {showProfile && (
         <StudentDetail
           student={selected}
-          allowedPrograms={allowedPrograms}
+          allowedPrograms={programs}
           onClose={() => setShowProfile(false)}
           onSaved={() => { fetchStudents(); reloadProgress(); }}
         />

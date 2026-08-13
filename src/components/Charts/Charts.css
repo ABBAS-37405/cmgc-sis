@@ -93,11 +93,15 @@
 /* --------------------------------------------------------------- tooltip */
 
 .chart__tip {
-  position: absolute; transform: translate(-50%, -100%); margin-top: -10px;
+  position: absolute; transform: translate(-50%, -100%); margin-top: -10px; max-width: 200px;
   display: flex; flex-direction: column; gap: 1px; pointer-events: none; white-space: nowrap;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
   padding: 6px 9px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); z-index: 5;
 }
+/* Flipped against the near edge so a tooltip on the first or last mark cannot
+   hang off the card and drag the page sideways. */
+.chart__tip--start { transform: translate(0, -100%); }
+.chart__tip--end { transform: translate(-100%, -100%); }
 .chart__tip-head { font-size: 11px; color: var(--subtext); }
 .chart__tip-line { font-size: 12.5px; font-weight: 700; color: var(--text); }
 
@@ -123,8 +127,11 @@
 .meter__fill--critical { background: var(--c-critical); }
 .meter__note { font-size: 11.5px; color: var(--subtext); }
 
-.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-.charts-grid--meters { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+/* min(…, 100%) is load-bearing, not a flourish: a bare minmax(300px, 1fr) track
+   cannot shrink below 300px, so on a 320px phone (minus the portal's padding)
+   the grid is wider than the screen and the whole page scrolls sideways. */
+.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.charts-grid--meters { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
 
 @media (prefers-reduced-motion: reduce) {
   .meter__fill { transition: none; }

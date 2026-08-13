@@ -7,11 +7,17 @@
 .sidebar__item--logout { color: #f87171; margin-top: 12px; padding-top: 14px; border-top: 1px solid #334155; border-radius: 0 0 8px 8px; }
 .sidebar__item--logout:hover { background: rgba(248,113,113,0.12); border-radius: 8px; }
 
-.sidebar__mobile { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; justify-content: space-around; padding: 8px 4px; z-index: 40; border-top: 1px solid #334155; overflow-x: auto; scrollbar-width: none; }
+.sidebar__mobile { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; justify-content: space-around; padding: 8px 4px; z-index: 40; border-top: 1px solid #334155; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .sidebar__mobile::-webkit-scrollbar { display: none; }
 .sidebar__mobile-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #94a3b8; padding: 4px 10px; flex: 0 0 auto; white-space: nowrap; }
 .sidebar__mobile-item--active { color: #60a5fa; }
 .sidebar__mobile-item--logout { color: #f87171; }
+
+/* Ten tabs now. Same reasoning as the admin bar: tighten the items before
+   making her swipe for them. */
+@media (max-width: 420px) {
+  .sidebar__mobile-item { padding: 4px 7px; font-size: 10px; }
+}
 
 @media (min-width: 1024px) {
   .sidebar { display: flex; }

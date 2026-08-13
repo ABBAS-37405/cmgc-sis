@@ -47,12 +47,43 @@ export default function App() {
     else localStorage.setItem(ACCENT_KEY, String(accentHue));
   }, [accentHue, theme]);
 
+  /*
+   * Two booleans off the scroll position: the navbar's shadow and the
+   * back-to-top button.
+   *
+   * Read inside one animation frame and written only when a boolean actually
+   * flips. The listener used to call both setters on every scroll event —
+   * dozens of times a second — and each crossing re-renders this component,
+   * which is the whole app: React only bails on an unchanged value *after* the
+   * call, and the flip re-renders every child. That is what was reloading the
+   * Student Report list mid-scroll, and it is why the effect sits above the
+   * early returns: it runs inside the portals too, where neither of these
+   * booleans is used at all.
+   *
+   * `passive: true` also tells the browser it never has to wait for this
+   * handler before painting the next frame.
+   */
   useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 60);
-      setShowTop(window.scrollY > 400);
+    let queued = false;
+    let lastScrolled = false;
+    let lastShowTop = false;
+
+    const read = () => {
+      queued = false;
+      const y = window.scrollY;
+      const nextScrolled = y > 60;
+      const nextShowTop = y > 400;
+      if (nextScrolled !== lastScrolled) { lastScrolled = nextScrolled; setScrolled(nextScrolled); }
+      if (nextShowTop !== lastShowTop) { lastShowTop = nextShowTop; setShowTop(nextShowTop); }
     };
-    window.addEventListener("scroll", onScroll);
+
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(read);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 

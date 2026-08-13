@@ -111,11 +111,18 @@ export function ChartCard({ title, subtitle, empty, emptyText, table, children }
   );
 }
 
-/** The floating read-out. Positioned in pixels, because the plot is drawn in them. */
-function Tooltip({ at, lines }) {
+/**
+ * The floating read-out. Positioned in pixels, because the plot is drawn in them.
+ *
+ * It flips against the near edge rather than always centring on the mark: a
+ * centred tooltip on the last column hangs past the card, and on a phone that is
+ * enough to make the whole page scroll sideways.
+ */
+function Tooltip({ at, width, lines }) {
   if (!at) return null;
+  const edge = at.x > width - 90 ? "end" : at.x < 90 ? "start" : "center";
   return (
-    <div className="chart__tip" style={{ left: at.x, top: at.y }} role="status">
+    <div className={`chart__tip chart__tip--${edge}`} style={{ left: at.x, top: at.y }} role="status">
       {lines.map((l, i) => (
         <span key={i} className={i === 0 ? "chart__tip-head" : "chart__tip-line"}>{l}</span>
       ))}
@@ -230,6 +237,7 @@ export function ColumnChart({
 
       {hover && (
         <Tooltip
+          width={width}
           at={{ x: hover.x, y: hover.y }}
           lines={[data[hover.index].label, data[hover.index].tipValue || `${Math.round(data[hover.index].value)}${suffix}`, data[hover.index].tipNote].filter(Boolean)}
         />
@@ -298,6 +306,7 @@ export function BarChart({ data, max = 100, suffix = "%", label = "Chart", nameW
 
       {hover && (
         <Tooltip
+          width={width}
           at={{ x: hover.x, y: hover.y - 4 }}
           lines={[data[hover.index].label, data[hover.index].tipValue || data[hover.index].valueLabel || `${Math.round(data[hover.index].value)}${suffix}`, data[hover.index].tipNote].filter(Boolean)}
         />
@@ -376,6 +385,7 @@ export function LineChart({ data, max = 100, suffix = "%", height = 210, label =
 
       {hover && (
         <Tooltip
+          width={width}
           at={{ x: hover.x, y: hover.y }}
           lines={[data[hover.index].label, data[hover.index].tipValue || `${Math.round(data[hover.index].value)}${suffix}`, data[hover.index].tipNote].filter(Boolean)}
         />

@@ -36,7 +36,7 @@
 .acct__tag--neg { color: #991b1b; background: #fee2e2; }
 .acct__tag--none { color: var(--subtext); background: var(--bg); border: 1px solid var(--border); }
 
-.acct__split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.acct__split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; align-items: start; }
 
 .acct__panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .acct__panel-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--text); }

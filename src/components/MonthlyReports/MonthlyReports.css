@@ -46,7 +46,7 @@
 .mrep__none p { font-size: 14px; }
 .mrep__none-hint { font-size: 12.5px; max-width: 420px; line-height: 1.55; }
 
-.mrep__tests { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.mrep__tests { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; }
 .mrep__test { display: flex; flex-direction: column; gap: 3px; text-align: left; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--card); }
 .mrep__test--active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .mrep__test-title { font-size: 13px; font-weight: 600; color: var(--text); }

@@ -12,20 +12,43 @@ const TARGETS = [
   { label: "Years of Excellence", value: 15, suffix: "+", icon: Award },
 ];
 
-export default function Stats() {
-  const [counts, setCounts] = useState(TARGETS.map(() => 0));
+const DURATION = 1200;
 
+/** Someone who has asked their device for less motion gets the finished number. */
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+export default function Stats() {
+  const [counts, setCounts] = useState(() =>
+    prefersReducedMotion() ? TARGETS.map((t) => t.value) : TARGETS.map(() => 0)
+  );
+
+  /*
+   * One animation frame loop that stops when it is finished.
+   *
+   * This used to be four setIntervals at 30ms — 133 state updates a second —
+   * and none of them was ever cleared: the callback returned a fresh array on
+   * every tick whether the number had changed or not, so React kept re-rendering
+   * for as long as the page was open. On a phone that is the whole landing page
+   * competing with the visitor's scroll, hours after the counters finished.
+   *
+   * Now it runs for 1.2 seconds, eases out, and cancels itself.
+   */
   useEffect(() => {
-    const timers = TARGETS.map((tg, i) =>
-      setInterval(() => {
-        setCounts((prev) => {
-          const next = [...prev];
-          if (next[i] < tg.value) next[i] = Math.min(next[i] + Math.ceil(tg.value / 40), tg.value);
-          return next;
-        });
-      }, 30)
-    );
-    return () => timers.forEach(clearInterval);
+    if (prefersReducedMotion()) return undefined;
+
+    let frame = 0;
+    const start = performance.now();
+
+    const tick = (now) => {
+      const t = Math.min((now - start) / DURATION, 1);
+      const eased = 1 - (1 - t) ** 3;
+      setCounts(TARGETS.map((tg) => Math.round(tg.value * eased)));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   return (

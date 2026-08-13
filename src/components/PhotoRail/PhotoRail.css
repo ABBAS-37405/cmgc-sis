@@ -35,7 +35,13 @@
        before the first one arrives. */
     background: linear-gradient(110deg, rgba(255,255,255,0.10) 30%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.10) 70%);
     background-size: 220% 100%;
-    animation: railEnter 0.9s ease both, railShimmer 1.6s linear infinite;
+    /* Four passes, not `infinite`. The shimmer exists to say "a photo is coming"
+       for the seconds before the first one arrives; once one is on screen it is
+       completely covered — but an infinite background-position animation keeps
+       the compositor repainting two 420x640 boxes at 60fps for as long as the
+       page is open, which the visitor pays for in scroll smoothness and battery
+       and never sees. ~6.4s outlasts any first load worth waiting through. */
+    animation: railEnter 0.9s ease both, railShimmer 1.6s linear 4;
   }
   .photo-rail--left .photo-rail__frame { animation-delay: 0.15s; }
   .photo-rail--right .photo-rail__frame { animation-delay: 0.3s; }

@@ -13,24 +13,38 @@ const RIGHT_RAIL_START = Math.floor(GALLERY_PHOTOS.length / 2);
 // Pre-Medical and General Science; FA covers Humanities and FA-IT.
 const PHRASES = ["Empowering Girls Through Education", "Excellence in FSc, FA and ICS", "Admissions Open 2026"];
 
+/** A typewriter is motion. Anyone who has asked for less of it gets the sentence. */
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 export default function Hero({ scrollTo, onPortalClick, onAdmissionClick }) {
   const [idx, setIdx] = useState(0);
-  const [display, setDisplay] = useState("");
+  const [display, setDisplay] = useState(() => (prefersReducedMotion() ? PHRASES[0] : ""));
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
+    if (prefersReducedMotion()) return undefined;
+
     const current = PHRASES[idx];
     const speed = deleting ? 30 : 60;
+    // The pause at the end of a phrase needs clearing too. It used to be started
+    // inside the callback and never cancelled, so leaving the landing page mid-
+    // phrase left a timer running that woke up to set state on a gone component.
+    let pause = 0;
+
     const timeout = setTimeout(() => {
       if (!deleting) {
         if (display.length < current.length) setDisplay(current.slice(0, display.length + 1));
-        else setTimeout(() => setDeleting(true), 1200);
+        else pause = setTimeout(() => setDeleting(true), 1200);
+      } else if (display.length > 0) {
+        setDisplay(display.slice(0, -1));
       } else {
-        if (display.length > 0) setDisplay(display.slice(0, -1));
-        else { setDeleting(false); setIdx((idx + 1) % PHRASES.length); }
+        setDeleting(false);
+        setIdx((idx + 1) % PHRASES.length);
       }
     }, speed);
-    return () => clearTimeout(timeout);
+
+    return () => { clearTimeout(timeout); clearTimeout(pause); };
   }, [display, deleting, idx]);
 
   return (

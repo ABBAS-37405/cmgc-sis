@@ -1,5 +1,11 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+
+/* Smooth scrolling is for the navbar's jump links. It is switched off for anyone
+   who has asked their device for less motion — for whom an animated jump is not
+   polish, it is the thing that makes a page unusable. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
 body {
   font-family: 'Poppins', 'Nunito', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;

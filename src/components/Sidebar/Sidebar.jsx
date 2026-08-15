@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
 import Logo from "../Logo/Logo";
+import MobileTabMenu from "../MobileTabMenu/MobileTabMenu";
 import { STUDENT_TABS } from "../../lib/studentTabs";
 import "./Sidebar.css";
 
@@ -7,6 +8,17 @@ import "./Sidebar.css";
 export default function Sidebar({ active, setActive, onLogout, userLabel, items = STUDENT_TABS }) {
   return (
     <>
+      {/* Phone only. The bottom bar below is unchanged — this is the full list
+          for the tabs that scroll off the end of it. */}
+      <MobileTabMenu
+        items={items}
+        active={active}
+        setActive={setActive}
+        onLogout={onLogout}
+        title="CMGC Portal"
+        userLabel={userLabel}
+      />
+
       <aside className="sidebar">
         <div className="sidebar__brand"><Logo size={26} /><span>CMGC Portal</span></div>
         {items.map((it) => (

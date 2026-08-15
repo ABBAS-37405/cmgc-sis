@@ -1,4 +1,6 @@
 .admin-portal { display: flex; min-height: 100vh; background: #f8fafc; }
-.admin-portal__main { flex: 1; padding: 20px; padding-bottom: 90px; }
+/* The 52px of top padding clears MobileTabMenu's fixed bar, the 90px at the
+   bottom clears the fixed tab bar. Both go away with the sidebar at 1024px. */
+.admin-portal__main { flex: 1; padding: 20px; padding-top: 72px; padding-bottom: 90px; }
 
 @media (min-width: 1024px) { .admin-portal__main { padding: 32px; padding-bottom: 32px; } }

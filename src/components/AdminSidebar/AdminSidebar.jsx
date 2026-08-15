@@ -1,5 +1,6 @@
 import { LayoutDashboard, Users, UserSearch, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut, FileBarChart } from "lucide-react";
 import Logo from "../Logo/Logo";
+import MobileTabMenu from "../MobileTabMenu/MobileTabMenu";
 import { hasPermission } from "../../lib/adminAuth";
 import "./AdminSidebar.css";
 
@@ -40,6 +41,20 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
 
   return (
     <>
+      {/* Phone only. Fed `visibleItems`, not `sidebarItems` — it renders its own
+          Logout, so passing the injected one would show it twice. The bottom bar
+          below is unchanged; this is the full list for the tabs that scroll off
+          the end of it. */}
+      <MobileTabMenu
+        items={visibleItems}
+        active={active}
+        setActive={setActive}
+        onLogout={onLogout}
+        title="CMGC Admin"
+        userLabel={adminProfile?.name || adminProfile?.email || "Admin"}
+        variant="admin"
+      />
+
       <aside className="admin-sidebar">
         <div className="admin-sidebar__brand"><Logo size={26} /><span>CMGC Admin</span></div>
         {sidebarItems.map((it) => (

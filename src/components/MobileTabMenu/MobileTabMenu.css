@@ -1,0 +1,61 @@
+/* Fixed rather than sticky: the portals lay the sidebar and the page out in a
+   flex row, and a sticky flex item would sit in that row instead of over it.
+   `.portal__main` / `.admin-portal__main` carry the matching top padding. */
+.mtm {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 45;
+  height: 52px; padding: 0 12px;
+  background: #0f172a; color: #fff;
+  border-bottom: 1px solid #334155;
+}
+.mtm__brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; min-width: 0; }
+.mtm__brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mtm__trigger {
+  display: flex; align-items: center; gap: 7px; flex-shrink: 0;
+  max-width: 55%; padding: 7px 11px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.16); border: 1px solid #334155;
+}
+.mtm__trigger-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mtm__chev { flex-shrink: 0; transition: transform 0.15s ease; }
+.mtm__chev--open { transform: rotate(180deg); }
+
+.mtm__overlay { position: fixed; inset: 0; z-index: 60; }
+.mtm__backdrop { position: absolute; inset: 0; width: 100%; background: rgba(15, 23, 42, 0.55); }
+
+.mtm__panel {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; flex-direction: column;
+  max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: #0f172a; color: #fff;
+  padding: 10px 10px 14px;
+  border-bottom: 1px solid #334155;
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.4);
+}
+.mtm__panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 10px; border-bottom: 1px solid #334155; margin-bottom: 8px; }
+.mtm__panel-title { font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mtm__close { color: #cbd5e1; padding: 4px; border-radius: 6px; flex-shrink: 0; }
+
+/* Two across: eleven items in one column runs past the fold on a small phone,
+   and the point of this menu is seeing the whole portal at once. */
+.mtm__items { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.mtm__item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 10px; border-radius: 8px;
+  font-size: 13px; color: #cbd5e1; text-align: left;
+}
+.mtm__item--active { background: #2563eb; color: #fff; }
+.mtm__item--logout { color: #f87171; margin-top: 8px; padding-top: 12px; border-top: 1px solid #334155; border-radius: 0 0 8px 8px; }
+
+.mtm--admin .mtm__trigger { color: #fecaca; }
+.mtm--admin .mtm__item--active { background: #b91c1c; }
+
+@media (max-width: 359px) {
+  .mtm__items { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 1024px) {
+  .mtm, .mtm__overlay { display: none; }
+}

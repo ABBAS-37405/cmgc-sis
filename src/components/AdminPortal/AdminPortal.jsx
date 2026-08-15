@@ -46,9 +46,10 @@ export default function AdminPortal({ adminProfile, onExit }) {
         {active === "attendance" && hasPermission(adminProfile, "attendance") && <MarkAttendance allowedPrograms={allowedPrograms} />}
         {active === "results" && hasPermission(adminProfile, "results") && <EnterResults allowedPrograms={allowedPrograms} />}
         {active === "fee" && hasPermission(adminProfile, "fee") && <FeeVerification />}
-        {/* allowedPrograms scopes who the WhatsApp forward can reach — a clerk
-            assigned two groups must not be able to message the whole college. */}
-        {active === "notices" && hasPermission(adminProfile, "notices") && <Notices allowedPrograms={allowedPrograms} />}
+        {/* Unscoped by allowedPrograms on purpose: `notices` has no audience
+            column — a notice goes to the whole college, the public board and
+            every student's Notices tab alike. */}
+        {active === "notices" && hasPermission(adminProfile, "notices") && <Notices />}
         {/* teacher={null} puts it in full-range mode: every subject the allowed
             groups offer, rather than one teacher's own list. */}
         {active === "lms" && hasPermission(adminProfile, "lms") && <LmsManage teacher={null} allowedPrograms={allowedPrograms} />}

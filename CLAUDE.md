@@ -297,7 +297,7 @@ Cells are primitives or `{ v, s }`, where `s` is an index into `S` — the style
 
 Click-to-chat can only pre-fill — a human must press Send. Actual automated delivery needs the WhatsApp Business API: `POST /api/send-credentials` in `server.js` (email via SMTP, WhatsApp via Twilio) is wired for it but `SMTP_*` / `TWILIO_*` are not set in `.env`, so the deep-link path is the one in use.
 
-**`components/WhatsAppQueue` is the whole of bulk sending**, and it is one implementation on purpose — the popup and focus handling below is subtle enough that a second copy would drift within a term. `useWhatsAppQueue()` is the machine, `<WhatsAppQueue>` is its banner, and `MarkAttendance` (absence reminders) and `Notices` (forwarding a notice) both drive it. `openWhatsAppQueue()` in `lib/whatsapp.js` is the older click-per-chat helper and is no longer used by anything.
+**`components/WhatsAppQueue` is the whole of bulk sending**, and it is one implementation on purpose — the popup and focus handling below is subtle enough that a second copy would drift within a term. `useWhatsAppQueue()` is the machine, `<WhatsAppQueue>` is its banner, and `MarkAttendance` (absence reminders) drives it. `openWhatsAppQueue()` in `lib/whatsapp.js` is the older click-per-chat helper and is no longer used by anything.
 
 **The queue advances by itself**, because a class of thirty meant thirty clicks in the portal on top of thirty presses of Send. The admin answers a single `confirm` and never touches the tab again. Four things make that work, and each one is load-bearing:
 
@@ -306,9 +306,19 @@ Click-to-chat can only pre-fill — a human must press Send. Actual automated de
 - **`armedRef` is a ref, and the effect has no dependency array.** No deps means the listener never closes over a stale queue; the ref means an unrelated re-render while she is away in WhatsApp cannot disarm it. Arming is what stops the very first return — the one caused by opening the tab — from skipping a recipient.
 - **Entries arrive already screened and already carrying their message.** Anything that could raise a modal has to be resolved before `start` — `sendAbsenceWhatsApp`'s prompt for a missing number is right for a single-row button and fatal for a queue, where one dialog half way through strands every recipient after it. Whoever cannot be messaged goes in `skipped` and is named when the run finishes.
 
-The cost of this design is that returning from *any* other window advances the queue, which the banner says out loud alongside a Stop button. Removing that ambiguity means the Business API, not more event plumbing. **A screen that hides the banner must also stop the run** — the hook lives in the screen, not the banner, so `Notices.closeSendPanel()` calls `wa.stop()`; without that the queue keeps opening chats with nothing on screen saying so.
+The cost of this design is that returning from *any* other window advances the queue, which the banner says out loud alongside a Stop button. Removing that ambiguity means the Business API, not more event plumbing. **A screen that hides the banner must also stop the run** — the hook lives in the screen, not the banner, so whichever screen owns a `useWhatsAppQueue` must call `wa.stop()` wherever it stops rendering the banner; without that the queue keeps opening chats with nothing on screen saying so.
 
-**Notices → the WhatsApp button on a notice** forwards it to students, filtered by year (1st / 2nd / both) and group, scoped by `allowed_programs` so a clerk cannot reach outside her own groups. The message is built around the notice but the body is **editable before sending** — a board headline and a sentence to a parent are not always the same thing — and each parent's copy names her own daughter. **Copy message** hands over the generic version instead, without a girl's name in it, because pasting one message into a class WhatsApp group is faster than thirty chats and is what the queue cannot beat. `CATEGORIES` in `Notices.jsx` and the icon/colour maps in `NoticeBoard.jsx` must stay in step: a category the admin can post but the public board does not know renders with no icon and an unstyled tag.
+### Notices
+
+`notices` is one row per announcement — `title`, `category`, `created_at`, and nothing else. There is **no audience column**, which is the fact the three screens around it are built on: a notice goes to the college, not to a group, so none of them scopes by `allowed_programs`.
+
+- `Notices.jsx` (admin) posts and deletes them.
+- `NoticeBoard.jsx` is the public landing-page section.
+- `StudentNotices.jsx` is the student portal's **Notices** tab, second in `STUDENT_TABS` — the same query as the public board, so a girl reads what was posted without leaving the portal. Category filters are narrowed to the categories actually present, because a filter that can only ever return nothing is a dead button.
+
+`CATEGORIES` in `Notices.jsx` and the icon maps in `NoticeBoard.jsx` and `StudentNotices.jsx` must stay in step (plus `CATEGORY_COLOR` on the public board): a category the admin can post but a reader does not know renders with no icon and an unstyled tag.
+
+There is deliberately **no WhatsApp forward here.** It was removed: a notice already reaches every student through the portal tab and the public board the moment it is posted, and click-to-chat cannot actually send — it opened one chat per student for the admin to press Send in, thirty times, to deliver what the portal had already delivered. Bulk WhatsApp remains where the message is genuinely per-girl and time-critical (`MarkAttendance`'s absence reminders, the report and salary sends).
 
 ### Campus photos
 

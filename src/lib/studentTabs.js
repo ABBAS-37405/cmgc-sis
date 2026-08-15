@@ -1,4 +1,4 @@
-import { Home, CalendarCheck, ClipboardList, NotebookPen, FileText, FileBarChart2, Wallet, UserSquare, BookOpen, TrendingUp } from "lucide-react";
+import { Home, CalendarCheck, ClipboardList, NotebookPen, FileText, FileBarChart2, Wallet, UserSquare, BookOpen, TrendingUp, Bell } from "lucide-react";
 
 /**
  * The student portal's screens, in order.
@@ -10,6 +10,10 @@ import { Home, CalendarCheck, ClipboardList, NotebookPen, FileText, FileBarChart
  */
 export const STUDENT_TABS = [
   { id: "overview", label: "Overview", icon: Home },
+  // Second, because an announcement is time-sensitive in a way none of the
+  // records below it are — and it is the same board the public site shows, so
+  // she no longer has to leave the portal to read what was posted.
+  { id: "notices", label: "Notices", icon: Bell },
   { id: "attendance", label: "Attendance", icon: CalendarCheck },
   { id: "classtests", label: "Class Tests", icon: ClipboardList },
   { id: "assignments", label: "Assignments", icon: NotebookPen },

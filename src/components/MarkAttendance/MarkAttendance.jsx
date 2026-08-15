@@ -64,7 +64,7 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
   const [classesHeld, setClassesHeld] = useState(true);
   // The admin confirms once and then never touches this tab again — the queue
   // walks itself as she comes back from each chat. Everything about how that
-  // works lives in useWhatsAppQueue; the Notices tab drives the same one.
+  // works lives in useWhatsAppQueue, which is the only implementation of it.
   const wa = useWhatsAppQueue();
 
   const fetchStudents = async () => {

@@ -2,6 +2,7 @@ import { useState, useRef, lazy, Suspense } from "react";
 import LoginPage from "../Login/LoginPage";
 import Sidebar from "../Sidebar/Sidebar";
 import Overview from "../Overview/Overview";
+import StudentNotices from "../StudentNotices/StudentNotices";
 import Attendance from "../Attendance/Attendance";
 import Results from "../Results/Results";
 import Fee from "../Fee/Fee";
@@ -160,6 +161,7 @@ export default function Portal({ onExit }) {
       />
       <main className="portal__main">
         {activeTab === "overview" && <Overview student={studentData} onNavigate={goToTab} onChangePassword={changeStudentPassword} />}
+        {activeTab === "notices" && <StudentNotices />}
         {activeTab === "attendance" && <Attendance studentId={studentData?.id} />}
         {activeTab === "classtests" && <ClassTests studentId={studentData?.id} />}
         {activeTab === "assignments" && <Assignments student={studentData} />}

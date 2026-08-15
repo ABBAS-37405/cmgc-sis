@@ -14,47 +14,8 @@
 .notices__date { font-size: 11px; color: var(--subtext); margin-top: 2px; }
 .notices__cat { font-size: 11px; background: var(--bg); border: 1px solid var(--border); color: var(--subtext); padding: 2px 8px; border-radius: 999px; }
 .notices__delete { color: #ef4444; padding: 4px; }
-.notices__send { color: #16a34a; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); display: inline-flex; align-items: center; }
-.notices__send:hover { background: #f0fdf4; border-color: #86efac; }
-.notices__row--active { background: var(--bg); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
 .notices__form-hint { font-size: 11.5px; color: var(--subtext); line-height: 1.55; margin-top: 10px; }
-.notices__form-hint svg { vertical-align: -1px; color: #16a34a; }
-
-/* The send panel spans both columns on a wide screen — it is a workflow, not a
-   card, and cramming a message preview into half the width makes it unreadable. */
-.notices__send-panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.notices__send-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.notices__send-head h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 0; }
-.notices__close { color: var(--subtext); padding: 4px; border-radius: 6px; }
-.notices__close:hover { background: var(--bg); }
-
-.notices__filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-.notices__field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
-.notices__field--full { min-width: 100%; }
-.notices__field span { font-size: 12px; color: var(--subtext); font-weight: 500; }
-.notices__field select, .notices__field textarea { width: 100%; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--bg); color: var(--text); font-family: inherit; }
-.notices__field textarea { resize: vertical; line-height: 1.55; }
-
-.notices__count { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--subtext); padding-bottom: 9px; }
-.notices__count strong { color: var(--text); font-size: 14px; }
-.notices__count em { font-style: normal; color: #b45309; }
-
-.notices__preview summary { font-size: 12.5px; color: var(--subtext); cursor: pointer; }
-.notices__preview pre { margin-top: 8px; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 12.5px; line-height: 1.6; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-.notices__preview-note { font-size: 11.5px; color: var(--subtext); margin-top: 6px; line-height: 1.5; }
-
-.notices__missing { font-size: 12px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; line-height: 1.55; }
-
-.notices__send-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.notices__go { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 8px; color: #fff; background: #16a34a; border: 1px solid #16a34a; }
-.notices__go:hover { background: #15803d; }
-.notices__go:disabled { opacity: 0.5; cursor: not-allowed; }
-.notices__copy { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); }
-.notices__copy:hover { background: var(--card); }
-.notices__audience { font-size: 12px; color: var(--subtext); }
-.notices__hint { font-size: 11.5px; color: var(--subtext); line-height: 1.6; }
 
 @media (min-width: 1024px) {
   .notices { grid-template-columns: 1fr 1fr; }
-  .notices__send-panel { grid-column: 1 / -1; }
 }

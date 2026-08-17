@@ -21,7 +21,7 @@ const PLACEHOLDERS = {
   teacher: "Teacher Email",
 };
 
-export default function LoginPage({ onLogin, onBack }) {
+export default function LoginPage({ onLogin, onBack, onRoleHint = () => {} }) {
   const [role, setRole] = useState("student");
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +44,10 @@ export default function LoginPage({ onLogin, onBack }) {
     }
 
     setLoading(true);
+    // Her portal's code downloads alongside the sign-in rather than after it. The
+    // request below is the slowest single step in opening the portal, and until
+    // this call it was dead time — see lib/preload.js.
+    onRoleHint(r);
 
     if (r === "admin") {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -142,7 +146,7 @@ export default function LoginPage({ onLogin, onBack }) {
 
         <div className="login__roles">
           {ROLES.map((r) => (
-            <button key={r.id} onClick={() => { setRole(r.id); setError(""); }} className={`login__role-btn ${role === r.id ? "login__role-btn--active" : ""}`}>
+            <button key={r.id} onClick={() => { setRole(r.id); setError(""); onRoleHint(r.id); }} className={`login__role-btn ${role === r.id ? "login__role-btn--active" : ""}`}>
               <r.icon size={14} /> {r.label}
             </button>
           ))}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ChevronUp } from "lucide-react";
 import PhotoRail from "../PhotoRail/PhotoRail";
 import { GALLERY_PHOTOS } from "../../lib/galleryImages";
+import { preloadPortal } from "../../lib/preload";
 import "./Hero.css";
 
 // The rails start half the set apart and tick at slightly different speeds, so
@@ -64,7 +65,16 @@ export default function Hero({ scrollTo, onPortalClick, onAdmissionClick }) {
         <p className="hero__location">Gulzar-e-Quaid, Rawalpindi, Punjab — Affiliated with BISE Rawalpindi</p>
         <div className="hero__actions">
           <button className="hero__btn hero__btn--primary" onClick={onAdmissionClick}>Apply for Admission</button>
-          <button className="hero__btn hero__btn--outline" onClick={onPortalClick}>Go to Portal</button>
+          {/* Aiming at the button is enough notice to start fetching the portal —
+              by the time the click lands the code is usually already here. */}
+          <button
+            className="hero__btn hero__btn--outline"
+            onClick={onPortalClick}
+            onMouseEnter={preloadPortal}
+            onFocus={preloadPortal}
+            onTouchStart={preloadPortal}>
+            Go to Portal
+          </button>
         </div>
       </div>
       <button className="hero__scroll-down" onClick={() => scrollTo("about")}>

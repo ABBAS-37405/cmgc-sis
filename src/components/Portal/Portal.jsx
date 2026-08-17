@@ -21,6 +21,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { pushStep, useTabHistory } from "../../lib/backStack";
 import { storedSession, rememberSession, rememberTab, clearSession } from "../../lib/session";
 import { restoreSession } from "../../lib/sessionRestore";
+import { preloadPortalFor } from "../../lib/preload";
 import "./Portal.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -43,6 +44,17 @@ export default function Portal({ onExit }) {
   useEffect(() => {
     if (!restoring) return undefined;
     let dropped = false;
+
+    /*
+     * Her portal's code starts downloading now, next to the two round trips that
+     * decide whether she may have it — not after them. The marker already says
+     * which portal is coming, and against this project a session check plus a
+     * profile read is ~400ms of nothing but waiting, which is long enough to fetch
+     * the whole admin chunk in. If the restore then fails she lands on the login
+     * page having downloaded something she does not use; that is the cheaper half
+     * of the trade, and only for someone who was signed in on this browser before.
+     */
+    preloadPortalFor(storedSession()?.role);
 
     restoreSession().then((session) => {
       if (dropped) return;
@@ -179,7 +191,9 @@ export default function Portal({ onExit }) {
   };
 
   if (restoring) return <div className="app-loading">Signing you back in…</div>;
-  if (!loggedIn) return <LoginPage onLogin={handleLogin} onBack={onExit} />;
+  // onRoleHint: picking "Admin" or "Teacher" is the earliest honest signal of which
+  // portal is coming, and it arrives a form-filling ahead of the sign-in request.
+  if (!loggedIn) return <LoginPage onLogin={handleLogin} onBack={onExit} onRoleHint={preloadPortalFor} />;
   if (role === "admin") {
     return (
       <Suspense fallback={<div className="app-loading">Loading admin portal…</div>}>

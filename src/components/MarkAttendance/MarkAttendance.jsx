@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Check, UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, shortGroup } from "../../lib/academics";
+import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { downloadXlsx, S, columnRef } from "../../lib/xlsx";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import WhatsAppQueue, { WhatsappIcon } from "../WhatsAppQueue/WhatsAppQueue";
@@ -132,35 +133,85 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, students, classesHeld]);
 
+  // "Classes held?" is a question about this class on this date, so changing either
+  // asks it again instead of carrying the last answer across. Without this, an
+  // admin who marked 1st year as off and then switched to 2nd year would find the
+  // 2nd year roster unmarked and no one auto-present, for no visible reason.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setClassesHeld(true);
+  }, [program, yearFilter, date]);
+
   const setStatus = (id, status) => {
     setRecords((p) => ({ ...p, [id]: status }));
     setSaved(false);
   };
 
-  // If admin realizes a date was actually a holiday after already marking
-  // attendance for it, switching "Classes Held" to No offers to wipe out
-  // every attendance record for that date (across all programs), so
-  // students' percentages on their portal recalculate correctly.
+  // Who the toggle and its confirmation are talking about: the roster currently on
+  // screen, named the way the admin picked it.
+  const yearLabel = yearFilter === "Both" ? "both years" : yearFilter;
+  const programLabel = program === ALL_PROGRAMS
+    ? (isRestricted ? "your programs" : "all programs")
+    : program;
+  const selectionLabel = `${yearLabel} · ${programLabel}`;
+
+  /**
+   * "Classes held?" answers for the class on screen, not for the college.
+   *
+   * A college day is rarely all-or-nothing: 2nd year sits an exam while 1st year is
+   * sent home, one year comes in for practicals during holidays. This toggle used to
+   * delete every attendance row for the date **across all programs and both years**,
+   * so answering No while looking at 1st year silently wiped the 2nd year register
+   * that had just been filled in.
+   *
+   * It is now scoped to exactly the students listed below it — the same
+   * program/year filter the roster is built from — and says so before deleting.
+   * Answering No for one year and Yes for the other is the intended way to record a
+   * day when only one of them had classes.
+   *
+   * Nothing needs to be saved for a class that had no college: an unmarked day is
+   * not an absence anywhere in this app, so leaving the register empty is the
+   * accurate record. Deleting only matters when the day was already marked.
+   */
   const handleClassesHeldToggle = async (held) => {
     if (held) {
       setClassesHeld(true);
       return;
     }
 
-    const { count } = await supabase
-      .from("attendance")
-      .select("*", { count: "exact", head: true })
-      .eq("date", date);
+    const studentIds = students.map((s) => s.id);
 
-    if (count > 0) {
-      const confirmCancel = window.confirm(
-        `Attendance for ${date} is already marked (${count} record${count === 1 ? "" : "s"} across all programs).\n\n` +
-        "If today turned out to be a holiday, do you want to cancel (delete) all marked attendance for this date?"
-      );
-      if (confirmCancel) {
-        await supabase.from("attendance").delete().eq("date", date);
-        setAlreadyMarked(false);
-        setSaved(false);
+    if (studentIds.length > 0) {
+      const { count } = await supabase
+        .from("attendance")
+        .select("*", { count: "exact", head: true })
+        .eq("date", date)
+        .in("student_id", studentIds);
+
+      if (count > 0) {
+        const confirmCancel = window.confirm(
+          `Attendance for ${date} is already marked for ${selectionLabel} ` +
+          `(${count} record${count === 1 ? "" : "s"}).\n\n` +
+          `If ${selectionLabel} had no classes on this date, delete those records?\n\n` +
+          "Every other class keeps its attendance."
+        );
+        if (confirmCancel) {
+          // A delete RLS refuses comes back as a plain success with no rows, so the
+          // rows are asked for and an empty result is treated as a failure.
+          const { data: removed, error } = await supabase
+            .from("attendance")
+            .delete()
+            .eq("date", date)
+            .in("student_id", studentIds)
+            .select("id");
+
+          if (error || !removed || removed.length === 0) {
+            alert(error ? `Could not cancel the attendance: ${error.message}` : WRITE_BLOCKED_HINT);
+            return;
+          }
+          setAlreadyMarked(false);
+          setSaved(false);
+        }
       }
     }
 
@@ -415,7 +466,9 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
       const unmarked = students.filter((s) => !records[s.id]);
       if (unmarked.length > 0) {
         alert(
-          "Classes are marked as not held today, so nobody is auto-present. Please mark each student individually before saving:\n\n" +
+          `${selectionLabel} is marked as having had no classes on this date, so nobody is auto-present.\n\n` +
+          "If that is right, there is nothing to save — an unmarked day is not counted as an absence. " +
+          "If some girls did attend, mark each of them first:\n\n" +
           unmarked.map((s) => "- " + s.name).join("\n")
         );
         return;
@@ -474,8 +527,10 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
       </div>
 
       <div className="mark-attendance__classes-toggle-wrap">
-        <span className="mark-attendance__classes-label">College Classes Held Today?</span>
-        <div className="mark-attendance__classes-toggle" role="group" aria-label="Were classes held today">
+        <span className="mark-attendance__classes-label">
+          Classes held for <strong>{selectionLabel}</strong> on this date?
+        </span>
+        <div className="mark-attendance__classes-toggle" role="group" aria-label={`Were classes held for ${selectionLabel} on this date`}>
           <button
             type="button"
             onClick={() => handleClassesHeldToggle(true)}
@@ -491,9 +546,17 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
         </div>
       </div>
 
+      {classesHeld && (
+        <div className="mark-attendance__hint-line">
+          This answers for <strong>{selectionLabel}</strong> only. If one year had classes and the other did not,
+          mark the year that came in and leave the other alone — an unmarked day is never counted as an absence.
+        </div>
+      )}
+
       {!classesHeld && (
         <div className="mark-attendance__warning">
-          ℹ️ Classes marked as not held — no student is auto-present. Mark each student individually before saving.
+          ℹ️ No classes for <strong>{selectionLabel}</strong> on this date — nobody here is auto-present, and every
+          other class keeps its attendance. Leave this roster empty, or mark each girl individually before saving.
         </div>
       )}
 

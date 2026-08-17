@@ -299,6 +299,17 @@ Salaries are charged to the **month worked** (`staff_salaries.month`), not the d
 
 `accounts.js` **imports nothing that reaches `supabaseClient`** — same discipline as `payroll.js`, `reportPdf.js` and `xlsx.js`, and for the same reason: the arithmetic is the part that quietly goes wrong, so it has to be drivable from plain Node against fixtures in a repo with no test runner.
 
+### Attendance — "classes held?" is per class, not per college
+
+`MarkAttendance` is shared by the admin portal and the teacher portal, and its **"Classes held?"** toggle answers for **the roster on screen** — the current program and year filter — never for the college.
+
+A college day is rarely all-or-nothing: 2nd year sits an exam while 1st year is sent home, one year comes in during holidays for practicals. The toggle originally deleted every attendance row for the date **across all programs and both years**, so answering No while looking at 1st year wiped the 2nd year register that had just been filled in. It is now scoped with the same `student_id in (visible ids)` filter the save path already used, names the class in its confirmation, and asks for the deleted rows back (`.select("id")`) because a delete RLS refuses returns a plain success — see `WRITE_BLOCKED_HINT`.
+
+Two rules behind it:
+
+- **An unmarked day is not an absence**, here as everywhere else in this app (`notMarked` in test reports, `unmarkedDays` in payroll). So a class that had no college needs nothing saved at all — the accurate record is an empty register, and the No answer exists for undoing a day that was already marked by mistake, not for recording the holiday.
+- **The answer does not travel.** Changing program, year or date resets it to Yes, because it is a question about one class on one date. Carrying it across meant an admin who marked 1st year as off found the 2nd year roster unmarked with nobody auto-present and no visible reason why.
+
 ### Spreadsheet downloads
 
 `src/lib/xlsx.js` writes a real `.xlsx` — an OOXML package assembled by hand and zipped with JSZip. It exists because the monthly attendance register is worked on in Google Sheets, and a CSV arrives there with no column widths, no frozen headings, no merged cells and no bold, so the sheet had to be re-formatted by hand every month.

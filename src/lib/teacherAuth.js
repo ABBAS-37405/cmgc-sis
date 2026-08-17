@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import { subjectsForPrograms } from "./academics";
 import { PROGRAMS } from "./adminAuth";
+import { callServiceApi } from "./serviceApi";
 
 // Duties an admin can hand to a teacher. Same shape as adminAuth.PERMISSION_KEYS.
 export const TEACHER_RIGHTS = [
@@ -11,8 +12,6 @@ export const TEACHER_RIGHTS = [
   { id: "attendance", label: "Mark Attendance" },
   { id: "results", label: "Enter Term Results" },
 ];
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export function hasTeacherRight(teacher, key) {
   if (!teacher) return false;
@@ -33,9 +32,9 @@ export function teacherSubjects(teacher) {
 // Subjects this teacher may enter tests for across the given programs: the intersection
 // of what she teaches and what those programs actually offer. Pass several programs for
 // a combined "All Programs" test — the result is the union of their subjects, still
-// narrowed to the ones she teaches.
-export function teacherSubjectsFor(teacher, programs) {
-  const offered = subjectsForPrograms(programs);
+// narrowed to the ones she teaches. A year narrows it to that class's compulsory list.
+export function teacherSubjectsFor(teacher, programs, year) {
+  const offered = subjectsForPrograms(programs, year);
   const taught = teacherSubjects(teacher);
   if (taught.length === 0) return offered;
   return offered.filter((s) => taught.includes(s));
@@ -54,20 +53,9 @@ export async function fetchTeacherProfile(userId) {
   return data;
 }
 
-async function callTeacherApi(path, body) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData?.session?.access_token;
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, accessToken }),
-  });
-
-  const result = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(result.error || "Request failed");
-  return result;
-}
+// Same helper the sub-admin routes use — both sides create Supabase Auth users through
+// server.js, and both fail the same way when it is not running.
+const callTeacherApi = callServiceApi;
 
 // `teacherId` attaches a login to a teacher record that already exists; omit it to
 // create the login and the record together. The pay fields travel with it because

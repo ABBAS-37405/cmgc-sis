@@ -1,4 +1,4 @@
-import { PROGRAMS, GROUP_COMBINATIONS, COMPULSORY_SUBJECTS, groupHasChoice, formatCombination } from "../../lib/academics";
+import { PROGRAMS, GROUP_COMBINATIONS, compulsoryFor, groupHasChoice, formatCombination } from "../../lib/academics";
 import "./Programs.css";
 
 /**
@@ -42,7 +42,8 @@ export default function Programs() {
         </div>
 
         <p className="programs__note">
-          {formatCombination(COMPULSORY_SUBJECTS)} are compulsory in every group.
+          {formatCombination(compulsoryFor("1st Year"))} are compulsory in every group in 1st year;
+          in 2nd year Islamiat is replaced by Pakistan Studies.
         </p>
       </div>
     </section>

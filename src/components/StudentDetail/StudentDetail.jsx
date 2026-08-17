@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Save, Pencil, Upload, Eye, FileText } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS, SUBJECTS } from "../../lib/academics";
+import { PROGRAMS, subjectsFor } from "../../lib/academics";
 import {
   DETAIL_GROUPS, DOCUMENT_FIELDS, detailsFrom, detailsToRow, matricPercentage,
 } from "../../lib/studentFields";
@@ -149,7 +149,7 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
     if (onSaved) onSaved();
   };
 
-  const subjectOptions = SUBJECTS[core.program] || [];
+  const subjectOptions = subjectsFor(core.program, core.year_of_study);
 
   return (
     <div className="sd-overlay" onClick={onClose}>

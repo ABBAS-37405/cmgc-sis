@@ -9,7 +9,30 @@
 // `admin_profiles.allowed_programs`, `teachers.programs` and the RLS policies
 // built on them. Renaming one here means updating the database too.
 
-export const COMPULSORY_SUBJECTS = ["English", "Urdu", "Islamiat", "Tarjama Tul Quran"];
+export const COMPULSORY_SUBJECTS = [
+  "English",
+  "Urdu",
+  "Islamiat",
+  "Pakistan Studies",
+  "Tarjama Tul Quran",
+];
+
+// Two of the compulsory subjects belong to one year only: Islamiat is examined in 1st
+// year and Pakistan Studies in 2nd. This is the only place a group's subject list
+// depends on the year rather than the group, so anything that knows which class it is
+// looking at passes the year, and anything that does not (a teacher's subject chips,
+// the public Programs section) gets the union.
+const YEAR_ONLY_COMPULSORY = {
+  "Islamiat": "1st Year",
+  "Pakistan Studies": "2nd Year",
+};
+
+export function compulsoryFor(year) {
+  if (!year) return COMPULSORY_SUBJECTS;
+  return COMPULSORY_SUBJECTS.filter(
+    (s) => !YEAR_ONLY_COMPULSORY[s] || YEAR_ONLY_COMPULSORY[s] === year,
+  );
+}
 
 export const GROUP_COMBINATIONS = {
   "Pre-Engineering": [["Physics", "Chemistry", "Mathematics"]],
@@ -49,11 +72,16 @@ export function shortGroup(group) {
 // Everything a group might study: every elective across its combinations, plus
 // the compulsory subjects. Marks-entry screens use this, because a teacher may
 // need to record any subject the group offers — not just one student's picks.
+// Pass a year to drop the compulsory subject the other year sits.
+export function subjectsFor(group, year) {
+  const combos = GROUP_COMBINATIONS[group];
+  if (!combos) return [];
+  return [...new Set(combos.flat()), ...compulsoryFor(year)];
+}
+
+// The year-agnostic form, for the screens that have no class in hand.
 export const SUBJECTS = Object.fromEntries(
-  Object.entries(GROUP_COMBINATIONS).map(([group, combos]) => [
-    group,
-    [...new Set(combos.flat()), ...COMPULSORY_SUBJECTS],
-  ]),
+  Object.keys(GROUP_COMBINATIONS).map((group) => [group, subjectsFor(group)]),
 );
 
 export const YEARS = ["1st Year", "2nd Year"];
@@ -74,9 +102,10 @@ export function formatCombination(subjects) {
 }
 
 // Subjects offered by the given groups. Empty/omitted groups = every subject.
-export function subjectsForPrograms(programs = []) {
-  if (!programs || programs.length === 0) return ALL_SUBJECTS;
+// A year narrows the compulsory half of the list, exactly like subjectsFor().
+export function subjectsForPrograms(programs = [], year) {
+  const groups = programs && programs.length > 0 ? programs : PROGRAMS;
   const set = new Set();
-  programs.forEach((p) => (SUBJECTS[p] || []).forEach((s) => set.add(s)));
+  groups.forEach((p) => subjectsFor(p, year).forEach((s) => set.add(s)));
   return [...set].sort();
 }

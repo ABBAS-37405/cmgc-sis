@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
-import { SUBJECTS } from "../../lib/academics";
+import { subjectsFor } from "../../lib/academics";
 import { EXAM_TYPES } from "../../lib/exams";
 import "./EnterResults.css";
 
@@ -47,6 +47,7 @@ export default function EnterResults({ allowedPrograms = [] }) {
   const [selected, setSelected] = useState(null);
   const [marks, setMarks] = useState({});
   const [totalMarks, setTotalMarks] = useState({});
+  const [extraSubjects, setExtraSubjects] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,11 +57,19 @@ export default function EnterResults({ allowedPrograms = [] }) {
     localStorage.setItem(EXAM_SELECTION_KEY, JSON.stringify({ examType, examDate, examMonth }));
   }, [examType, examDate, examMonth]);
 
+  // The marks sheet for the girl on screen: what her class studies — Islamiat in 1st
+  // year, Pakistan Studies in 2nd — plus anything she already carries a mark in.
+  const sheetSubjects = selected
+    ? [...subjectsFor(selected.program, selected.year_of_study), ...extraSubjects]
+    : [];
+
   const fetchStudents = async () => {
     setLoading(true);
     let query = supabase
       .from("students")
-      .select("id, name, roll_no, program")
+      // year_of_study travels with her because the subject list depends on it:
+      // Islamiat is examined in 1st year, Pakistan Studies in 2nd.
+      .select("id, name, roll_no, program, year_of_study")
       .is("deleted_at", null)
       .order("program")
       .order("name");
@@ -104,10 +113,18 @@ export default function EnterResults({ allowedPrograms = [] }) {
       });
       setMarks(existingMarks);
       setTotalMarks(existingTotal);
+      // Any subject she already has a mark in, even one her class does not sit today —
+      // saving deletes this exam's rows and writes back the list on screen, so a subject
+      // missing from the sheet is a mark quietly thrown away.
+      setExtraSubjects(
+        [...new Set(data.map((r) => r.subject))]
+          .filter((s) => !subjectsFor(student.program, student.year_of_study).includes(s))
+      );
     } else {
+      setExtraSubjects([]);
       const emptyMarks = {};
       const emptyTotal = {};
-      SUBJECTS[student.program].forEach((s) => {
+      subjectsFor(student.program, student.year_of_study).forEach((s) => {
         emptyMarks[s] = "";
         emptyTotal[s] = "100";
       });
@@ -140,7 +157,7 @@ export default function EnterResults({ allowedPrograms = [] }) {
       .eq("exam_name", examName);
 
     // Insert new results
-    const rows = SUBJECTS[selected.program].map((subject) => ({
+    const rows = sheetSubjects.map((subject) => ({
       student_id: selected.id,
       exam_name: examName,
       subject,
@@ -250,7 +267,7 @@ export default function EnterResults({ allowedPrograms = [] }) {
                   <span>Obtained</span>
                   <span>Total</span>
                 </div>
-                {SUBJECTS[selected.program].map((subject) => (
+                {sheetSubjects.map((subject) => (
                   <div key={subject} className="enter-results__subject-row">
                     <span>{subject}</span>
                     <input

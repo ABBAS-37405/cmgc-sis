@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Check, Plus, Trash2, FileText, Search, Upload, Eye, Paperclip } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
-import { SUBJECTS, YEARS, subjectsForPrograms } from "../../lib/academics";
+import { YEARS, subjectsFor, subjectsForPrograms } from "../../lib/academics";
 import { teacherSubjectsFor } from "../../lib/teacherAuth";
 import "./AssignmentEntry.css";
 
@@ -44,18 +44,21 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
 
+  const [year, setYear] = useState(YEARS[0]);
+
+  // The class narrows the compulsory half of the list: Islamiat is a 1st-year paper
+  // and Pakistan Studies a 2nd-year one.
   const availableSubjects = teacher
-    ? teacherSubjectsFor(teacher, visiblePrograms)
-    : subjectsForPrograms(visiblePrograms);
+    ? teacherSubjectsFor(teacher, visiblePrograms, year)
+    : subjectsForPrograms(visiblePrograms, year);
 
   const [subjectChoice, setSubject] = useState(availableSubjects[0] || "");
   const subject = availableSubjects.includes(subjectChoice) ? subjectChoice : (availableSubjects[0] || "");
 
-  const [year, setYear] = useState(YEARS[0]);
   const [picked, setPicked] = useState(() => (visiblePrograms[0] ? [visiblePrograms[0]] : []));
 
   // A group that does not study the subject cannot be set this assignment.
-  const eligiblePrograms = subject ? visiblePrograms.filter((p) => (SUBJECTS[p] || []).includes(subject)) : visiblePrograms;
+  const eligiblePrograms = subject ? visiblePrograms.filter((p) => subjectsFor(p, year).includes(subject)) : visiblePrograms;
   const ineligiblePrograms = visiblePrograms.filter((p) => !eligiblePrograms.includes(p));
   const selected = picked.filter((p) => eligiblePrograms.includes(p));
 

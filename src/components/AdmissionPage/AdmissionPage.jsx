@@ -3,7 +3,7 @@ import { ArrowLeft, CheckCircle, FileCheck, Upload, User } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import {
   PROGRAMS,
-  COMPULSORY_SUBJECTS,
+  compulsoryFor,
   combinationsFor,
   groupHasChoice,
   formatCombination,
@@ -508,12 +508,12 @@ export default function AdmissionPage({ onBack }) {
                   <p>Subjects for <strong>{group}</strong>:</p>
                   <div className="ap-subject-tags">
                     {chosenElectives.map((s) => <span key={s} className="ap-subject-tag">{s}</span>)}
-                    {COMPULSORY_SUBJECTS.map((s) => (
+                    {compulsoryFor(form.yearOfStudy).map((s) => (
                       <span key={s} className="ap-subject-tag ap-subject-tag--compulsory">{s}</span>
                     ))}
                   </div>
                   <p className="ap-subjects-note">
-                    The last four are compulsory for every group.
+                    The last {compulsoryFor(form.yearOfStudy).length} are compulsory for every group in {form.yearOfStudy}.
                   </p>
                 </div>
               )}

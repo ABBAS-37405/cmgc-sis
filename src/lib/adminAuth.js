@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { callServiceApi } from "./serviceApi";
 
 export const PERMISSION_KEYS = [
   { id: "students", label: "Students" },
@@ -32,8 +33,6 @@ export const WRITE_BLOCKED_HINT =
   "Nothing was saved — the database refused the change. Your admin session has most likely expired: " +
   "sign out, sign in again, and try once more. (Sub-admins can only change records in the programs assigned to them.)";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-
 export async function fetchAdminProfile(userId) {
   const { data, error } = await supabase
     .from("admin_profiles")
@@ -56,20 +55,7 @@ export function allowedProgramsFor(profile) {
   return Array.isArray(profile.allowed_programs) ? profile.allowed_programs : [];
 }
 
-async function callAdminApi(path, body) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData?.session?.access_token;
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, accessToken }),
-  });
-
-  const result = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(result.error || "Request failed");
-  return result;
-}
+const callAdminApi = callServiceApi;
 
 export function createSubAdmin({ email, password, name, whatsapp, permissions, allowedPrograms }) {
   return callAdminApi("/api/admin/create", { email, password, name, whatsapp, permissions, allowedPrograms });

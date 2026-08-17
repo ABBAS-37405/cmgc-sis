@@ -16,7 +16,7 @@
  *   are of real girls and must never be dressed up as fake records.
  */
 
-import { PROGRAMS, SUBJECTS, YEARS } from "../lib/academics";
+import { PROGRAMS, SUBJECTS, YEARS, subjectsFor } from "../lib/academics";
 // Safe to import, unlike lib/feePlans below: payroll reaches nothing that touches
 // the Supabase client, so there is no cycle back into the client being built.
 import { computeSalary, salaryRowFor } from "../lib/payroll";
@@ -364,7 +364,7 @@ export function buildDemoDatabase() {
     YEARS.forEach((year) => {
       const roster = db.students.filter((s) => s.program === program && s.year_of_study === year && !s.deleted_at);
       if (roster.length === 0) return;
-      const subjects = (SUBJECTS[program] || []).slice(0, 3);
+      const subjects = subjectsFor(program, year).slice(0, 3);
 
       subjects.forEach((subject) => {
         const teacher =
@@ -417,7 +417,7 @@ export function buildDemoDatabase() {
   exams.forEach((exam) => {
     db.students.forEach((s) => {
       if (s.deleted_at) return;
-      (SUBJECTS[s.program] || []).forEach((subject) => {
+      subjectsFor(s.program, s.year_of_study).forEach((subject) => {
         db.results.push({
           id: uid(5),
           student_id: s.id,

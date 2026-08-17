@@ -1,5 +1,5 @@
 /**
- * Remembering that someone is signed in, across a reload.
+ * Remembering that someone is signed in, across a reload — and only across a reload.
  *
  * Navigation in this app is state, not routes: App decides between the website, the
  * admission form and the portal from booleans, and Portal decides between the login
@@ -22,14 +22,38 @@
  * branch disappears, and the demo's auth lives in memory anyway — a remembered
  * admin there would restore to a session that no longer exists and land on the
  * login page, which is worse than the landing page it lands on today.
+ *
+ * **`sessionStorage`, not `localStorage`, and that is the whole scope of the
+ * feature.** What this exists to survive is a refresh, a crash, a phone killing the
+ * tab — not the office computer being shut for the night. `localStorage` outlives
+ * the browser, so closing it left the next person to sit down already signed in as
+ * the admin, which for a screen holding every girl's record is not a convenience.
+ * `sessionStorage` is scoped to the tab: it survives every reload inside it and is
+ * gone the moment the tab or the browser closes. The auth token itself is kept the
+ * same way — see `supabaseClient.js`, and the two must agree or one of them decides
+ * on its own how long a session lasts.
+ *
+ * The cost is honest and intended: a second tab is a second session, so opening the
+ * portal in a new tab means signing in again.
  */
 
 const SESSION_KEY = "cmgc-session";
 
+/*
+ * This marker used to live in localStorage, where it outlived the browser being
+ * closed. Anything still there belongs to that older behaviour, is never read again,
+ * and is cleared once so a stale role cannot be left lying around.
+ */
+try {
+  localStorage.removeItem(SESSION_KEY);
+} catch {
+  // ignore — storage denied is not a reason to fail the page
+}
+
 function read() {
   if (__DEMO__) return null;
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" && parsed.role ? parsed : null;
@@ -41,7 +65,7 @@ function read() {
 function write(payload) {
   if (__DEMO__) return;
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
   } catch {
     // A browser with storage denied simply does not survive a reload. Everything
     // else has to keep working, so this is never allowed to throw.
@@ -70,7 +94,7 @@ export function rememberTab(tab) {
 export function clearSession() {
   if (__DEMO__) return;
   try {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
   } catch {
     // ignore
   }

@@ -5,7 +5,7 @@ import { PROGRAMS } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
 import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher } from "../../lib/teacherAuth";
 import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
-import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, isDemoMode } from "../../lib/whatsapp";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
@@ -30,6 +30,14 @@ const emptyForm = {
   is_active: true,
 };
 
+/**
+ * Her login details, with the password only when there is one to quote.
+ *
+ * Sending must never depend on knowing the password, because knowing it is the one
+ * thing this screen cannot arrange — her login is a Supabase Auth account and only a
+ * hash of it exists. When it is not known the message carries the email and points
+ * her at the office, which is true and costs nobody her working password.
+ */
 const buildTeacherCredentialsMessage = (name, email, password) =>
   [
     `Assalamualaikum ${name},`,
@@ -37,16 +45,21 @@ const buildTeacherCredentialsMessage = (name, email, password) =>
     "Your CMGC teacher portal login is ready.",
     "",
     `Login Email: ${email}`,
-    `Password: ${password}`,
+    ...(password
+      ? [`Password: ${password}`]
+      : ["Password: the one issued to you by the college office."]),
     "",
     "Open the college website, press Portal Login and sign in with these details.",
+    ...(password
+      ? []
+      : ["If you have forgotten your password, tell the office and a new one will be set for you."]),
     "Please keep this message to yourself.",
     "Thank you.",
   ].join("\n");
 
-// A readable throwaway password for the "she has no password we can quote" case:
-// two short words and three digits beats a random string an admin has to read out
-// over the phone when WhatsApp does not arrive.
+// A readable throwaway password to offer when the admin is setting one: two short
+// words and three digits beats a random string she has to read out over the phone
+// when WhatsApp does not arrive.
 const SUGGEST_WORDS = ["cmgc", "class", "school", "study", "teach"];
 function suggestPassword() {
   const word = SUGGEST_WORDS[Math.floor(Math.random() * SUGGEST_WORDS.length)];
@@ -241,7 +254,14 @@ export default function Teachers({ allowedPrograms = [] }) {
   };
 
   const handleResetPassword = async (t) => {
-    const next = window.prompt(`Set a new login password for ${t.name} (minimum 6 characters):`, "");
+    // This is the one button that changes a password, so this is the one place that
+    // asks for one. A suggestion is offered because the admin usually just wants a
+    // working password to hand over, not to invent one.
+    const next = window.prompt(
+      `Set a new login password for ${t.name} (minimum 6 characters).\n\n` +
+      `Her current password stops working. Nothing else about her record changes.`,
+      suggestPassword()
+    );
     if (next === null) return;
     if (next.trim().length < 6) {
       alert("Password must be at least 6 characters.");
@@ -259,19 +279,17 @@ export default function Teachers({ allowedPrograms = [] }) {
   /**
    * Send a teacher her own login details on WhatsApp.
    *
-   * Unlike a student's, her password is not on her row — Supabase Auth holds only a
-   * hash, so there is nothing to look up. Two paths follow from that:
+   * Sending changes nothing. It opens a chat and nothing else — no password is set
+   * here and none is asked for, because a teacher who already has a working login
+   * must not lose it just because the office wanted to message her the email.
    *
-   *  - the admin set a password on this screen a moment ago, so it is in
-   *    `knownPasswords` and can simply be sent;
-   *  - it is not, in which case the only way to state a password in the message is
-   *    to set one. That is a real change to her login, so it is spelled out in the
-   *    prompt rather than done quietly behind a "send" button.
-   *
-   * The chat window is reserved before the `await`, exactly like doApprove() in
-   * StudentsList: a window.open after an await is blocked as a popup.
+   * Her password is not readable (Supabase Auth keeps a hash), so the message quotes
+   * one only when the admin set it on this screen a moment ago; otherwise it names
+   * the office as where her password came from. Setting a password lives behind
+   * "Reset Password", which is the button that says it is going to do that — and it
+   * feeds the same map, so resetting and then sending sends the new one.
    */
-  const handleSendCredentials = async (t) => {
+  const handleSendCredentials = (t) => {
     if (!t.user_id) {
       alert(`${t.name} has no login yet, so there is nothing to send. Use "Create Login" on her card first.`);
       return;
@@ -296,41 +314,13 @@ export default function Teachers({ allowedPrograms = [] }) {
       }
     }
 
-    const known = knownPasswords[t.id];
-    let password = known;
-
-    if (!known) {
-      const chosen = window.prompt(
-        `${t.name}'s password is not stored anywhere — her login is a real Supabase account, so the portal only ever sees a hash of it.\n\n` +
-        `To put a password in the message, one has to be set. Sending now will REPLACE her current password: whatever she is using today stops working.\n\n` +
-        `Password to set and send (minimum 6 characters), or Cancel:`,
-        suggestPassword()
-      );
-      if (chosen === null) return;
-      password = chosen.trim();
-      if (password.length < 6) {
-        alert("Password must be at least 6 characters. Nothing was sent and nothing was changed.");
-        return;
-      }
-    }
-
-    // Reserved inside the click, before any await, or the browser blocks it. The demo
-    // never opens a real chat, so reserving there would leave a blank tab sitting open.
-    const waWindow = isDemoMode() ? null : window.open("", "_blank");
-
-    if (!known) {
-      try {
-        await resetTeacherPassword(t.id, password);
-        rememberPassword(t.id, password);
-      } catch (err) {
-        if (waWindow && !waWindow.closed) waWindow.close();
-        alert("Could not set the new password, so nothing was sent: " + err.message);
-        return;
-      }
-    }
-
-    const opened = openWhatsApp(number, buildTeacherCredentialsMessage(t.name, t.email, password), waWindow);
-    if (!opened && waWindow && !waWindow.closed) waWindow.close();
+    // Nothing is awaited between here and the chat, so no window has to be reserved
+    // against the popup blocker — this is all still inside the click.
+    const opened = openWhatsApp(
+      number,
+      buildTeacherCredentialsMessage(t.name, t.email, knownPasswords[t.id] || null)
+    );
+    if (!opened) alert("Could not open WhatsApp. Please check the number and try again.");
   };
 
   const handleDelete = async (t) => {
@@ -617,7 +607,7 @@ export default function Teachers({ allowedPrograms = [] }) {
                           title={
                             knownPasswords[t.id]
                               ? `Send ${t.name} her login email and password on WhatsApp`
-                              : `Send ${t.name} her login on WhatsApp — her password is not stored, so a new one has to be set first`
+                              : `Send ${t.name} her login email on WhatsApp. Her password is not stored, so it is not included — use Reset Password first if she needs one.`
                           }
                           aria-label={`Send login details to ${t.name} on WhatsApp`}
                         >

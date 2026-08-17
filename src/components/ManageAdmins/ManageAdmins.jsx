@@ -8,7 +8,7 @@ import {
   deleteSubAdmin,
   updateSubAdmin,
 } from "../../lib/adminAuth";
-import { openWhatsApp, isValidWhatsAppNumber, isDemoMode } from "../../lib/whatsapp";
+import { openWhatsApp, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import "./ManageAdmins.css";
 
 const emptyForm = { name: "", email: "", password: "", whatsapp: "", permissions: [], allowedPrograms: [] };
@@ -17,6 +17,8 @@ function toggleValue(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
+// The password appears only when there is one to quote — see the Teachers screen for
+// why sending can never depend on knowing it.
 function buildAdminCredentialsMessage(name, email, password) {
   return [
     `Assalamualaikum ${name || "Admin"},`,
@@ -24,9 +26,14 @@ function buildAdminCredentialsMessage(name, email, password) {
     "Your CMGC admin portal login is ready.",
     "",
     `Login Email: ${email}`,
-    `Password: ${password}`,
+    ...(password
+      ? [`Password: ${password}`]
+      : ["Password: the one issued to you by the college office."]),
     "",
     "Open the college website, press Portal Login and sign in with these details.",
+    ...(password
+      ? []
+      : ["If you have forgotten your password, tell the office and a new one will be set for you."]),
     "Please keep this message to yourself.",
   ].join("\n");
 }
@@ -165,17 +172,17 @@ export default function ManageAdmins({ adminProfile }) {
   /**
    * Send a sub-admin her own login details on WhatsApp.
    *
-   * This used to ask for the password every single time, through an empty box that
-   * looked like a reset but was not one: whatever was typed went into the message and
-   * nowhere else, so a slip of memory sent a password that had never been set and the
-   * admin was locked out by a message telling her she was not.
+   * Sending changes nothing: no password is set here and none is asked for. It used
+   * to ask on every send, through an empty box that looked like a reset and was not
+   * one — whatever was typed went into the message and nowhere else, so a
+   * half-remembered password reached someone who then could not sign in with it.
    *
-   * Her password cannot be looked up — a sub-admin login is a real Supabase Auth
-   * account, so only a hash exists. So there are two honest paths, the same two the
-   * Teachers screen uses: send the password set on this screen a moment ago, or set
-   * one now and say so plainly first.
+   * Her password cannot be looked up (a sub-admin login is a Supabase Auth account,
+   * so only a hash exists), which is precisely why sending must not depend on it. The
+   * message quotes a password only when one was set on this screen; changing one
+   * lives behind "Reset Password", which is the button that says so.
    */
-  const sendCredentials = async (admin) => {
+  const sendCredentials = (admin) => {
     let number = (admin.whatsapp || "").trim();
     if (!number || !isValidWhatsAppNumber(number)) {
       const entered = window.prompt("Enter the sub-admin WhatsApp number (03XXXXXXXXX):", "");
@@ -186,52 +193,24 @@ export default function ManageAdmins({ adminProfile }) {
       }
     }
 
-    const known = knownPasswords[admin.user_id];
-    let password = known;
-
-    // Known password: nothing to ask, so nothing is asked.
-    if (!known) {
-      const chosen = window.prompt(
-        `${admin.name || admin.email}'s password is not stored anywhere — her login is a real Supabase account, so the portal only ever sees a hash of it.\n\n` +
-        `To put a password in the message, one has to be set. Sending now will REPLACE her current password: whatever she is using today stops working.\n\n` +
-        `Password to set and send (minimum 6 characters), or Cancel:`,
-        suggestPassword()
-      );
-      if (chosen === null) return;
-      password = chosen.trim();
-      if (password.length < 6) {
-        return alert("Password must be at least 6 characters. Nothing was sent and nothing was changed.");
-      }
-    }
-
-    // Reserved inside the click, before any await, or the browser blocks it as a
-    // popup. The demo never opens a real chat, so it reserves nothing.
-    const waWindow = isDemoMode() ? null : window.open("", "_blank");
-
-    if (!known) {
-      try {
-        // Only the password: the server writes no profile columns it was not given,
-        // so her name, tabs and programs are left exactly as they are.
-        await updateSubAdmin({ targetUserId: admin.user_id, password });
-        rememberPassword(admin.user_id, password);
-      } catch (err) {
-        if (waWindow && !waWindow.closed) waWindow.close();
-        return alert("Could not set the new password, so nothing was sent: " + err.message);
-      }
-    }
-
-    const message = buildAdminCredentialsMessage(admin.name, admin.email, password);
-    const success = openWhatsApp(number, message, waWindow);
-    if (!success) {
-      if (waWindow && !waWindow.closed) waWindow.close();
+    // Nothing is awaited between here and the chat, so no window has to be reserved
+    // against the popup blocker — this is all still inside the click.
+    const message = buildAdminCredentialsMessage(
+      admin.name,
+      admin.email,
+      knownPasswords[admin.user_id] || null
+    );
+    if (!openWhatsApp(number, message)) {
       alert("Could not open WhatsApp. Please check the number and try again.");
     }
   };
 
   const handleResetPassword = async (admin) => {
+    // The one button that changes a password, so the one place that asks for one.
     const next = window.prompt(
-      `Set a new login password for ${admin.name || admin.email} (minimum 6 characters):`,
-      "123456"
+      `Set a new login password for ${admin.name || admin.email} (minimum 6 characters).\n\n` +
+      `Her current password stops working. Her tabs, programs and name are untouched.`,
+      suggestPassword()
     );
     if (next === null) return;
     const password = next.trim();

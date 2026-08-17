@@ -19,6 +19,7 @@ import BackGuard from "./components/BackGuard/BackGuard";
 // Demo build only; `__DEMO__` folds to false everywhere else and this goes with it.
 import { DemoBanner } from "./demo/DemoUi";
 import { pushStep, truncate } from "./lib/backStack";
+import { storedSession } from "./lib/session";
 import { applyAccent, storedAccent, ACCENT_KEY } from "./lib/accent";
 import "./styles/themes.css";
 import "./App.css";
@@ -31,7 +32,11 @@ export default function App() {
   const [accentHue, setAccentHue] = useState(storedAccent);
   const [scrolled, setScrolled] = useState(false);
   const [showTop, setShowTop] = useState(false);
-  const [showPortal, setShowPortal] = useState(false);
+  // A remembered session means she was inside the portal when the page went away —
+  // a refresh, a crash, a phone killing the tab. Read synchronously so the website
+  // is never painted first and then yanked away. Portal does the actual restoring;
+  // if it comes to nothing, it falls back to its own login screen.
+  const [showPortal, setShowPortal] = useState(() => Boolean(storedSession()));
   const [showAdmission, setShowAdmission] = useState(false);
 
   useEffect(() => {

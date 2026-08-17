@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import AdminSidebar from "../AdminSidebar/AdminSidebar";
 import AdminOverview from "../AdminOverview/AdminOverview";
 import StudentsList from "../StudentsList/StudentsList";
@@ -13,10 +13,20 @@ import MonthlyReports from "../MonthlyReports/MonthlyReports";
 import ManageAdmins from "../ManageAdmins/ManageAdmins";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
 import { useTabHistory } from "../../lib/backStack";
+import { canSeeAdminTab } from "../../lib/adminNav";
+import { storedSession, rememberTab } from "../../lib/session";
 import "./AdminPortal.css";
 
 export default function AdminPortal({ adminProfile, onExit }) {
-  const [active, setActive] = useState("overview");
+  // The tab she was on before the page reloaded, but only if she may still see it:
+  // a permission withdrawn in the meantime would otherwise restore her to a blank
+  // main area, since every branch below is guarded by that same permission.
+  const [active, setActive] = useState(() => {
+    const tab = storedSession()?.tab;
+    return tab && canSeeAdminTab(adminProfile, tab) ? tab : "overview";
+  });
+
+  useEffect(() => { rememberTab(active); }, [active]);
 
   /*
    * Memoised, because `allowedProgramsFor` builds a new array every time and this

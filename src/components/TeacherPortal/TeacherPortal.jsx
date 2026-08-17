@@ -12,6 +12,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
 import { useTabHistory } from "../../lib/backStack";
+import { storedSession, rememberTab } from "../../lib/session";
 import "./TeacherPortal.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -48,9 +49,16 @@ export default function TeacherPortal({ teacher, onLogout }) {
   const dutyItems = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
   const canSeePerformance = hasTeacherRight(teacher, "class_tests");
   const items = [...dutyItems, ...(canSeePerformance ? [PERFORMANCE_ITEM] : []), SALARY_ITEM];
-  const [active, setActive] = useState(dutyItems[0]?.id || SALARY_ITEM.id);
+  // Restored only if that tab is still one of hers — rights can be withdrawn
+  // between one visit and the next.
+  const [active, setActive] = useState(() => {
+    const tab = storedSession()?.tab;
+    return tab && items.some((it) => it.id === tab) ? tab : (dutyItems[0]?.id || SALARY_ITEM.id);
+  });
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
+
+  useEffect(() => { rememberTab(active); }, [active]);
 
   const handleChangePassword = async () => {
     const next = window.prompt(`Set a new login password for ${teacher?.name || teacher?.email} (minimum 6 characters):`, "");

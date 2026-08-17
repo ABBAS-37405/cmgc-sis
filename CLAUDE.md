@@ -30,7 +30,9 @@ Vite + React 19 SPA for CMGC (Community Model Girls College) — a public market
 
 ### Navigation is state, not routes
 
-There is no router. `src/App.jsx` early-returns `<Portal>` or `<AdmissionPage>` based on boolean state; `Portal.jsx` early-returns `<LoginPage>` or `<AdminPortal>` based on login/role state; each portal renders its tab from an `active` string. Adding a "page" means adding a state branch, not a route. **URLs never change**, so deep links are not supported by design — and must not be added casually, because state is lost on reload and an address that reloads to the wrong screen is worse than one that never claimed anything.
+There is no router. `src/App.jsx` early-returns `<Portal>` or `<AdmissionPage>` based on boolean state; `Portal.jsx` early-returns `<LoginPage>` or `<AdminPortal>` based on login/role state; each portal renders its tab from an `active` string. Adding a "page" means adding a state branch, not a route. **URLs never change**, so deep links are not supported by design — and must not be added casually, because an address that reloads to the wrong screen is worse than one that never claimed anything.
+
+**A reload no longer throws that state away, though** — see "Staying signed in" below. What survives is the portal, not the address bar: the URL is still `/` on every screen.
 
 **The browser's Back button is supported, and `src/lib/backStack.js` is the whole of it.** One press walks back one screen inside the site; a press with nothing left to walk back to asks before leaving. It works without URLs because the browser only ever holds **one** guard entry (`arm()` keeps a marked entry above the one the visitor arrived on, so a back press fires `popstate` instead of unloading), while the real record of where she is lives in the module's own stack of undo steps.
 
@@ -47,9 +49,19 @@ Four rules, and breaking any one of them makes Back do nothing or do too much:
 
 ### Auth: two entirely separate mechanisms, three roles
 
-- **Students/parents** — no Supabase Auth at all. `LoginPage` queries the `students` table for a matching `roll_no` + plaintext `password` column and hands the whole row down as `studentData`. Session lives only in React state (lost on reload).
+- **Students/parents** — no Supabase Auth at all. `LoginPage` queries the `students` table for a matching `roll_no` + plaintext `password` column and hands the whole row down as `studentData`. Her session is React state plus the id in `localStorage` that restores it (below); there is no token, because there is no account.
 - **Admins** — real Supabase Auth (`signInWithPassword`), then `fetchAdminProfile()` loads their `admin_profiles` row. No profile row = no admin access.
 - **Teachers** — the same Supabase Auth mechanism as admins: sign in with email + password, then `fetchTeacherProfile()` loads the `teachers` row matching `user_id`. No row (or `is_active: false`) = signed straight back out. `teachers` holds no password column; only the `students` table still uses the plaintext-password login.
+
+### Staying signed in
+
+Refreshing used to drop whoever was working back onto the landing page, because everything that said "she is in the portal, on the Fee tab" was React state and nothing else. `src/lib/session.js` fixes that with one `localStorage` key holding **the role, the tab, and — for a student only — the id of her row**. No password, no record, nothing that could not be read again from the database.
+
+- **`session.js` imports nothing, and must stay that way.** `App` reads `storedSession()` synchronously to decide what to render (so the website is never painted and then yanked away), and App is the landing bundle. The half that turns a marker back into a signed-in portal needs the Supabase client and both profile fetchers, so it lives in **`sessionRestore.js`** and is imported only from `Portal`, which is already lazy. Merging them measured **+4.5 kB on the landing bundle** to answer a question about a session a first-time visitor has not got.
+- **The marker says which profile to load; the database says whether she is still allowed in.** Admin and teacher restore through `supabase.auth.getSession()` — supabase-js persists that itself — then `fetchAdminProfile` / `fetchTeacherProfile`. A revoked login, a deleted profile row, a teacher set `is_active: false`, a deleted student: each returns null, clears the marker, and lands on the login page. A failed restore is never retried.
+- **A student has no auth at all**, so hers is an id and a re-read of her row as `anon` — the same read her Attendance tab already makes. Re-reading rather than storing the row means a password change or an edit is picked up on the next load instead of being carried around stale. The consequence is honest and worth stating: for a student, "still signed in" is exactly as strong as "this browser profile is hers". That is why **Logout clears the marker** rather than only dropping React state, and `signOutToLogin` (the Back-button sign-out) clears it too.
+- **A restored tab is validated, never trusted.** `canSeeAdminTab()` in `src/lib/adminNav.js` is the sidebar's own filter, exported so `AdminPortal` can refuse a tab whose permission has since been withdrawn — every branch there is guarded by that permission, so a stale tab would restore to a blank main area. `TeacherPortal` checks the same way against her `items`. That is why `ADMIN_NAV_ITEMS` moved out of `AdminSidebar`: a component file may not export non-components (fast refresh).
+- **Nothing is remembered in the demo.** `__DEMO__` folds to false in a real build and takes the branch with it; in the demo the auth is in-memory, so a remembered admin would restore to a session that no longer exists and land on the login page — worse than the landing page it lands on today.
 
 ### Admin permissions model
 

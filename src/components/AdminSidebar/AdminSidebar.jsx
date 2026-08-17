@@ -1,34 +1,11 @@
-import { LayoutDashboard, Users, UserSearch, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, LogOut, FileBarChart } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Logo from "../Logo/Logo";
 import MobileTabMenu from "../MobileTabMenu/MobileTabMenu";
-import { hasPermission } from "../../lib/adminAuth";
+import { ADMIN_NAV_ITEMS, canSeeAdminTab } from "../../lib/adminNav";
 import "./AdminSidebar.css";
 
-const NAV_ITEMS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, permission: null },
-  { id: "students", label: "Students", icon: Users, permission: "students" },
-  // One girl's whole record on screen. Same `students` permission — the roster it
-  // opens with is read through the very policy that key gates, so an admin
-  // without it would only ever see an empty list here.
-  { id: "progress", label: "Student Report", icon: UserSearch, permission: "students" },
-  { id: "attendance", label: "Attendance", icon: CalendarCheck, permission: "attendance" },
-  { id: "results", label: "Results", icon: FileText, permission: "results" },
-  { id: "fee", label: "Fee Verification", icon: Wallet, permission: "fee" },
-  { id: "notices", label: "Notices", icon: Bell, permission: "notices" },
-  { id: "lms", label: "LMS", icon: BookOpen, permission: "lms" },
-  // Also holds the non-teaching register and payroll — same `teachers` permission,
-  // so no new key was added to PERMISSION_KEYS or the RLS policies built on it.
-  { id: "teachers", label: "Teachers & Staff", icon: BookOpen, permission: "teachers" },
-  { id: "reports", label: "Monthly Reports", icon: FileBarChart, permission: "reports" },
-  { id: "admins", label: "Manage Admins", icon: ShieldCheck, permission: "__super_admin_only__" },
-];
-
 export default function AdminSidebar({ active, setActive, onLogout, adminProfile }) {
-  const visibleItems = NAV_ITEMS.filter((it) => {
-    if (it.permission === "__super_admin_only__") return !!adminProfile?.is_super_admin;
-    if (!it.permission) return true;
-    return hasPermission(adminProfile, it.permission);
-  });
+  const visibleItems = ADMIN_NAV_ITEMS.filter((it) => canSeeAdminTab(adminProfile, it.id));
 
   const sidebarItems = [...visibleItems];
   const manageAdminsIndex = sidebarItems.findIndex((it) => it.id === "admins");

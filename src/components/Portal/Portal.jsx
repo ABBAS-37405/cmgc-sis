@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import LoginPage from "../Login/LoginPage";
 import Sidebar from "../Sidebar/Sidebar";
 import Overview from "../Overview/Overview";
@@ -19,6 +19,8 @@ const AdminPortal = lazy(() => import("../AdminPortal/AdminPortal"));
 const TeacherPortal = lazy(() => import("../TeacherPortal/TeacherPortal"));
 import { supabase } from "../../lib/supabaseClient";
 import { pushStep, useTabHistory } from "../../lib/backStack";
+import { storedSession, rememberSession, rememberTab, clearSession } from "../../lib/session";
+import { restoreSession } from "../../lib/sessionRestore";
 import "./Portal.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -31,6 +33,42 @@ export default function Portal({ onExit }) {
   const [adminProfile, setAdminProfile] = useState(null);
   const [teacherData, setTeacherData] = useState(null);
   const loginStep = useRef(null);
+
+  // True only while a remembered session is being turned back into a logged-in
+  // portal. Seeded synchronously from storage so the login screen is never shown
+  // for the moment the lookup takes — signing in again is exactly what she should
+  // not have to do.
+  const [restoring, setRestoring] = useState(() => Boolean(storedSession()));
+
+  useEffect(() => {
+    if (!restoring) return undefined;
+    let dropped = false;
+
+    restoreSession().then((session) => {
+      if (dropped) return;
+      if (session) {
+        setRole(session.role);
+        if (session.role === "admin") setAdminProfile(session.data);
+        else if (session.role === "teacher") setTeacherData(session.data);
+        else setStudentData(session.data);
+        // Only the student portal's tab is held here; the other two own theirs.
+        if (session.role === "student" && session.tab) setActiveTab(session.tab);
+        setLoggedIn(true);
+      }
+      // Whatever happened, stop waiting: a session that could not be restored
+      // leaves her on the login page rather than on a spinner.
+      setRestoring(false);
+    });
+
+    return () => { dropped = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Her tab, so a refresh in Fee comes back to Fee. Written only while signed in,
+  // so it can never resurrect a tab after a logout has cleared the session.
+  useEffect(() => {
+    if (loggedIn && role === "student") rememberTab(activeTab);
+  }, [loggedIn, role, activeTab]);
 
   // Back moves between tabs a screen at a time, in the order she visited them.
   const goToTab = useTabHistory(activeTab, setActiveTab);
@@ -46,6 +84,9 @@ export default function Portal({ onExit }) {
   const signOutToLogin = async (r) => {
     // Admins and teachers are both real Supabase Auth sessions; students are not.
     if (r === "admin" || r === "teacher") await supabase.auth.signOut();
+    // Signing out is the one thing that must outlive the page, or a reload would
+    // put back the session she just left.
+    clearSession();
     setLoggedIn(false);
     setActiveTab("overview");
     setStudentData(null);
@@ -100,6 +141,8 @@ export default function Portal({ onExit }) {
   };
 
   const handleLogin = (r, id, data) => {
+    // Written before anything renders, so a reload one second later finds it.
+    rememberSession(r, data);
     setRole(r);
     if (r === "admin") {
       setAdminProfile(data);
@@ -135,6 +178,7 @@ export default function Portal({ onExit }) {
     onExit && onExit();
   };
 
+  if (restoring) return <div className="app-loading">Signing you back in…</div>;
   if (!loggedIn) return <LoginPage onLogin={handleLogin} onBack={onExit} />;
   if (role === "admin") {
     return (

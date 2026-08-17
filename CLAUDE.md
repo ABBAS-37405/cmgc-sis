@@ -99,6 +99,7 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
+- `supabase_attendance_exclusion.sql` — `students.attendance_excluded_at` / `attendance_excluded_reason`, and the `protect_student_fields` trigger extended to cover them. See "Out of the attendance register" below.
 - `supabase_expenses.sql` — the `expenses` table behind Reports → Accounts. Adds nothing else: income is read from `payment_transactions` and the wage bill from `staff_salaries`, both of which already exist. Gated on `can_manage_teachers()`, and the reason is written up in the file — see the Accounts section below.
 - `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
 
@@ -309,6 +310,21 @@ Two rules behind it:
 
 - **An unmarked day is not an absence**, here as everywhere else in this app (`notMarked` in test reports, `unmarkedDays` in payroll). So a class that had no college needs nothing saved at all — the accurate record is an empty register, and the No answer exists for undoing a day that was already marked by mistake, not for recording the holiday.
 - **The answer does not travel.** Changing program, year or date resets it to Yes, because it is a question about one class on one date. Carrying it across meant an admin who marked 1st year as off found the 2nd year roster unmarked with nobody auto-present and no visible reason why.
+
+### Out of the attendance register
+
+A girl can be enrolled and still not be part of the daily roll call — long medical leave, studying privately, stopped coming but her record is not to be closed. Left in the roster she is marked Absent every morning by whoever fills it in, and the percentage her parents are sent collapses for a reason that has nothing to do with her. **`students.attendance_excluded_at`** (with an optional `attendance_excluded_reason`) takes her out; null means she is in it.
+
+It is a third state, not a variant of the two that already exist: `deleted_at` hides her everywhere, `is_passout` says she finished, this says she is enrolled but off the register.
+
+- **Only a super admin, and the database is what enforces it.** `MarkAttendance` takes `adminProfile` (the admin portal passes it, the teacher portal does not) and shows the per-row "Out of register" button and the **Out of Attendance** tab only for `is_super_admin`. The real gate is `protect_student_fields_on_update()` in `supabase_attendance_exclusion.sql` — the same trigger that already guards `is_passout` / `deleted_at` / `year_of_study`, now covering these two columns. Unlike an RLS refusal it *raises*, so a refusal reaches the admin as a sentence rather than as a silent success.
+- **Nothing already recorded is touched.** Taking her out stops new marks being offered; her existing `attendance` rows stay, so her portal, her reports and her Student Report still show the term she did attend. Putting her back leaves the days in between unmarked, which is not the same as absent — the rule the whole app follows.
+- **The exclusion filter is the roster, not a view.** `fetchRoster()` is the single query behind both the screen and the downloaded sheet, so a girl off the register is on neither. It retries once without the filter on `42703`: the register is filled in every morning and a frontend deploy can land before the SQL is pasted into the dashboard, and an empty class with no explanation is the worse failure.
+- **The Out of Attendance list ignores the program/year filters on purpose** (it is still scoped to `allowedPrograms`). Whoever was taken out has to stay findable without remembering which filter she was excluded under — otherwise she stays off the register for a term by accident. The register itself says how many of the class on screen are missing from it, since it cannot show them.
+- **Switching to that tab calls `wa.stop()`**, because it unmounts the WhatsApp banner — the rule from the WhatsApp section: whichever screen owns a `useWhatsAppQueue` must stop the run wherever it stops rendering the banner.
+- **`carryRecordsRef` carries the unsaved marks across the reload** that excluding or restoring triggers. Both change `students`, which re-runs the effect that rebuilds the day's register from the database — and that would silently discard whatever the admin had ticked but not yet saved. The ref is consumed once, so a date change still reloads properly.
+
+Reports are deliberately unchanged: an excluded girl simply has no attendance rows for those months, which every summary already reads as "nothing recorded" rather than as absence.
 
 ### Spreadsheet downloads
 

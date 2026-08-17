@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Check, UserPlus } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Check, UserPlus, UserMinus, Undo2 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, shortGroup } from "../../lib/academics";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
@@ -45,9 +45,19 @@ const sendAbsenceWhatsApp = (student, status, date) => {
   return openWhatsApp(number, buildAbsenceMessage(student.name, student.roll_no, status, date));
 };
 
-export default function MarkAttendance({ allowedPrograms = [] }) {
+/**
+ * `adminProfile` is passed by the admin portal and left out by the teacher portal,
+ * so only a super admin ever sees the two controls it gates: taking a girl out of
+ * the daily register, and the tab that lists whoever is out.
+ *
+ * The gate is cosmetic, as everywhere else in this app. The real one is the
+ * `protect_student_fields` trigger in supabase_attendance_exclusion.sql, which
+ * raises if anyone but a super admin writes those columns.
+ */
+export default function MarkAttendance({ allowedPrograms = [], adminProfile = null }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+  const canExclude = !!adminProfile?.is_super_admin;
 
   const [students, setStudents] = useState([]);
   const [records, setRecords] = useState({});
@@ -63,36 +73,103 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
   const [saved, setSaved] = useState(false);
   const [alreadyMarked, setAlreadyMarked] = useState(false);
   const [classesHeld, setClassesHeld] = useState(true);
+  // "register" is the roster everyone sees; "excluded" is the super admin's list of
+  // girls taken out of it.
+  const [view, setView] = useState("register");
+  const [excluded, setExcluded] = useState([]);
+  const [excludedLoading, setExcludedLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  /*
+   * Taking a girl out (or putting her back) changes `students`, which re-runs the
+   * effect that loads the day's register — and that rebuilds it from the database,
+   * silently throwing away whatever the admin had ticked but not yet saved. The
+   * marks on screen are carried across that one reload instead of being lost.
+   */
+  const carryRecordsRef = useRef(null);
   // The admin confirms once and then never touches this tab again — the queue
   // walks itself as she comes back from each chat. Everything about how that
   // works lives in useWhatsAppQueue, which is the only implementation of it.
   const wa = useWhatsAppQueue();
 
+  /*
+   * The roster the filters describe: the one marked on screen and the one the
+   * spreadsheet is built from are this same query with different columns.
+   *
+   * Girls taken out of the register are left out of both. They are still enrolled —
+   * they are simply not part of the daily roll call.
+   *
+   * The retry is for a deploy that lands before supabase_attendance_exclusion.sql is
+   * pasted into the dashboard: PostgREST answers a filter on an unknown column with
+   * 42703, and this is the screen the office fills in every morning, so it falls
+   * back to the whole roster rather than showing an empty class for no stated
+   * reason. Returns null (rather than []) when the query itself failed, so a
+   * network blip leaves the list on screen alone.
+   */
+  const fetchRoster = async (fields) => {
+    const build = (excludeOutOfRegister) => {
+      let query = supabase
+        .from("students")
+        .select(fields)
+        .is("deleted_at", null)
+        .order("program")
+        .order("name");
+
+      if (excludeOutOfRegister) query = query.is("attendance_excluded_at", null);
+
+      if (program !== ALL_PROGRAMS) {
+        query = query.eq("program", program);
+      } else if (isRestricted) {
+        // "All Programs" means all of *hers*, never the whole college — a teacher
+        // assigned Pre-Engineering, ICS and General Science must not see
+        // Pre-Medical girls here.
+        query = query.in("program", visiblePrograms);
+      }
+
+      if (yearFilter !== "Both") {
+        query = query.eq("year_of_study", yearFilter);
+      }
+
+      return query;
+    };
+
+    const { data, error } = await build(true);
+    if (error?.code === "42703") {
+      const retry = await build(false);
+      return retry.data || null;
+    }
+    return data || null;
+  };
+
   const fetchStudents = async () => {
     setLoading(true);
+    const data = await fetchRoster("id, name, roll_no, program, year_of_study, phone, whatsapp");
+    if (data) setStudents(data);
+    setLoading(false);
+  };
+
+  /*
+   * The girls who are out of the register, and deliberately NOT filtered by the
+   * program/year selectors above: whoever was taken out has to stay findable, and
+   * hunting for her by remembering which filter she was excluded under is exactly
+   * the way a girl stays out of the register for a term by accident. The list is
+   * still scoped to the programs this admin may see.
+   */
+  const fetchExcluded = async () => {
+    if (!canExclude) return;
+    setExcludedLoading(true);
     let query = supabase
       .from("students")
-      .select("id, name, roll_no, program, phone, whatsapp")
+      .select("id, name, roll_no, program, year_of_study, attendance_excluded_at, attendance_excluded_reason")
       .is("deleted_at", null)
+      .not("attendance_excluded_at", "is", null)
       .order("program")
       .order("name");
 
-    if (program !== ALL_PROGRAMS) {
-      query = query.eq("program", program);
-    } else if (isRestricted) {
-      // "All Programs" means all of *hers*, never the whole college — a teacher
-      // assigned Pre-Engineering, ICS and General Science must not see
-      // Pre-Medical girls here.
-      query = query.in("program", visiblePrograms);
-    }
-
-    if (yearFilter !== "Both") {
-      query = query.eq("year_of_study", yearFilter);
-    }
+    if (isRestricted) query = query.in("program", visiblePrograms);
 
     const { data } = await query;
-    if (data) setStudents(data);
-    setLoading(false);
+    setExcluded(data || []);
+    setExcludedLoading(false);
   };
 
   // Loads any attendance already saved for this date so it isn't overwritten
@@ -110,9 +187,16 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     const saved = {};
     (data || []).forEach((r) => { saved[r.student_id] = r.status; });
 
+    // Unsaved marks from before the roster changed win over what is in the
+    // database: they are the newer answer, and the admin never asked for them to
+    // be reloaded. Consumed once — a date change still reloads properly.
+    const carried = carryRecordsRef.current;
+    carryRecordsRef.current = null;
+
     const initial = {};
     students.forEach((s) => {
-      if (saved[s.id]) initial[s.id] = saved[s.id];
+      if (carried && carried[s.id]) initial[s.id] = carried[s.id];
+      else if (saved[s.id]) initial[s.id] = saved[s.id];
       else if (classesHeld) initial[s.id] = "Present";
     });
 
@@ -127,8 +211,15 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program, yearFilter]);
 
+  // Loaded once for the tab's count, not per filter — the list ignores the filters
+  // by design.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchExcluded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canExclude, allowedPrograms]);
+
+  useEffect(() => {
     loadAttendanceForDate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, students, classesHeld]);
@@ -218,7 +309,103 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     setClassesHeld(false);
   };
 
+  /*
+   * Out of the register — not deleted, not passed out.
+   *
+   * A girl on long medical leave, one studying privately, one who has stopped
+   * coming but whose record the office is not ready to close: left in the roster she
+   * is marked Absent every day by whoever fills it in, and the percentage her
+   * parents are sent collapses for a reason that has nothing to do with her.
+   *
+   * Nothing already recorded is touched. This stops new marks from being offered;
+   * it does not rewrite the ones she has, which is why her old attendance still
+   * appears on her portal and in her reports.
+   *
+   * One dialog, because the reason is worth having and a second box for it would
+   * read as a second confirmation: OK does it, Cancel does not, and an empty reason
+   * is fine.
+   */
+  const excludeFromAttendance = async (student) => {
+    const reason = window.prompt(
+      `Take ${student.name} out of the daily attendance register?\n\n` +
+      "She stays enrolled and keeps every attendance mark already recorded — she simply stops " +
+      "appearing here until she is added back from the Out of Attendance tab.\n\n" +
+      "Reason (optional):",
+      ""
+    );
+    if (reason === null) return;
+
+    setBusyId(student.id);
+    const { data, error } = await supabase
+      .from("students")
+      .update({
+        attendance_excluded_at: new Date().toISOString(),
+        attendance_excluded_reason: reason.trim() || null,
+      })
+      .eq("id", student.id)
+      .select("id");
+    setBusyId(null);
+
+    if (error || !data || data.length === 0) {
+      alert(error ? `Could not take her out of the register: ${error.message}` : WRITE_BLOCKED_HINT);
+      return;
+    }
+
+    const rest = { ...records };
+    delete rest[student.id];
+    carryRecordsRef.current = rest;
+    setStudents((prev) => prev.filter((s) => s.id !== student.id));
+    fetchExcluded();
+  };
+
+  const restoreToAttendance = async (student) => {
+    if (!window.confirm(
+      `Put ${student.name} back into the daily attendance register?\n\n` +
+      "She will appear in the roster again from today. The days she was out stay unmarked, " +
+      "and an unmarked day is never counted as an absence."
+    )) return;
+
+    setBusyId(student.id);
+    const { data, error } = await supabase
+      .from("students")
+      .update({ attendance_excluded_at: null, attendance_excluded_reason: null })
+      .eq("id", student.id)
+      .select("id");
+    setBusyId(null);
+
+    if (error || !data || data.length === 0) {
+      alert(error ? `Could not put her back in the register: ${error.message}` : WRITE_BLOCKED_HINT);
+      return;
+    }
+
+    setExcluded((prev) => prev.filter((s) => s.id !== student.id));
+    // She belongs in the roster again, but only if she is inside the filters on
+    // screen — fetchStudents decides that, not this handler.
+    carryRecordsRef.current = records;
+    fetchStudents();
+  };
+
   const absentees = students.filter((s) => records[s.id] === "Absent" || records[s.id] === "Leave");
+
+  // How many of the girls out of the register belong to the class on screen — the
+  // register itself never shows them, so it says how many are missing and why.
+  const excludedHere = excluded.filter((s) =>
+    (program === ALL_PROGRAMS || s.program === program) &&
+    (yearFilter === "Both" || s.year_of_study === yearFilter)
+  );
+
+  // Switching away from the register hides the WhatsApp banner, and a queue that
+  // keeps opening chats with nothing on screen saying so is the one thing the
+  // banner exists to prevent.
+  const changeView = (next) => {
+    if (next === "excluded") wa.stop();
+    setView(next);
+  };
+
+  const excludedSince = (value) => {
+    if (!value) return "";
+    return new Date(value).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
+  };
 
   const monthLabel = (monthKey) => {
     const [year, month] = monthKey.split("-").map(Number);
@@ -247,27 +434,10 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  const fetchStudentsForSheet = async () => {
-    let query = supabase
-      .from("students")
-      .select("id, name, roll_no, program, year_of_study")
-      .is("deleted_at", null)
-      .order("program", { ascending: true })
-      .order("name", { ascending: true });
-
-    if (program !== ALL_PROGRAMS) {
-      query = query.eq("program", program);
-    } else if (allowedPrograms.length > 0) {
-      query = query.in("program", visiblePrograms);
-    }
-
-    if (yearFilter !== "Both") {
-      query = query.eq("year_of_study", yearFilter);
-    }
-
-    const { data } = await query;
-    return data || [];
-  };
+  // Same roster as the screen, so the sheet the office writes on by hand matches
+  // the one it marks here — a girl out of the register is on neither.
+  const fetchStudentsForSheet = async () =>
+    (await fetchRoster("id, name, roll_no, program, year_of_study")) || [];
 
   const fetchAttendanceForMonth = async (studentIds) => {
     const [year, month] = downloadMonth.split("-").map(Number);
@@ -496,8 +666,79 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
     }
   };
 
+  // Only the super admin has a second view to switch to, so only she sees the
+  // switcher at all.
+  const viewTabs = canExclude && (
+    <div className="mark-attendance__views" role="group" aria-label="Attendance views">
+      <button
+        type="button"
+        onClick={() => changeView("register")}
+        className={"mark-attendance__view-btn " + (view === "register" ? "mark-attendance__view-btn--active" : "")}>
+        Attendance Register
+      </button>
+      <button
+        type="button"
+        onClick={() => changeView("excluded")}
+        className={"mark-attendance__view-btn " + (view === "excluded" ? "mark-attendance__view-btn--active" : "")}>
+        Out of Attendance ({excluded.length})
+      </button>
+    </div>
+  );
+
+  if (canExclude && view === "excluded") {
+    return (
+      <div className="mark-attendance">
+        {viewTabs}
+        <p className="mark-attendance__hint-line">
+          These girls are still enrolled and keep every attendance mark already recorded — they are only
+          left out of the daily roll call. This list covers every program you can see, not the filters on
+          the register.
+        </p>
+
+        {excludedLoading ? (
+          <p className="mark-attendance__empty">Loading...</p>
+        ) : excluded.length === 0 ? (
+          <div className="mark-attendance__empty">
+            <UserMinus size={32} />
+            <p>Nobody is out of the attendance register</p>
+            <p className="mark-attendance__hint">
+              Use “Out of register” beside a girl on the register to take her out.
+            </p>
+          </div>
+        ) : (
+          excluded.map((s) => (
+            <div key={s.id} className="mark-attendance__row">
+              <div>
+                <p className="mark-attendance__name">
+                  {s.name}
+                  <span className="mark-attendance__program-tag">{s.program}</span>
+                  {s.year_of_study && <span className="mark-attendance__program-tag">{s.year_of_study}</span>}
+                </p>
+                <p className="mark-attendance__roll">{s.roll_no}</p>
+                <p className="mark-attendance__excluded-note">
+                  Out of the register since {excludedSince(s.attendance_excluded_at)}
+                  {s.attendance_excluded_reason ? ` — ${s.attendance_excluded_reason}` : ""}
+                </p>
+              </div>
+              <div className="mark-attendance__buttons">
+                <button
+                  type="button"
+                  onClick={() => restoreToAttendance(s)}
+                  disabled={busyId === s.id}
+                  className="mark-attendance__restore-btn">
+                  <Undo2 size={14} /> {busyId === s.id ? "Adding back..." : "Add Back to Attendance"}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mark-attendance">
+      {viewTabs}
       <div className="mark-attendance__toolbar">
         <div className="mark-attendance__field">
           <label>Program</label>
@@ -563,6 +804,16 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
       {alreadyMarked && !saved && (
         <div className="mark-attendance__warning">
           ⚠️ Attendance already marked for this date — saving will overwrite it.
+        </div>
+      )}
+
+      {/* The register cannot show who is missing from it, so it says so. */}
+      {canExclude && excludedHere.length > 0 && (
+        <div className="mark-attendance__hint-line">
+          {excludedHere.length === 1
+            ? `1 girl in ${selectionLabel} is out of the register and is not listed below`
+            : `${excludedHere.length} girls in ${selectionLabel} are out of the register and are not listed below`}
+          {" "}— open the <strong>Out of Attendance</strong> tab to put them back.
         </div>
       )}
 
@@ -652,6 +903,16 @@ export default function MarkAttendance({ allowedPrograms = [] }) {
                     className="mark-attendance__whatsapp-btn"
                     title={`Notify parent via WhatsApp — ${records[s.id]}`}>
                     <WhatsappIcon />
+                  </button>
+                )}
+                {canExclude && (
+                  <button
+                    type="button"
+                    onClick={() => excludeFromAttendance(s)}
+                    disabled={busyId === s.id}
+                    className="mark-attendance__exclude-btn"
+                    title={`Take ${s.name} out of the daily attendance register — she stays enrolled`}>
+                    <UserMinus size={14} /> Out of register
                   </button>
                 )}
               </div>

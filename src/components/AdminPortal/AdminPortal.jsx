@@ -53,7 +53,10 @@ export default function AdminPortal({ adminProfile, onExit }) {
             because the screen hides the two sections RLS would answer with
             silence (attendance and results) instead of showing them as zero. */}
         {active === "progress" && hasPermission(adminProfile, "students") && <StudentProgress allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
-        {active === "attendance" && hasPermission(adminProfile, "attendance") && <MarkAttendance allowedPrograms={allowedPrograms} />}
+        {/* adminProfile is what puts "out of the register" and the Out of Attendance
+            tab on screen — super admin only. The teacher portal passes none, so its
+            copy of this screen is the register and nothing else. */}
+        {active === "attendance" && hasPermission(adminProfile, "attendance") && <MarkAttendance allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "results" && hasPermission(adminProfile, "results") && <EnterResults allowedPrograms={allowedPrograms} />}
         {active === "fee" && hasPermission(adminProfile, "fee") && <FeeVerification />}
         {/* Unscoped by allowedPrograms on purpose: `notices` has no audience

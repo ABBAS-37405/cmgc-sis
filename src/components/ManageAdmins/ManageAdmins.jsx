@@ -8,7 +8,7 @@ import {
   deleteSubAdmin,
   updateSubAdmin,
 } from "../../lib/adminAuth";
-import { openWhatsApp, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { openWhatsApp, isValidWhatsAppNumber, isDemoMode } from "../../lib/whatsapp";
 import "./ManageAdmins.css";
 
 const emptyForm = { name: "", email: "", password: "", whatsapp: "", permissions: [], allowedPrograms: [] };
@@ -21,13 +21,22 @@ function buildAdminCredentialsMessage(name, email, password) {
   return [
     `Assalamualaikum ${name || "Admin"},`,
     "",
-    "Your CMGC admin portal login has been updated.",
+    "Your CMGC admin portal login is ready.",
     "",
-    `Email: ${email}`,
+    `Login Email: ${email}`,
     `Password: ${password}`,
     "",
-    "Please use these credentials to sign in.",
+    "Open the college website, press Portal Login and sign in with these details.",
+    "Please keep this message to yourself.",
   ].join("\n");
+}
+
+// A readable throwaway password, for the case where no password is known and one has
+// to be set before it can be sent. Same helper as the Teachers screen.
+const SUGGEST_WORDS = ["cmgc", "office", "admin", "college"];
+function suggestPassword() {
+  const word = SUGGEST_WORDS[Math.floor(Math.random() * SUGGEST_WORDS.length)];
+  return `${word}${Math.floor(100 + Math.random() * 900)}`;
 }
 
 export default function ManageAdmins({ adminProfile }) {
@@ -40,6 +49,17 @@ export default function ManageAdmins({ adminProfile }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [savingEditId, setSavingEditId] = useState(null);
+
+  // Passwords set during this visit to the screen, keyed by the admin's user_id.
+  //
+  // A sub-admin's login is a Supabase Auth account, so nothing here can read her
+  // password back — the same position the Teachers screen is in. Holding the one the
+  // super admin has just typed is what lets "Send WhatsApp" send it without asking
+  // for it again, and without resetting a working login. Memory only; a reload
+  // forgets them and the send flow then offers to set a new one.
+  const [knownPasswords, setKnownPasswords] = useState({});
+  const rememberPassword = (userId, password) =>
+    setKnownPasswords((prev) => ({ ...prev, [userId]: password }));
 
   const fetchAdmins = async () => {
     setLoading(true);
@@ -74,7 +94,7 @@ export default function ManageAdmins({ adminProfile }) {
 
     setCreating(true);
     try {
-      await createSubAdmin({
+      const created = await createSubAdmin({
         email: form.email.trim(),
         password: form.password,
         name: form.name.trim(),
@@ -82,6 +102,9 @@ export default function ManageAdmins({ adminProfile }) {
         permissions: form.permissions,
         allowedPrograms: form.allowedPrograms,
       });
+      // The route answers with the auth user it made, which is what admin_profiles
+      // keys on — so the password just typed can be sent from her card as it is.
+      if (created?.userId) rememberPassword(created.userId, form.password);
       setForm(emptyForm);
       await fetchAdmins();
     } catch (err) {
@@ -128,6 +151,7 @@ export default function ManageAdmins({ adminProfile }) {
         permissions: editForm.permissions,
         allowedPrograms: editForm.allowedPrograms,
       });
+      if (editForm.password.trim()) rememberPassword(admin.user_id, editForm.password.trim());
       setEditingId(null);
       setEditForm(null);
       await fetchAdmins();
@@ -138,26 +162,68 @@ export default function ManageAdmins({ adminProfile }) {
     }
   };
 
+  /**
+   * Send a sub-admin her own login details on WhatsApp.
+   *
+   * This used to ask for the password every single time, through an empty box that
+   * looked like a reset but was not one: whatever was typed went into the message and
+   * nowhere else, so a slip of memory sent a password that had never been set and the
+   * admin was locked out by a message telling her she was not.
+   *
+   * Her password cannot be looked up — a sub-admin login is a real Supabase Auth
+   * account, so only a hash exists. So there are two honest paths, the same two the
+   * Teachers screen uses: send the password set on this screen a moment ago, or set
+   * one now and say so plainly first.
+   */
   const sendCredentials = async (admin) => {
     let number = (admin.whatsapp || "").trim();
     if (!number || !isValidWhatsAppNumber(number)) {
-      number = window.prompt("Enter the sub-admin WhatsApp number (03XXXXXXXXX):", "");
-      if (!number || !isValidWhatsAppNumber(number.trim())) {
+      const entered = window.prompt("Enter the sub-admin WhatsApp number (03XXXXXXXXX):", "");
+      if (entered === null) return;
+      number = entered.trim();
+      if (!isValidWhatsAppNumber(number)) {
         return alert("Please enter a valid WhatsApp number in the format 03XXXXXXXXX.");
       }
-      number = number.trim();
     }
 
-    const password = window.prompt(
-      `Enter the password to share with ${admin.name || admin.email}:`, ""
-    );
-    if (!password) {
-      return;
+    const known = knownPasswords[admin.user_id];
+    let password = known;
+
+    // Known password: nothing to ask, so nothing is asked.
+    if (!known) {
+      const chosen = window.prompt(
+        `${admin.name || admin.email}'s password is not stored anywhere — her login is a real Supabase account, so the portal only ever sees a hash of it.\n\n` +
+        `To put a password in the message, one has to be set. Sending now will REPLACE her current password: whatever she is using today stops working.\n\n` +
+        `Password to set and send (minimum 6 characters), or Cancel:`,
+        suggestPassword()
+      );
+      if (chosen === null) return;
+      password = chosen.trim();
+      if (password.length < 6) {
+        return alert("Password must be at least 6 characters. Nothing was sent and nothing was changed.");
+      }
+    }
+
+    // Reserved inside the click, before any await, or the browser blocks it as a
+    // popup. The demo never opens a real chat, so it reserves nothing.
+    const waWindow = isDemoMode() ? null : window.open("", "_blank");
+
+    if (!known) {
+      try {
+        // Only the password: the server writes no profile columns it was not given,
+        // so her name, tabs and programs are left exactly as they are.
+        await updateSubAdmin({ targetUserId: admin.user_id, password });
+        rememberPassword(admin.user_id, password);
+      } catch (err) {
+        if (waWindow && !waWindow.closed) waWindow.close();
+        return alert("Could not set the new password, so nothing was sent: " + err.message);
+      }
     }
 
     const message = buildAdminCredentialsMessage(admin.name, admin.email, password);
-    const success = openWhatsApp(number, message);
+    const success = openWhatsApp(number, message, waWindow);
     if (!success) {
+      if (waWindow && !waWindow.closed) waWindow.close();
       alert("Could not open WhatsApp. Please check the number and try again.");
     }
   };
@@ -183,7 +249,8 @@ export default function ManageAdmins({ adminProfile }) {
         permissions: admin.permissions || [],
         allowedPrograms: admin.allowed_programs || [],
       });
-      alert(`Password updated. ${admin.name || admin.email} can now sign in with the new password.`);
+      rememberPassword(admin.user_id, password);
+      alert(`Password updated. ${admin.name || admin.email} can now sign in with the new password. Use "Send WhatsApp" on her card to send it to her.`);
       await fetchAdmins();
     } catch (err) {
       alert("Could not update password: " + err.message);

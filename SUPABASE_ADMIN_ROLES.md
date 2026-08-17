@@ -34,6 +34,31 @@ alter table admin_profiles enable row level security;
 `Pre-Engineering`, `Pre-Medical`, `ICS`, `General Science`, `FA-IT`, `Humanities`.
 An empty `allowed_programs` array means "no restriction — all programs".
 
+### 1a. If the table already exists: the `whatsapp` column
+
+`create table` above is not re-runnable, so a database created before `whatsapp` was
+added to it does not have that column — and saving a sub-admin then fails with
+
+> Could not find the 'whatsapp' column of 'admin_profiles' in the schema cache
+
+which is PostgREST reporting a column the app sends and the table has not got. Manage
+Admins writes it on create and on edit, shows it on each card, and messages it with
+"Send WhatsApp", so this is required rather than optional. Safe to run on any database,
+including one that already has the column:
+
+```sql
+alter table admin_profiles add column if not exists whatsapp text;
+
+-- PostgREST answers from a cached copy of the schema, so a fresh column stays
+-- invisible until it re-reads. Supabase usually does this by itself within a minute;
+-- this is how to stop waiting.
+notify pgrst, 'reload schema';
+```
+
+The number is a plain string in the same form as everywhere else (`03XXXXXXXXX`);
+`whatsappNumberFor()` normalises it at send time, and nothing in the database
+constrains it.
+
 ---
 
 ## 2. Helper function `is_super_admin()`

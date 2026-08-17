@@ -43,9 +43,15 @@
 .teachers__tag--visiting { color: #6d28d9; border-color: #c4b5fd; }
 .teachers__tag--pay { color: var(--subtext); }
 .teachers__pay-note { grid-column: span 2; justify-content: flex-end; }
-.teachers__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* Four buttons now (Edit, Reset Password, Send Login, Remove), so they wrap rather
+   than squeezing the card's details out of the way on a narrow screen. */
+.teachers__card-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .teachers__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
 .teachers__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+/* WhatsApp's own green, same as the student credential button — the one place a
+   fixed colour beats the theme, because it is naming another app. */
+.teachers__wa-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #86efac; color: #16a34a; background: #f0fdf4; }
+.teachers__wa-btn:hover { background: #dcfce7; }
 
 .teachers__report-picker { max-width: 340px; margin-bottom: 14px; }
 .teachers__stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }

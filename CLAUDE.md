@@ -167,6 +167,8 @@ Unlike the `class_tests` policies, which settle for `is_staff()`, the write poli
 
 A `teachers` row can exist with `user_id` null — a recorded teacher who has no login yet. The Teachers tab shows "Create Login" for those, which posts to `/api/teacher/create` with a `teacherId` to attach an auth user to the existing row rather than inserting a new one.
 
+**"Send Login" WhatsApps a teacher her own credentials, and it is not the student flow with a different table.** A student's password is a plaintext column, so `StudentsList` can quote it back at any time; a teacher's is a real Supabase Auth account, so the portal only ever sees a hash and **there is nothing to look up**. The button therefore has two paths: a password the admin set on this screen a moment ago (held in `knownPasswords`, in memory only, keyed by teacher id — which is what lets "Add Teacher" be followed by "send her the details" without touching the password she just chose), or no password at all, in which case the only way to state one in a message is to **set** one. That second path resets her login, so the prompt says so in those words instead of doing it quietly behind a send button. `handleResetPassword` feeds the same map, so resetting and then sending costs one reset, not two. The chat window is reserved before the `await` (and not reserved at all in the demo, per `isDemoMode()`), the same rule as `StudentsList.doApprove()`.
+
 Class tests are two tables on purpose: `class_tests` is one row per test conducted, `class_test_marks` one row per student per test with a `unique (class_test_id, student_id)` constraint that `ClassTestEntry` upserts against. That shape is what lets each subject carry a different number of tests — the student's `ClassTests` tab groups marks by subject and renders each subject's own horizontal strip of tests.
 
 A test can span groups: picking `"All Programs"` stores that literal in `class_tests.program` and the concrete groups it covered in `class_tests.programs[]`. Always build the roster from `programs[]`, falling back to `[program]` — reading `program` alone silently returns nobody for a combined test.
@@ -293,7 +295,7 @@ Cells are primitives or `{ v, s }`, where `s` is an index into `S` — the style
 
 ### WhatsApp
 
-`src/lib/whatsapp.js` is the only place that builds a WhatsApp link — `StudentsList`, `MarkAttendance` and `FeeVerification` all go through it, and none of them keeps a local number normalizer.
+`src/lib/whatsapp.js` is the only place that builds a WhatsApp link — `StudentsList`, `MarkAttendance`, `FeeVerification` and `Teachers` all go through it, and none of them keeps a local number normalizer. The glyph is shared too: lucide carries no brand icons, so `components/WhatsappIcon` holds the one hand-drawn path both credential buttons render.
 
 - `whatsappNumberFor(person)` reads `whatsapp` first and falls back to `phone`. Never message `phone` directly: the two are often different numbers and the phone on file may have no WhatsApp on it.
 - `whatsappUrl()` sends desktop straight to `web.whatsapp.com/send` and mobile to `wa.me`. `wa.me` on a laptop is a redirect hop that frequently lands on the "download WhatsApp" interstitial and loses the prefilled text — that is what made laptop sending unreliable.

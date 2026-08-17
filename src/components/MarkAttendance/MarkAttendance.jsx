@@ -26,13 +26,37 @@ const buildAbsenceMessage = (studentName, rollNo, status, dateStr) => {
   ].join("\n");
 };
 
+/**
+ * The warning sent to a girl who is off the attendance register: come to the
+ * office, or her name is struck off.
+ *
+ * It is deliberately not the absence message with harder words. That one reports a
+ * day; this one is the last step before her enrolment ends, so it says what has
+ * already happened (she is off the register), what is being asked (come in), and
+ * what follows if nobody does — in that order, with no date invented for the
+ * deadline. Where she is asked to reply is honest too: this arrives from whichever
+ * WhatsApp the office is signed into, so replying to it reaches the college.
+ */
+const buildStruckOffMessage = (studentName, rollNo) => [
+  "Assalamualaikum,",
+  "",
+  `Your daughter ${studentName} (Roll No: ${rollNo}) has not been attending classes at CMGC, and her name has been taken off the daily attendance register.`,
+  "",
+  "Please contact the college office immediately — reply to this message or come to the office — and tell us whether she intends to continue her studies.",
+  "",
+  "If we do not hear from you, her name will be struck off the college rolls.",
+  "",
+  "Regards,",
+  "CMGC Administration",
+].join("\n");
+
 // Her WhatsApp number first, phone only as a fallback — the two are often
 // different, and a number on file may have no WhatsApp on it at all.
 //
-// This is the single-row button, and the prompt is why it is not what the bulk
-// run uses: a modal half way through a queue strands every recipient after it.
-// The queue screens for usable numbers before it starts instead.
-const sendAbsenceWhatsApp = (student, status, date) => {
+// This is the single-row path, and the prompt is why it is not what the bulk run
+// uses: a modal half way through a queue strands every recipient after it. The
+// queue screens for usable numbers before it starts instead.
+const openChatWith = (student, message) => {
   let number = whatsappNumberFor(student);
   if (!isValidWhatsAppNumber(number)) {
     const entered = window.prompt(
@@ -42,8 +66,11 @@ const sendAbsenceWhatsApp = (student, status, date) => {
     if (!entered || !entered.trim()) return false;
     number = entered.trim();
   }
-  return openWhatsApp(number, buildAbsenceMessage(student.name, student.roll_no, status, date));
+  return openWhatsApp(number, message);
 };
+
+const sendAbsenceWhatsApp = (student, status, date) =>
+  openChatWith(student, buildAbsenceMessage(student.name, student.roll_no, status, date));
 
 /**
  * `adminProfile` is passed by the admin portal and left out by the teacher portal,
@@ -159,7 +186,7 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     setExcludedLoading(true);
     let query = supabase
       .from("students")
-      .select("id, name, roll_no, program, year_of_study, attendance_excluded_at, attendance_excluded_reason")
+      .select("id, name, roll_no, program, year_of_study, phone, whatsapp, attendance_excluded_at, attendance_excluded_reason")
       .is("deleted_at", null)
       .not("attendance_excluded_at", "is", null)
       .order("program")
@@ -394,11 +421,44 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     (yearFilter === "Both" || s.year_of_study === yearFilter)
   );
 
-  // Switching away from the register hides the WhatsApp banner, and a queue that
-  // keeps opening chats with nothing on screen saying so is the one thing the
-  // banner exists to prevent.
+  /*
+   * The warning, sent to every parent on this list at once.
+   *
+   * A queue and not a loop, like every other bulk send here, and screened before it
+   * starts because a prompt for a missing number half way through would strand
+   * everyone after it — whoever has no usable number is named when the run
+   * finishes rather than stopping it.
+   *
+   * Deliberately a separate button from the per-row one: this list holds girls who
+   * have stopped coming and girls on leave the office already agreed to, and only
+   * the office can tell them apart. The confirm says how many, and the row button
+   * is there for when the answer is "her, but not her".
+   */
+  const warnAllStruckOff = () => {
+    const entries = [];
+    const skipped = [];
+    excluded.forEach((s) => {
+      const number = whatsappNumberFor(s);
+      if (!isValidWhatsAppNumber(number)) {
+        skipped.push(s);
+        return;
+      }
+      entries.push({
+        id: s.id,
+        name: s.name,
+        number,
+        message: buildStruckOffMessage(s.name, s.roll_no),
+      });
+    });
+
+    wa.start({ entries, skipped, what: "the struck-off warning", recipientNoun: "parent" });
+  };
+
+  // Each view renders its own copy of the banner, so a switch either way ends the
+  // run: a queue that keeps opening chats with nothing on screen saying so is the
+  // one thing that banner exists to prevent.
   const changeView = (next) => {
-    if (next === "excluded") wa.stop();
+    if (next !== view) wa.stop();
     setView(next);
   };
 
@@ -695,6 +755,25 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
           the register.
         </p>
 
+        {excluded.length > 0 && (
+          <>
+            <div className="mark-attendance__summary">
+              <button
+                type="button"
+                onClick={warnAllStruckOff}
+                className="mark-attendance__warn-btn">
+                <WhatsappIcon /> Send Struck-Off Warning to All ({excluded.length})
+              </button>
+            </div>
+            <p className="mark-attendance__hint-line">
+              That message tells her parents to contact the office immediately or her name will be struck off
+              the college rolls. Send it to the girls who have simply stopped coming — for one on leave the
+              office already agreed to, use the button on her own row, or nothing at all.
+            </p>
+            <WhatsAppQueue queue={wa.queue} onNext={wa.next} onStop={wa.stop} />
+          </>
+        )}
+
         {excludedLoading ? (
           <p className="mark-attendance__empty">Loading...</p>
         ) : excluded.length === 0 ? (
@@ -721,6 +800,13 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                 </p>
               </div>
               <div className="mark-attendance__buttons">
+                <button
+                  type="button"
+                  onClick={() => openChatWith(s, buildStruckOffMessage(s.name, s.roll_no))}
+                  className="mark-attendance__warn-btn"
+                  title={`Warn ${s.name}'s parents that her name will be struck off unless they contact the office`}>
+                  <WhatsappIcon /> Warn Parents
+                </button>
                 <button
                   type="button"
                   onClick={() => restoreToAttendance(s)}

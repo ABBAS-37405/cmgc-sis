@@ -48,6 +48,11 @@
 .mark-attendance__exclude-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 8px; border: 1px dashed var(--border); color: var(--subtext); background: var(--bg); }
 .mark-attendance__exclude-btn:hover:not(:disabled) { border-style: solid; border-color: #f87171; color: #b91c1c; background: #fef2f2; }
 .mark-attendance__exclude-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* A warning, so it is amber rather than the green every other WhatsApp button in
+   this app uses — those report a day, this one is the last step before her
+   enrolment ends. */
+.mark-attendance__warn-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid #fbbf24; color: #b45309; background: #fffbeb; }
+.mark-attendance__warn-btn:hover:not(:disabled) { background: #fef3c7; }
 .mark-attendance__restore-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid #86efac; color: #15803d; background: #f0fdf4; }
 .mark-attendance__restore-btn:hover:not(:disabled) { background: #dcfce7; }
 .mark-attendance__restore-btn:disabled { opacity: 0.5; cursor: not-allowed; }

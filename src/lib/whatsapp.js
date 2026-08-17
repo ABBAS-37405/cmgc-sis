@@ -63,6 +63,33 @@ export function whatsappNumberFor(person) {
   return (person?.phone || person?.phone1 || "").trim();
 }
 
+/**
+ * The name of the one browser tab every chat in this app is opened in.
+ *
+ * A `_blank` target means "a new tab, always", so marking a class used to leave the
+ * admin with a tab per girl — each one a fresh WhatsApp Web load, and the earlier
+ * ones stale. A *named* target is reused: the browser hands the URL to the tab
+ * already carrying that name, and only opens one if there isn't any. It survives
+ * losing the JS handle (a re-render, a portal reload) too, which a reference does
+ * not, so a single send and a queue that reserved its window both land in the same
+ * tab and never fight over two.
+ *
+ * `noopener` cannot be passed with it: it is defined as "open in a fresh context",
+ * which defeats the reuse. That is acceptable here and nowhere else — the target is
+ * WhatsApp's own origin, and the queue already hands `openWhatsApp` a live window
+ * handle for exactly this purpose.
+ */
+export const WHATSAPP_WINDOW_NAME = "cmgcWhatsApp";
+
+/**
+ * The tab reserved inside a click gesture before slow work (a PDF, an insert),
+ * so the chat that follows is not read as a popup. Named, so it *is* the WhatsApp
+ * tab already on screen rather than a second one beside it.
+ */
+export function reserveWhatsAppWindow() {
+  return window.open("", WHATSAPP_WINDOW_NAME);
+}
+
 export function whatsappUrl(number, message) {
   const n = normalizeWhatsAppNumber(number);
   const text = encodeURIComponent(message);
@@ -90,6 +117,20 @@ export function copyMessage(message) {
     // ignore — opening the chat matters more than the convenience copy
   }
   return false;
+}
+
+/**
+ * Bring the chat forward. Reusing one tab means the second message onwards
+ * navigates a tab that may be sitting behind this one, and a chat the admin cannot
+ * see reads exactly like a button that did nothing. Best effort, and cross-origin
+ * safe — `focus` is one of the few methods a foreign window still allows.
+ */
+function focusChat(chatWindow) {
+  try {
+    chatWindow?.focus();
+  } catch {
+    // ignore — the chat is loaded either way
+  }
 }
 
 /**
@@ -122,9 +163,13 @@ export function openWhatsApp(number, message, windowRef) {
   // is reused rather than opening a second tab.
   if (windowRef && !windowRef.closed) {
     windowRef.location.href = url;
-  } else {
-    window.open(url, "_blank", "noopener,noreferrer");
+    focusChat(windowRef);
+    return true;
   }
+
+  // Otherwise the shared, named tab — see WHATSAPP_WINDOW_NAME. One chat replaces
+  // the last one instead of stacking up a tab per recipient.
+  focusChat(window.open(url, WHATSAPP_WINDOW_NAME));
   return true;
 }
 

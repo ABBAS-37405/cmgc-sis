@@ -24,7 +24,7 @@ import {
   reportFileName,
   saveBlob,
 } from "../../lib/reportPdf";
-import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 
 const ALL_PROGRAMS = "All Programs";
 const MONTHS = recentMonths(18);
@@ -278,8 +278,9 @@ export default function ReportsPane({ allowedPrograms = [], adminProfile, mode =
   const sendNextInQueue = async () => {
     if (!waQueue) return;
     const report = waQueue.list[waQueue.index];
-    // Reserved inside the click, before the PDF work begins.
-    const windowRef = window.open("", "_blank");
+    // Reserved inside the click, before the PDF work begins — and named, so every
+    // report in the run replaces the last chat rather than opening a tab per girl.
+    const windowRef = reserveWhatsAppWindow();
     await send(report, windowRef);
 
     const nextIndex = waQueue.index + 1;
@@ -542,7 +543,7 @@ export default function ReportsPane({ allowedPrograms = [], adminProfile, mode =
                           </button>
                           <button
                             className="mrep__btn mrep__btn--sm mrep__btn--primary"
-                            onClick={() => send(r, window.open("", "_blank"))}
+                            onClick={() => send(r, reserveWhatsAppWindow())}
                             disabled={busy || !!waQueue}
                             title={noNumber ? "No WhatsApp number on file — you will be asked for one" : "Open WhatsApp with a link to her report"}
                           >

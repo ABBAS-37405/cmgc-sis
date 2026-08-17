@@ -8,7 +8,7 @@ import StudentDetail from "../StudentDetail/StudentDetail";
 import EditRequests from "../EditRequests/EditRequests";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
 import { DETAIL_GROUPS, blankDetails, detailsToRow, matricPercentage } from "../../lib/studentFields";
-import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { fetchFeePlans, findPlan, buildFeeRows } from "../../lib/feePlans";
 import "./StudentsList.css";
 
@@ -581,8 +581,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     setRejecting(true);
 
     // Opened synchronously (within the click's user-gesture window) so the
-    // WhatsApp redirect below isn't blocked as a popup after the awaits.
-    const waWindowRef = window.open("", "_blank");
+    // WhatsApp redirect below isn't blocked as a popup after the awaits. Named, so
+    // it takes over the one WhatsApp tab this app uses instead of adding another.
+    const waWindowRef = reserveWhatsAppWindow();
 
     const { error } = await supabase
       .from("applications")
@@ -612,8 +613,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     setShowAdmissionFeeModal(false);
 
     // Opened synchronously (within the click's user-gesture window) so the
-    // WhatsApp redirect below isn't blocked as a popup after the awaits.
-    const waWindowRef = window.open("", "_blank");
+    // WhatsApp redirect below isn't blocked as a popup after the awaits. Named, so
+    // it takes over the one WhatsApp tab this app uses instead of adding another.
+    const waWindowRef = reserveWhatsAppWindow();
 
     const { error: appError } = await supabase
       .from("applications")

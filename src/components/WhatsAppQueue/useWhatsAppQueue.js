@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { openWhatsApp, isDemoMode } from "../../lib/whatsapp";
+import { openWhatsApp, isDemoMode, reserveWhatsAppWindow } from "../../lib/whatsapp";
 
 /**
  * Sending one message to many people, with the admin confirming once.
@@ -119,8 +119,10 @@ export function useWhatsAppQueue() {
 
     // Reserved inside the click gesture, the same trick StudentsList.doApprove
     // uses — every later chat reuses this window instead of asking for a popup.
+    // Named, so a run started after a single send takes over that same tab rather
+    // than opening a second one next to it.
     if (!isDemoMode()) {
-      const reserved = window.open("", "_blank");
+      const reserved = reserveWhatsAppWindow();
       if (!reserved) {
         alert(
           "Your browser blocked the WhatsApp tab. Allow pop-ups for this site and try again — " +

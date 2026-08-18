@@ -728,13 +728,19 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
 
   // Only the super admin has a second view to switch to, so only she sees the
   // switcher at all.
+  //
+  // The two numbers on it are counted differently, and that is not an oversight:
+  // the register is whoever the program/year filters are showing, so it moves as
+  // she changes them, while the excluded list ignores those filters by design and
+  // is everyone she can see. The register's own total is repeated in the summary
+  // below for the admins and teachers who never get these tabs.
   const viewTabs = canExclude && (
     <div className="mark-attendance__views" role="group" aria-label="Attendance views">
       <button
         type="button"
         onClick={() => changeView("register")}
         className={"mark-attendance__view-btn " + (view === "register" ? "mark-attendance__view-btn--active" : "")}>
-        Attendance Register
+        Attendance Register ({students.length})
       </button>
       <button
         type="button"
@@ -914,6 +920,11 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
       ) : (
         <>
           <div className="mark-attendance__summary">
+            {/* How many girls this register is asking about, before any of them is
+                marked — the same figure the tab carries, for whoever has no tabs. */}
+            <span className="mark-attendance__count mark-attendance__count--total">
+              In register: {students.length}
+            </span>
             <span className="mark-attendance__count mark-attendance__count--present">
               Present: {Object.values(records).filter(v => v === "Present").length}
             </span>

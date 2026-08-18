@@ -25,6 +25,9 @@
 .mark-attendance__hint { font-size: 12px; color: var(--subtext); }
 .mark-attendance__summary { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .mark-attendance__count { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; }
+/* Neutral on purpose: it is the size of the class, not a status, so it takes the
+   theme's own surface rather than one of the P/A/L colours. */
+.mark-attendance__count--total { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
 .mark-attendance__count--present { background: #dcfce7; color: #16a34a; }
 .mark-attendance__count--absent { background: #fee2e2; color: #dc2626; }
 .mark-attendance__count--leave { background: #fef3c7; color: #b45309; }

@@ -2,6 +2,13 @@
 .sidebar__brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; padding: 0 8px; margin-bottom: 32px; }
 .sidebar__item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; font-size: 14px; color: #cbd5e1; margin-bottom: 4px; text-align: left; }
 .sidebar__item--active { background: #2563eb; color: white; }
+/* `margin-left: auto` parks it at the right edge of the row, so the count reads
+   as belonging to the tab rather than to the label it follows. */
+.sidebar__badge {
+  margin-left: auto; min-width: 19px; padding: 1px 6px; border-radius: 999px;
+  background: #2563eb; color: #fff; font-size: 11px; font-weight: 700; text-align: center;
+}
+.sidebar__item--active .sidebar__badge { background: rgba(255, 255, 255, 0.28); }
 .sidebar__footer { margin-top: auto; padding-top: 16px; border-top: 1px solid #334155; }
 .sidebar__user { font-size: 12px; color: #94a3b8; padding: 0 12px; margin-bottom: 8px; }
 .sidebar__item--logout { color: #f87171; margin-top: 12px; padding-top: 14px; border-top: 1px solid #334155; border-radius: 0 0 8px 8px; }
@@ -11,6 +18,13 @@
 .sidebar__mobile::-webkit-scrollbar { display: none; }
 .sidebar__mobile-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #94a3b8; padding: 4px 10px; flex: 0 0 auto; white-space: nowrap; }
 .sidebar__mobile-item--active { color: #60a5fa; }
+/* The bottom bar stacks its icon over its label, so the count cannot sit at the
+   end of a row — it rides the corner of the item instead. */
+.sidebar__mobile-item { position: relative; }
+.sidebar__badge--dot {
+  position: absolute; top: 0; right: 2px; margin-left: 0;
+  min-width: 16px; padding: 0 4px; font-size: 10px; line-height: 16px;
+}
 .sidebar__mobile-item--logout { color: #f87171; }
 
 /* Ten tabs now. Same reasoning as the admin bar: tighten the items before

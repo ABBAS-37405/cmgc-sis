@@ -175,6 +175,16 @@ A row carries any combination of written text, a link and a file, so the same sc
 
 `parseYouTube()` accepts watch URLs, `youtu.be`, playlists, shorts, embeds and a video-inside-a-playlist; anything else returns null and the student gets a plain "Open link" button instead of a player. Playback is `youtube-nocookie.com`, and every video also offers "Open on YouTube" — a playlist embed keeps the playlist.
 
+**"Your teacher has uploaded something new" is derived, not stored.** `src/lib/lmsAlerts.js` plus `components/LmsAlert/` put a short notice on her Overview naming what went up, and a count on the LMS nav item. It adds **no table and no SQL**, and that is forced rather than clever: a student has no Supabase Auth account, so a per-girl notification row could be written by anyone and scoped by RLS to nobody — and `notices` cannot carry it either, because it deliberately has no audience column, while material for 2nd year Pre-Medical is not for the college. `fetchMaterialsForStudent` already returns exactly her group and her year, so "new" is that list against one timestamp per student in `localStorage`.
+
+Three rules there:
+
+- **The first visit announces nothing.** With no stored timestamp, treating everything ever published as unread would greet a girl opening the portal on a new phone with a term's worth of "new" material. `firstVisitSeenAt` stamps now instead, so only what arrives afterwards is ever announced. A notice that is wrong the first time is one nobody reads the second time.
+- **Opening the tab is what marks it read** — `Portal` calls `seen()` when `activeTab` becomes `lms`, so there is nothing to dismiss once she is looking at the material. `dismiss()` is the separate "not now": the banner goes, the badge stays, and it is back next sign-in.
+- **The notice names the material rather than counting it.** "3 new items" gives her nothing to decide on; `summariseNewMaterial` names two and counts the rest. The stored key is per student id, because a shared family phone signs two sisters in and one reading her LMS must not mark the other's as read.
+
+The honest cost: "last looked" is per browser, so her mother's phone has its own idea of what she has seen. The alternative needs real student accounts.
+
 Unlike the `class_tests` policies, which settle for `is_staff()`, the write policy checks entitlement to **every** group the row covers — `bool_and(teacher_can('lms', p))` for a teacher, `admin_can_lms()` (the `lms` permission plus `programs <@ allowed_programs`) for an admin. A combined item is therefore not a way to reach a group you were never assigned.
 
 ### Teachers & class tests

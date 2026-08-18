@@ -13,6 +13,7 @@ import Lms from "../Lms/Lms";
 import MyPerformance from "../Performance/MyPerformance";
 import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
+import { useLmsAlerts } from "../LmsAlert/useLmsAlerts";
 // A student signing in should not be made to wait for the admin and teacher
 // portals, which are far bigger than everything she can actually see.
 const AdminPortal = lazy(() => import("../AdminPortal/AdminPortal"));
@@ -84,6 +85,26 @@ export default function Portal({ onExit }) {
 
   // Back moves between tabs a screen at a time, in the order she visited them.
   const goToTab = useTabHistory(activeTab, setActiveTab);
+
+  /*
+   * What her teachers have put up since she last looked.
+   *
+   * Owned here rather than inside Overview because two things show it — the
+   * notice on her first screen and the count on the LMS nav item — and they must
+   * never disagree. It costs one query, and only for a student: the hook does
+   * nothing without an id, so an admin or a teacher signing in never runs it.
+   */
+  const lmsAlerts = useLmsAlerts(role === "student" && loggedIn ? studentData : null);
+  // Destructured so the effect below depends on a number and a stable callback.
+  // The hook returns a fresh object each render, so depending on `lmsAlerts`
+  // itself would re-run it every time anything in the portal re-rendered.
+  const { count: newLmsCount, seen: markLmsSeen } = lmsAlerts;
+
+  // Opening the tab is what marks them read: there is nothing to dismiss once
+  // she is looking at the material itself.
+  useEffect(() => {
+    if (activeTab === "lms" && newLmsCount > 0) markLmsSeen();
+  }, [activeTab, newLmsCount, markLmsSeen]);
 
   /**
    * Signing in is one screen deep, so Back from the portal's first tab lands on
@@ -216,9 +237,19 @@ export default function Portal({ onExit }) {
         setActive={goToTab}
         onLogout={handleLogout}
         userLabel={`${studentData?.name || "Student"} (${role})`}
+        badges={lmsAlerts.count > 0 ? { lms: lmsAlerts.count } : null}
       />
       <main className="portal__main">
-        {activeTab === "overview" && <Overview student={studentData} onNavigate={goToTab} onChangePassword={changeStudentPassword} />}
+        {activeTab === "overview" && (
+          <Overview
+            student={studentData}
+            onNavigate={goToTab}
+            onChangePassword={changeStudentPassword}
+            lmsAlert={lmsAlerts.showBanner
+              ? { items: lmsAlerts.items, onOpen: () => goToTab("lms"), onDismiss: lmsAlerts.dismiss }
+              : null}
+          />
+        )}
         {activeTab === "notices" && <StudentNotices />}
         {activeTab === "attendance" && <Attendance studentId={studentData?.id} />}
         {activeTab === "classtests" && <ClassTests studentId={studentData?.id} />}

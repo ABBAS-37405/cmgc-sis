@@ -5,7 +5,13 @@ import { STUDENT_TABS } from "../../lib/studentTabs";
 import "./Sidebar.css";
 
 // `items` lets the teacher portal reuse this shell with its own nav; students get STUDENT_TABS.
-export default function Sidebar({ active, setActive, onLogout, userLabel, items = STUDENT_TABS }) {
+//
+// `badges` is `{ tabId: count }` — currently only the LMS tab, for material a
+// teacher has put up since she last looked. Null when there is nothing to say,
+// so a portal that never passes it renders exactly as it did before.
+export default function Sidebar({ active, setActive, onLogout, userLabel, items = STUDENT_TABS, badges = null }) {
+  const badgeFor = (id) => (badges && badges[id] > 0 ? badges[id] : null);
+
   return (
     <>
       {/* Phone only. The bottom bar below is unchanged — this is the full list
@@ -17,6 +23,7 @@ export default function Sidebar({ active, setActive, onLogout, userLabel, items 
         onLogout={onLogout}
         title="CMGC Portal"
         userLabel={userLabel}
+        badges={badges}
       />
 
       <aside className="sidebar">
@@ -24,6 +31,7 @@ export default function Sidebar({ active, setActive, onLogout, userLabel, items 
         {items.map((it) => (
           <button key={it.id} onClick={() => setActive(it.id)} className={`sidebar__item ${active === it.id ? "sidebar__item--active" : ""}`}>
             <it.icon size={17} /> {it.label}
+            {badgeFor(it.id) && <span className="sidebar__badge">{badgeFor(it.id)}</span>}
           </button>
         ))}
 
@@ -44,6 +52,7 @@ export default function Sidebar({ active, setActive, onLogout, userLabel, items 
           <button key={it.id} onClick={() => setActive(it.id)} className={`sidebar__mobile-item ${active === it.id ? "sidebar__mobile-item--active" : ""}`}>
             <it.icon size={18} />
             {it.label}
+            {badgeFor(it.id) && <span className="sidebar__badge sidebar__badge--dot">{badgeFor(it.id)}</span>}
           </button>
         ))}
         <button onClick={onLogout} className="sidebar__mobile-item sidebar__mobile-item--logout"><LogOut size={18} /> Logout</button>

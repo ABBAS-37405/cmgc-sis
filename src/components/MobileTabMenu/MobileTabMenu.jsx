@@ -18,10 +18,15 @@ import "./MobileTabMenu.css";
  *
  * Hidden above 1024px, where the real sidebar takes over.
  */
-export default function MobileTabMenu({ items, active, setActive, onLogout, title, userLabel, variant = "student" }) {
+export default function MobileTabMenu({ items, active, setActive, onLogout, title, userLabel, variant = "student", badges = null }) {
   const [open, setOpen] = useState(false);
 
   const current = items.find((it) => it.id === active);
+  // `{ tabId: count }`, or null. The trigger carries a plain dot instead of the
+  // number: it names the tab she is on, and a count beside a different tab's
+  // name would read as belonging to it.
+  const badgeFor = (id) => (badges && badges[id] > 0 ? badges[id] : null);
+  const anyBadge = items.some((it) => badgeFor(it.id));
 
   // Escape closes it. Registered only while open, so it cannot swallow a press
   // meant for a modal on the screen behind.
@@ -67,6 +72,7 @@ export default function MobileTabMenu({ items, active, setActive, onLogout, titl
         >
           {current?.icon && <current.icon size={15} />}
           <span className="mtm__trigger-label">{current?.label || "Menu"}</span>
+          {anyBadge && !open && <span className="mtm__dot" aria-label="New material" />}
           <ChevronDown size={15} className={`mtm__chev ${open ? "mtm__chev--open" : ""}`} />
         </button>
       </div>
@@ -99,6 +105,7 @@ export default function MobileTabMenu({ items, active, setActive, onLogout, titl
                   className={`mtm__item ${active === it.id ? "mtm__item--active" : ""}`}
                 >
                   <it.icon size={17} /> {it.label}
+                  {badgeFor(it.id) && <span className="mtm__badge">{badgeFor(it.id)}</span>}
                 </button>
               ))}
             </div>

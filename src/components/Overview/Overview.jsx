@@ -1,7 +1,8 @@
 import { CalendarCheck, Clock, Wallet, Award, Bell, GraduationCap, Lock } from "lucide-react";
+import LmsAlert from "../LmsAlert/LmsAlert";
 import "./Overview.css";
 
-export default function Overview({ student, onNavigate, onChangePassword }) {
+export default function Overview({ student, onNavigate, onChangePassword, lmsAlert = null }) {
   // Enrolment defaults to 1st Year everywhere else in the app, so a missing
   // value is shown the same way here rather than as a dash.
   const classYear = student?.year_of_study || "1st Year";
@@ -17,6 +18,13 @@ export default function Overview({ student, onNavigate, onChangePassword }) {
 
   return (
     <div className="overview">
+      {/* Above the welcome card on purpose: it is the one thing here that is new
+          since she last signed in, and everything below it will still be true
+          tomorrow. */}
+      {lmsAlert && (
+        <LmsAlert items={lmsAlert.items} onOpen={lmsAlert.onOpen} onDismiss={lmsAlert.onDismiss} />
+      )}
+
       <div className="overview__welcome">
         <div className="overview__welcome-content">
           <div>

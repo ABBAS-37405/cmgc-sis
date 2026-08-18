@@ -10,6 +10,7 @@ import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
 import { DETAIL_GROUPS, blankDetails, detailsToRow, matricPercentage } from "../../lib/studentFields";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { fetchFeePlans, findPlan, buildFeeRows } from "../../lib/feePlans";
+import { prepareUpload, selectionError } from "../../lib/uploads";
 import "./StudentsList.css";
 
 // Used only until the fee_plans rows load, or if a group has no plan yet.
@@ -778,13 +779,21 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     // Upload image to Supabase Storage if provided
     if (profileImage) {
       try {
-        const fileExt = profileImage.name.split('.').pop().toLowerCase();
+        // Shrunk to a portrait's worth of pixels first — it is only ever shown in
+        // a small circle, and the camera file behind it is megabytes.
+        const ready = await prepareUpload(profileImage, "photo");
+        if (ready.error) {
+          setSaving(false);
+          return setFormError(ready.error);
+        }
+
+        const fileExt = ready.file.name.split('.').pop().toLowerCase();
         const fileName = `${form.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
 
         // Try upload with upsert option
         const { error: uploadError } = await supabase.storage
           .from('student-profiles')
-          .upload(fileName, profileImage, {
+          .upload(fileName, ready.file, {
             cacheControl: '3600',
             upsert: true
           });
@@ -859,9 +868,11 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
         setFormError("Please select a valid image file");
         return;
       }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setFormError("Image must be less than 5MB");
+      // No 5MB rule here any more: the picture is compressed on upload, so a
+      // photo straight off a phone is fine and only an unopenable file is not.
+      const tooBig = selectionError(file, "photo");
+      if (tooBig) {
+        setFormError(tooBig);
         return;
       }
       setProfileImage(file);
@@ -879,8 +890,9 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
         alert("Please select a valid image file");
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Image must be less than 5MB");
+      const tooBig = selectionError(file, "photo");
+      if (tooBig) {
+        alert(tooBig);
         return;
       }
       setPictureTempImage(file);
@@ -895,12 +907,19 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
     setUploadingPicture(true);
 
     try {
-      const fileExt = pictureTempImage.name.split('.').pop().toLowerCase();
+      const ready = await prepareUpload(pictureTempImage, "photo");
+      if (ready.error) {
+        setUploadingPicture(false);
+        alert(ready.error);
+        return;
+      }
+
+      const fileExt = ready.file.name.split('.').pop().toLowerCase();
       const fileName = `${showPictureModal.roll_no.replace(/\//g, '-')}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('student-profiles')
-        .upload(fileName, pictureTempImage, {
+        .upload(fileName, ready.file, {
           cacheControl: '3600',
           upsert: true
         });

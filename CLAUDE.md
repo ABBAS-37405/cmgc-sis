@@ -373,6 +373,25 @@ The cost of this design is that returning from *any* other window advances the q
 
 There is deliberately **no WhatsApp forward here.** It was removed: a notice already reaches every student through the portal tab and the public board the moment it is posted, and click-to-chat cannot actually send — it opened one chat per student for the admin to press Send in, thirty times, to deliver what the portal had already delivered. Bulk WhatsApp remains where the message is genuinely per-girl and time-critical (`MarkAttendance`'s absence reminders, the report and salary sends).
 
+### Uploads — every bucket write goes through one file
+
+`src/lib/uploads.js` is the only thing that decides what may be uploaded and how big it is allowed to be. All eight upload sites go through it: the admission form (photo + five documents), a fee proof, both profile-picture paths in `StudentsList`, a document on `StudentDetail`, an assignment question, a student's submission, and LMS material. Same arrangement as `whatsapp.js` being the only place that builds a chat link — a second copy of these numbers would drift within a term.
+
+It exists because the college is on Supabase's free 1 GB and was spending it carelessly: a B-Form photographed on a phone arrives at 4–8 MB, there are five documents per applicant, and the admission form uploaded them exactly as the camera wrote them, with **no size limit on documents at all**. Around forty applications filled the whole quota. Redrawing that scan at 2000px costs nothing a reader can see and takes it to roughly 250 kB.
+
+Four rules, and each one is a way this goes wrong:
+
+- **The cap is measured after compression, never before.** Refusing an 8 MB camera photo at the file picker turns away a file that was about to become 250 kB, and the mother filling in the form has no way to shrink it herself. Only `SOURCE_IMAGE_LIMIT` (25 MB, too big to decode without locking a cheap phone) is refused up front. This is why the old 2 MB / 5 MB checks at the pickers are gone rather than merely moved.
+- **Two halves, and they are used at different moments.** `selectionError(file, kind)` is synchronous, for a picker's `onChange`, and says no only to what compression could not have rescued — an oversized *image* is deliberately not an error there. `prepareUpload(file, kind)` is async and belongs immediately before the `storage.upload` call, where every screen already has a spinner running.
+- **If it cannot compress, it hands the original back.** A PDF, a HEIC on a browser that cannot decode one, a canvas that failed: the file goes up as it came and only the cap applies. It never throws, so no upload can fail because of it. An uncompressible file over its cap is refused with its real size rather than silently uploaded.
+- **Whichever is smaller wins.** Re-encoding an already-optimised JPEG can make it bigger, so the result is compared against the original and the original is kept when it was already better. `compressed: false` then, and callers that store a filename must use `ready.file.name` — a compressed scan is re-encoded as `.jpg` and labelling it `.png` misnames the student's download.
+
+`UPLOAD_KINDS` holds the four kinds and their ceilings — `photo` (1200px, 2 MB), `document` (2000px, 5 MB), `submission` (2000px, 10 MB), `material` (2000px, 20 MB). The canvas fills white before drawing, because JPEG has no transparency and a PNG scan with a clear corner would otherwise come out black, and it decodes with `imageOrientation: "from-image"`, because a phone writes rotation into EXIF and a canvas that ignores it saves every portrait sideways.
+
+It **imports nothing** — same discipline as `session.js`. It does reach the DOM for the canvas, so it cannot be driven from Node end to end, but every DOM path is guarded and falls back, which is what let the caps and the scale maths be exercised from plain Node against a stubbed canvas.
+
+This is deliberately *only* the compression half of the storage problem. Two things it does not address, both still open: **nothing is ever deleted** (there is no `storage.remove()` anywhere — a superseded profile picture is a new file, since the path carries `Date.now()`, so the old one orphans forever), and report PDFs are stored rather than regenerated. Moving images to Cloudinary was considered and deferred; its free tier is 25 credits/month shared across storage *and* bandwidth, and PDF delivery is blocked by default on free accounts.
+
 ### Campus photos
 
 `public/images/gallery/` is **generated output, not source** — never edit or add files there by hand. The camera originals live in `_original-photos/` (gitignored, ~93 MB) and `npm run optimize:images` derives, per photo, WebP at 320/640/1200/1600 plus one 1200px JPEG.

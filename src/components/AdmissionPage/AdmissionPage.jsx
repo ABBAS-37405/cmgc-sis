@@ -9,6 +9,7 @@ import {
   formatCombination,
 } from "../../lib/academics";
 import { findBFormClash, describeUniqueViolation } from "../../lib/bform";
+import { prepareUpload, selectionError } from "../../lib/uploads";
 import "./AdmissionPage.css";
 
 const DOCS_BASE = [
@@ -136,13 +137,15 @@ export default function AdmissionPage({ onBack }) {
     });
   };
 
+  // A photo straight off a phone is several megabytes and used to be refused here.
+  // It is now shrunk on submit instead — see lib/uploads.js — so the only thing
+  // turned away at the picker is a file too big to even open.
   const handlePhoto = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    const maxSize = 2 * 1024 * 1024;
-    if (f.size > maxSize) {
-      const sizeLabel = f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)}MB` : `${(f.size / 1024).toFixed(1)}KB`;
-      setPhotoError(`Too large (${sizeLabel}). Max: 2MB`);
+    const tooBig = selectionError(f, "photo");
+    if (tooBig) {
+      setPhotoError(tooBig);
       return;
     }
     setPhotoError("");
@@ -150,9 +153,19 @@ export default function AdmissionPage({ onBack }) {
     setPhotoPreview(URL.createObjectURL(f));
   };
 
+  // A PDF cannot be compressed, so its size is the one thing worth saying now
+  // rather than after the whole form has been filled in and submitted.
   const handleDocFile = (key) => (e) => {
     const f = e.target.files[0];
-    if (f) { setFiles((p) => ({ ...p, [key]: f })); setActiveDoc(null); }
+    if (!f) return;
+    const tooBig = selectionError(f, "document");
+    if (tooBig) {
+      setErrors((p) => ({ ...p, [key]: tooBig }));
+      return;
+    }
+    setErrors((p) => ({ ...p, [key]: "" }));
+    setFiles((p) => ({ ...p, [key]: f }));
+    setActiveDoc(null);
   };
 
   const validate = () => {
@@ -207,11 +220,19 @@ export default function AdmissionPage({ onBack }) {
 
     const uploadedUrls = {};
     if (photo) {
+      // Shrunk here rather than at the picker: a camera photo is megabytes and
+      // would otherwise go into the bucket exactly as the phone wrote it.
+      const ready = await prepareUpload(photo, "photo");
+      if (ready.error) {
+        setLoading(false);
+        setErrorModal({ title: "Application Not Submitted", reasons: [`Photo: ${ready.error}`] });
+        return;
+      }
       // Runs on submit, never during render — Date.now() only keeps the
       // storage path unique.
       // eslint-disable-next-line react-hooks/purity
-      const path = `photos/${Date.now()}-photo-${photo.name}`;
-      const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, photo);
+      const path = `photos/${Date.now()}-photo-${ready.file.name}`;
+      const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, ready.file);
       if (upErr) {
         setLoading(false);
         setErrorModal({ title: "Application Not Submitted", reasons: [`Photo upload failed: ${upErr.message}`] });
@@ -224,9 +245,17 @@ export default function AdmissionPage({ onBack }) {
     for (const doc of activeDocs) {
       const file = files[doc.key];
       if (!file) continue;
+      // A photographed B-Form is 4-8 MB and reads identically at 2000px. A PDF
+      // comes back untouched and only has to be under the cap.
+      const ready = await prepareUpload(file, "document");
+      if (ready.error) {
+        setLoading(false);
+        setErrorModal({ title: "Application Not Submitted", reasons: [`${doc.label}: ${ready.error}`] });
+        return;
+      }
       // eslint-disable-next-line react-hooks/purity
-      const path = `docs/${Date.now()}-${doc.key}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, file);
+      const path = `docs/${Date.now()}-${doc.key}-${ready.file.name}`;
+      const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, ready.file);
       if (upErr) {
         setLoading(false);
         setErrorModal({ title: "Application Not Submitted", reasons: [`Upload failed (${doc.label}): ${upErr.message}`] });

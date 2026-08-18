@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck, Wallet, Calendar } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { prepareUpload } from "../../lib/uploads";
 import "./Fee.css";
 
 const buildProofPath = (fileName) => `payment-proofs/${new Date().getTime()}-${fileName}`;
@@ -134,11 +135,20 @@ export default function Fee({ studentId }) {
 
     setUploading(true);
 
+    // A bank screenshot or a photo of a slip — shrunk before it goes up, since
+    // the admin only ever has to read the reference number off it.
+    const ready = await prepareUpload(proofFile, "document");
+    if (ready.error) {
+      setUploadError(ready.error);
+      setUploading(false);
+      return;
+    }
+
     // Upload proof to Supabase Storage
-    const path = buildProofPath(proofFile.name);
+    const path = buildProofPath(ready.file.name);
     const { error: uploadErr } = await supabase.storage
       .from("admission-documents")
-      .upload(path, proofFile);
+      .upload(path, ready.file);
 
     if (uploadErr) {
       setUploadError("File upload failed: " + uploadErr.message);

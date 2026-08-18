@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { YEARS, subjectsFor, subjectsForPrograms } from "../../lib/academics";
 import { teacherSubjectsFor } from "../../lib/teacherAuth";
+import { prepareUpload } from "../../lib/uploads";
 import "./AssignmentEntry.css";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -187,8 +188,16 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
 
     let fileUrl = null;
     if (file) {
-      const path = `questions/${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-      const { error: upErr } = await supabase.storage.from("assignments").upload(path, file);
+      // One question paper is read by the whole class, so this is the upload
+      // whose size is paid for most often on the way back out.
+      const ready = await prepareUpload(file, "submission");
+      if (ready.error) {
+        setSaving(false);
+        setError(ready.error);
+        return;
+      }
+      const path = `questions/${Date.now()}-${ready.file.name.replace(/[^\w.-]/g, "_")}`;
+      const { error: upErr } = await supabase.storage.from("assignments").upload(path, ready.file);
       if (upErr) {
         setSaving(false);
         setError("File upload failed: " + upErr.message);

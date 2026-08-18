@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FileText, Upload, Paperclip, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { prepareUpload } from "../../lib/uploads";
 import "./Assignments.css";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -62,18 +63,23 @@ export default function Assignments({ student }) {
 
   const upload = async (assignment, file) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File is too large. Maximum size is 10 MB.");
-      return;
-    }
     setUploadingId(assignment.id);
     setError("");
 
-    const safe = file.name.replace(/[^\w.-]/g, "_");
+    // Most submissions are photographs of handwritten pages, which is the case
+    // this saves the most on. A PDF is passed through and only measured.
+    const ready = await prepareUpload(file, "submission");
+    if (ready.error) {
+      setUploadingId(null);
+      setError(ready.error);
+      return;
+    }
+
+    const safe = ready.file.name.replace(/[^\w.-]/g, "_");
     // Runs on upload, never during render — Date.now() only keeps the path unique.
     // eslint-disable-next-line react-hooks/purity
     const path = `submissions/${assignment.id}/${student.id}-${Date.now()}-${safe}`;
-    const { error: upErr } = await supabase.storage.from("assignments").upload(path, file);
+    const { error: upErr } = await supabase.storage.from("assignments").upload(path, ready.file);
     if (upErr) {
       setUploadingId(null);
       setError("Upload failed: " + upErr.message);

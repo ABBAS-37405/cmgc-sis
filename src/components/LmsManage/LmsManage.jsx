@@ -8,6 +8,7 @@ import {
   LMS_BUCKET, LMS_CATEGORIES, YEAR_OPTIONS, categoryLabel,
   fetchMaterialsForStaff, removeMaterial, programsCovered, parseYouTube, isPlaylist,
 } from "../../lib/lms";
+import { prepareUpload } from "../../lib/uploads";
 import "./LmsManage.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -103,9 +104,17 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
     let fileName = null;
 
     if (file) {
-      const safe = file.name.replace(/[^\w.-]/g, "_");
+      // Notes and past papers are usually photographed pages. This is also the
+      // one screen with no cap at all until now — a scanned book could take the
+      // whole bucket on its own.
+      const ready = await prepareUpload(file, "material");
+      if (ready.error) {
+        setSaving(false);
+        return setError(ready.error);
+      }
+      const safe = ready.file.name.replace(/[^\w.-]/g, "_");
       const path = `${subject.replace(/[^\w]/g, "_")}/${Date.now()}-${safe}`;
-      const { error: upErr } = await supabase.storage.from(LMS_BUCKET).upload(path, file);
+      const { error: upErr } = await supabase.storage.from(LMS_BUCKET).upload(path, ready.file);
       if (upErr) {
         setSaving(false);
         return setError(
@@ -115,7 +124,9 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
       }
       const { data } = supabase.storage.from(LMS_BUCKET).getPublicUrl(path);
       fileUrl = data?.publicUrl || null;
-      fileName = file.name;
+      // The name of what was actually stored: a compressed scan is re-encoded as
+      // a .jpg, and labelling it .png would misname the student's download.
+      fileName = ready.file.name;
     }
 
     const combined = selectedPrograms.length > 1;

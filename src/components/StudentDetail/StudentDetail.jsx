@@ -6,6 +6,7 @@ import {
   DETAIL_GROUPS, DOCUMENT_FIELDS, detailsFrom, detailsToRow, matricPercentage,
 } from "../../lib/studentFields";
 import { findBFormClash, describeUniqueViolation, normalizeBForm } from "../../lib/bform";
+import { prepareUpload } from "../../lib/uploads";
 import "./StudentDetail.css";
 
 const YEARS = ["1st Year", "2nd Year"];
@@ -65,18 +66,23 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
 
   const uploadDoc = async (field, file) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError(`${field.label} is too large. Maximum size is 5 MB.`);
-      return;
-    }
     setUploadingKey(field.key);
     setError("");
 
-    const safe = file.name.replace(/[^\w.-]/g, "_");
+    // A scan is shrunk before it goes up; a PDF is only measured. The size cap
+    // lives in lib/uploads.js so every screen that uploads agrees on it.
+    const ready = await prepareUpload(file, "document");
+    if (ready.error) {
+      setUploadingKey(null);
+      setError(`${field.label}: ${ready.error}`);
+      return;
+    }
+
+    const safe = ready.file.name.replace(/[^\w.-]/g, "_");
     // Runs on upload, never during render — Date.now() only keeps the path unique.
     // eslint-disable-next-line react-hooks/purity
     const path = `students/${student.id}/${field.key}-${Date.now()}-${safe}`;
-    const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, file);
+    const { error: upErr } = await supabase.storage.from("admission-documents").upload(path, ready.file);
     if (upErr) {
       setUploadingKey(null);
       setError(`Upload failed: ${upErr.message}`);

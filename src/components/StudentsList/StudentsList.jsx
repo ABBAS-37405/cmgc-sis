@@ -11,6 +11,7 @@ import { DETAIL_GROUPS, blankDetails, detailsToRow, matricPercentage } from "../
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { fetchFeePlans, findPlan, buildFeeRows } from "../../lib/feePlans";
 import { prepareUpload, selectionError } from "../../lib/uploads";
+import { pathFromPublicUrl } from "../../lib/storageCleanup";
 import "./StudentsList.css";
 
 // Used only until the fee_plans rows load, or if a group has no plan yet.
@@ -940,6 +941,20 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
         .eq('id', showPictureModal.id);
 
       if (updateError) throw updateError;
+
+      /*
+       * Take the picture she was using before out of the bucket.
+       *
+       * The path carries Date.now(), so `upsert` never replaces anything — every
+       * new picture is a new file and the old one would sit there for good. Done
+       * only after the row is safely pointing at the new file, and best effort:
+       * a refused delete is a wasted byte, not a reason to tell the admin her
+       * upload failed when it plainly worked.
+       */
+      const oldPath = pathFromPublicUrl(showPictureModal.profile_picture_url, 'student-profiles');
+      if (oldPath && oldPath !== fileName) {
+        await supabase.storage.from('student-profiles').remove([oldPath]);
+      }
 
       // Update local state
       setStudents((prev) =>

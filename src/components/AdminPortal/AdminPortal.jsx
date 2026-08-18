@@ -11,6 +11,9 @@ import LmsManage from "../LmsManage/LmsManage";
 import Teachers from "../Teachers/Teachers";
 import MonthlyReports from "../MonthlyReports/MonthlyReports";
 import ManageAdmins from "../ManageAdmins/ManageAdmins";
+import StorageCleanup from "../StorageCleanup/StorageCleanup";
+import { fetchUsage, runSafeSweep } from "../../lib/storageSweep";
+import { needsSweep, percentFull } from "../../lib/storageCleanup";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
 import { useTabHistory } from "../../lib/backStack";
 import { canSeeAdminTab } from "../../lib/adminNav";
@@ -42,10 +45,51 @@ export default function AdminPortal({ adminProfile, onExit }) {
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
 
+  /*
+   * Storage housekeeping, without anyone having to remember to do it.
+   *
+   * One RPC when the portal opens. Below the threshold that is the end of it;
+   * above it, the safe sweep runs on its own — files whose LMS material was
+   * already removed, documents of rejected applications, orphaned profile
+   * pictures — none of which is visible to anybody, so none of it needs asking.
+   *
+   * If it is still full afterwards, the only thing left is a teacher's live
+   * material, and that is never taken automatically. The strip below is how she
+   * finds out, since otherwise the first sign would be an upload failing in the
+   * middle of an admission.
+   */
+  const [storageFull, setStorageFull] = useState(null);
+
+  useEffect(() => {
+    if (!adminProfile?.is_super_admin) return;
+    let live = true;
+
+    (async () => {
+      const first = await fetchUsage();
+      // A missing function (the SQL not pasted yet) or a refused read must not
+      // put a warning on screen — it says nothing about how full storage is.
+      if (!live || first.error || !needsSweep(first.bytes)) return;
+
+      const report = await runSafeSweep();
+      if (!live) return;
+      setStorageFull(needsSweep(report.after) ? report.after : null);
+    })();
+
+    return () => { live = false; };
+  }, [adminProfile]);
+
   return (
     <div className="admin-portal">
       <AdminSidebar active={active} setActive={goToTab} onLogout={onExit} adminProfile={adminProfile} />
       <main className="admin-portal__main">
+        {/* Inside main, not beside it: .admin-portal is a flex row, so a sibling
+            here would sit next to the sidebar as a third column. */}
+        {storageFull !== null && active !== "storage" && (
+          <button type="button" className="admin-portal__storage-warn" onClick={() => goToTab("storage")}>
+            Storage is {percentFull(storageFull)}% full and the automatic cleanup has freed all it safely can.
+            Open <strong>Storage</strong> to free more.
+          </button>
+        )}
         {active === "overview" && <AdminOverview />}
         {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {/* Read-only: one student's attendance, tests, exams, assignments and fee
@@ -68,6 +112,7 @@ export default function AdminPortal({ adminProfile, onExit }) {
         {active === "lms" && hasPermission(adminProfile, "lms") && <LmsManage teacher={null} allowedPrograms={allowedPrograms} />}
         {active === "teachers" && hasPermission(adminProfile, "teachers") && <Teachers allowedPrograms={allowedPrograms} />}
         {active === "reports" && hasPermission(adminProfile, "reports") && <MonthlyReports allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
+        {active === "storage" && adminProfile?.is_super_admin && <StorageCleanup />}
         {active === "admins" && adminProfile?.is_super_admin && <ManageAdmins adminProfile={adminProfile} />}
       </main>
     </div>

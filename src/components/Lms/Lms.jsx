@@ -169,6 +169,15 @@ function Material({ item }) {
             <Download size={14} /> {item.file_name || "Download file"}
           </a>
         )}
+        {/* The file was swept to free storage, but the material was not deleted —
+            everything above this line is still hers. Saying so is the point: a
+            download button that has quietly vanished reads as a broken page. */}
+        {!item.file_url && item.file_archived_at && (
+          <p className="lms__archived">
+            The attached file was removed to save space. Everything written above is still here —
+            ask your teacher to upload the file again if you need it.
+          </p>
+        )}
       </div>
 
       <span className="lms__tag">{categoryLabel(item.category)}</span>

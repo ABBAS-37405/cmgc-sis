@@ -4,3 +4,12 @@
 .admin-portal__main { flex: 1; padding: 20px; padding-top: 72px; padding-bottom: 90px; }
 
 @media (min-width: 1024px) { .admin-portal__main { padding: 32px; padding-bottom: 32px; } }
+
+/* Only ever on screen when the automatic cleanup has already run and could not
+   free enough — so it is an errand, not a notice, and it is a button. */
+.admin-portal__storage-warn {
+  display: block; width: 100%; text-align: left; margin-bottom: 16px; cursor: pointer;
+  font-size: 13px; line-height: 1.5; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412;
+}
+.admin-portal__storage-warn:hover { border-color: #f97316; }

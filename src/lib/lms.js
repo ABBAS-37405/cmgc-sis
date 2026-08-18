@@ -6,6 +6,7 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { pathFromPublicUrl } from "./storageCleanup";
 
 export const LMS_BUCKET = "lms-materials";
 
@@ -132,6 +133,14 @@ export async function fetchMaterialsForStaff({ programs = [], subjects = [] } = 
 
 /** Soft delete, matching how students and applications are removed. */
 export async function removeMaterial(id) {
+  // Read the file before hiding the row: once `deleted_at` is set, the student
+  // policy stops returning it, and the path would be that much harder to find.
+  const { data: existing } = await supabase
+    .from("lms_materials")
+    .select("file_url")
+    .eq("id", id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("lms_materials")
     .update({ deleted_at: new Date().toISOString() })
@@ -141,5 +150,18 @@ export async function removeMaterial(id) {
   if (error) return error.message;
   // RLS refuses an update by returning success with no rows — see WRITE_BLOCKED_HINT.
   if (!data || data.length === 0) return "BLOCKED";
+
+  /*
+   * ...and take the file with it.
+   *
+   * This used to stamp `deleted_at` and stop, leaving the upload in the bucket
+   * for good — on a free 1 GB, removed material was quietly the largest thing in
+   * storage. Best effort on purpose: the material is already gone from every
+   * student's screen, so a refused delete is a wasted byte and not a failure
+   * worth reporting to the teacher. Whatever is missed here is swept later.
+   */
+  const path = pathFromPublicUrl(existing?.file_url, LMS_BUCKET);
+  if (path) await supabase.storage.from(LMS_BUCKET).remove([path]);
+
   return null;
 }

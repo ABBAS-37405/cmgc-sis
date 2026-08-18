@@ -63,4 +63,7 @@
   text-decoration: none;
 }
 .lms__btn:hover { border-color: var(--accent); }
+/* Sits where the download button was, so the space reads as explained rather
+   than as something that failed to load. */
+.lms__archived { font-size: 12px; line-height: 1.5; color: var(--subtext); margin: 0; max-width: 60ch; }
 .lms__btn--play { background: var(--accent); border-color: var(--accent); color: #fff; }

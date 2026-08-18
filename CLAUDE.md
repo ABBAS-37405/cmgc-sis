@@ -102,6 +102,7 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
 - `supabase_attendance_exclusion.sql` — `students.attendance_excluded_at` / `attendance_excluded_reason`, and the `protect_student_fields` trigger extended to cover them. See "Out of the attendance register" below.
+- `supabase_storage_cleanup.sql` — `lms_materials.file_archived_at`, the `storage_usage()` / `storage_objects_in()` reader functions, and the **delete policies these buckets never had**. Nothing in the app could delete a file before this: a delete matching no policy returns a plain success, so a sweep would have reported freeing space it had not freed. See "Storage cleanup" below.
 - `supabase_expenses.sql` — the `expenses` table behind Reports → Accounts. Adds nothing else: income is read from `payment_transactions` and the wage bill from `staff_salaries`, both of which already exist. Gated on `can_manage_teachers()`, and the reason is written up in the file — see the Accounts section below.
 - `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
 
@@ -391,6 +392,30 @@ Four rules, and each one is a way this goes wrong:
 It **imports nothing** — same discipline as `session.js`. It does reach the DOM for the canvas, so it cannot be driven from Node end to end, but every DOM path is guarded and falls back, which is what let the caps and the scale maths be exercised from plain Node against a stubbed canvas.
 
 This is deliberately *only* the compression half of the storage problem. Two things it does not address, both still open: **nothing is ever deleted** (there is no `storage.remove()` anywhere — a superseded profile picture is a new file, since the path carries `Date.now()`, so the old one orphans forever), and report PDFs are stored rather than regenerated. Moving images to Cloudinary was considered and deferred; its free tier is 25 credits/month shared across storage *and* bandwidth, and PDF delivery is blocked by default on free accounts.
+
+### Storage cleanup — the other half of the same problem
+
+Compression stopped the bucket filling so fast; this stops it filling at all. The college is on Supabase's free **1 GB**, and until this existed **nothing in the app had ever called `storage.remove()`**. `removeMaterial` stamped `deleted_at` and left the file; a replaced profile picture became a *new* file because the path carries `Date.now()`; a rejected application kept all six documents. The failure that produces is an upload silently erroring in the middle of an admission.
+
+`src/lib/storageCleanup.js` decides, `src/lib/storageSweep.js` acts, `StorageCleanup.jsx` is the screen. The split is the usual one: **the deciding half imports nothing**, because choosing which of a teacher's files to destroy is exactly the arithmetic that quietly goes wrong.
+
+**Two halves that are not the same kind of decision, and must not be merged:**
+
+- **The safe sweep runs by itself** once usage passes `SWEEP_ABOVE` (70%), with nobody asked, because nothing it deletes is visible to anybody: files whose LMS material was already soft-deleted, documents of rejected or deleted applications, and profile pictures no student row points at. It is triggered from `AdminPortal` on mount for a super admin — one RPC when usage is below the line, and that is the whole cost.
+- **A teacher's live material is never swept automatically.** Oldest-first is what the college asked for and is what the screen offers, pre-ticked, but *oldest is a proxy for least valuable and it is often wrong* — the paper scheme goes up in the first week of the year and is wanted in the last. So it is a proposal an admin agrees to, and the warning strip in `AdminPortal` is how she finds out it is waiting.
+
+**Four rules that are easy to break:**
+
+- **Freeing stops at `SWEEP_DOWN_TO` (60%), not at 69.9%.** Without the gap a sweep would free one file, drop under the line, and run again on the next upload — deleting one more teacher's work every few minutes for the rest of the term.
+- **`MIN_AGE_MS` (24h) is not a nicety.** A file is written to the bucket *before* the row that points at it, so anything newer than a day that looks like an orphan is a half-finished upload. `planSweep` and `orphansIn` both enforce it, and `planSweep` reports `skippedTooNew` rather than dropping them silently.
+- **Never delete on the strength of a failed read.** The orphan sweep reasons from absence, and a `students` query that errored is indistinguishable from a college with no profile pictures. That read is checked and the sweep abandons instead of guessing.
+- **Count what `remove()` returned, not what was asked for.** Same reasoning as `WRITE_BLOCKED_HINT`: a refused delete is a plain success, so freeing is measured by re-reading `storage_usage()` either side.
+
+**Archiving keeps the record and takes only the file.** `file_url` is cleared and `file_archived_at` stamped; the title, notes, link and any YouTube video survive, and the student's LMS tab says the attachment was removed to save space and to ask her teacher for it again — a download button that has quietly vanished reads as a broken page.
+
+Two leaks are now closed **at the source** as well, so the sweep only mops up the backlog: `removeMaterial` deletes the file with the row (best effort — the material is already off every screen, so a refused delete is a wasted byte, not a failure worth reporting), and replacing a profile picture deletes the one it replaced, after the row safely points at the new file.
+
+`assignments` and `reports` are deliberately left alone and given no delete policy: a submission is a student's own work and the only copy of it, and a report PDF's link has already been sent to a parent on WhatsApp — deleting behind it breaks a message somebody may open months later. `STORAGE_QUOTA_BYTES` is the one number to change if the college ever leaves the free tier; Postgres cannot know the plan.
 
 ### Campus photos
 

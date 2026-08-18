@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserSearch, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, FileBarChart } from "lucide-react";
+import { LayoutDashboard, Users, UserSearch, CalendarCheck, FileText, Wallet, Bell, BookOpen, ShieldCheck, FileBarChart, HardDrive } from "lucide-react";
 import { hasPermission } from "./adminAuth";
 
 /**
@@ -31,6 +31,9 @@ export const ADMIN_NAV_ITEMS = [
   // so no new key was added to PERMISSION_KEYS or the RLS policies built on it.
   { id: "teachers", label: "Teachers & Staff", icon: BookOpen, permission: "teachers" },
   { id: "reports", label: "Monthly Reports", icon: FileBarChart, permission: "reports" },
+  // Super admin only, like Manage Admins: the safe half of cleanup runs by
+  // itself, but deciding that a teacher's file may go is not a sub-admin's call.
+  { id: "storage", label: "Storage", icon: HardDrive, permission: SUPER_ADMIN_ONLY },
   { id: "admins", label: "Manage Admins", icon: ShieldCheck, permission: SUPER_ADMIN_ONLY },
 ];
 

@@ -117,9 +117,16 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
       const { error: upErr } = await supabase.storage.from(LMS_BUCKET).upload(path, ready.file);
       if (upErr) {
         setSaving(false);
+        // The teacher reading this cannot create a storage bucket, so a missing one
+        // is not something to tell her to "check" — it is told apart from a real
+        // upload failure and answered with what she can still do today.
+        const missingBucket = /bucket not found/i.test(upErr.message || "");
         return setError(
-          `File upload failed: ${upErr.message}. ` +
-          `Check that a public bucket named "${LMS_BUCKET}" exists in Supabase.`
+          missingBucket
+            ? `The college's file storage is not set up yet, so the attachment could not go up. ` +
+              `Ask the office to run supabase_lms.sql in Supabase (it creates the "${LMS_BUCKET}" bucket). ` +
+              `Meanwhile you can still publish this with the written text and the link — only the file is blocked.`
+            : `File upload failed: ${upErr.message}`
         );
       }
       const { data } = supabase.storage.from(LMS_BUCKET).getPublicUrl(path);

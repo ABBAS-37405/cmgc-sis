@@ -135,13 +135,37 @@ update teachers
 
 
 -- ============================================================
--- 5. Storage bucket — create this in the dashboard, not here
+-- 5. Storage bucket
 -- ============================================================
--- Storage -> New bucket
---   Name:   lms-materials
---   Public: yes   (same as admission-documents and assignments)
+-- This used to say "create it by hand in the dashboard". That is what went
+-- wrong: the step was missed, and the first teacher to attach a file got
+-- "Bucket not found" with nothing on the screen able to fix it. It is created
+-- here now, exactly as the assignments bucket is, so running this file is the
+-- whole of the setup.
 --
--- Without it, links and written notes still work; only file uploads fail.
+-- Without the bucket, links and written notes still work; only file uploads
+-- fail — which is why the LMS looked fine until somebody attached a PDF.
+
+insert into storage.buckets (id, name, public)
+values ('lms-materials', 'lms-materials', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "lms_materials_read"   on storage.objects;
+drop policy if exists "lms_materials_upload" on storage.objects;
+
+-- Students read material from an anonymous session — they have no auth account,
+-- and the file is course material meant to be handed out. Same posture as the
+-- admission-documents and assignments buckets.
+create policy "lms_materials_read" on storage.objects
+  for select to anon, authenticated using (bucket_id = 'lms-materials');
+
+-- Only staff put material up. Unlike the assignments bucket, this one never
+-- needs anon insert: a student uploads her solved work there, never here.
+create policy "lms_materials_upload" on storage.objects
+  for insert to authenticated with check (bucket_id = 'lms-materials' and is_staff());
+
+-- The matching delete policy lives in supabase_storage_cleanup.sql, with the
+-- rest of the policies that let the sweep actually free space.
 
 
 -- ============================================================
@@ -149,3 +173,6 @@ update teachers
 -- ============================================================
 -- select policyname, roles, cmd from pg_policies where tablename = 'lms_materials';
 -- select name, rights from teachers order by name;
+-- select id, public from storage.buckets where id = 'lms-materials';
+-- select policyname, cmd from pg_policies
+--  where tablename = 'objects' and policyname like 'lms_materials%';

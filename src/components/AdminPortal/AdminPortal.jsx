@@ -110,7 +110,7 @@ export default function AdminPortal({ adminProfile, onExit }) {
         {/* teacher={null} puts it in full-range mode: every subject the allowed
             groups offer, rather than one teacher's own list. */}
         {active === "lms" && hasPermission(adminProfile, "lms") && <LmsManage teacher={null} allowedPrograms={allowedPrograms} />}
-        {active === "teachers" && hasPermission(adminProfile, "teachers") && <Teachers allowedPrograms={allowedPrograms} />}
+        {active === "teachers" && hasPermission(adminProfile, "teachers") && <Teachers allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "reports" && hasPermission(adminProfile, "reports") && <MonthlyReports allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "storage" && adminProfile?.is_super_admin && <StorageCleanup />}
         {active === "admins" && adminProfile?.is_super_admin && <ManageAdmins adminProfile={adminProfile} />}

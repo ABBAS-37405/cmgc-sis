@@ -99,6 +99,7 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_bform_unique.sql` — partial unique indexes making one B-Form mean one girl: `applications_bform_unique` (exempts soft-deleted and `Rejected` rows so a rejected applicant may re-apply) and `students_cnic_unique`. Both index `regexp_replace(…, '[^0-9]', '', 'g')`, so a number typed with or without dashes is the same number.
 - `supabase_student_details.sql` — the 25 columns that bring `students` up to parity with `applications` (`whatsapp`, contact, personal, family/finance, matric record, and the five document URLs), plus a backfill joining `applications a` on `a.bform = s.cnic` with `coalesce` so nothing already set is overwritten, and a `whatsapp = phone` fallback.
 - `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
+- `supabase_teacher_password_vault.sql` — `teacher_login_passwords`, the one table a super admin can read a teacher's portal password out of. See "Reading a password back" below.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
 - `supabase_attendance_exclusion.sql` — `students.attendance_excluded_at` / `attendance_excluded_reason`, and the `protect_student_fields` trigger extended to cover them. See "Out of the attendance register" below.
@@ -106,7 +107,7 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_expenses.sql` — the `expenses` table behind Reports → Accounts. Adds nothing else: income is read from `payment_transactions` and the wage bill from `staff_salaries`, both of which already exist. Gated on `can_manage_teachers()`, and the reason is written up in the file — see the Accounts section below.
 - `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
 
-Tables in use: `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`, `expenses`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
+Tables in use: `teacher_login_passwords`, `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`, `expenses`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports` (all public).
 
 ### Fee flow
 
@@ -193,17 +194,47 @@ Unlike the `class_tests` policies, which settle for `is_staff()`, the write poli
 
 A `teachers` row can exist with `user_id` null — a recorded teacher who has no login yet. The Teachers tab shows "Create Login" for those, which posts to `/api/teacher/create` with a `teacherId` to attach an auth user to the existing row rather than inserting a new one.
 
-**"Send Login" WhatsApps a teacher her own credentials, and it is not the student flow with a different table.** A student's password is a plaintext column, so `StudentsList` can quote it back at any time; a teacher's is a real Supabase Auth account, so the portal only ever sees a hash and **there is nothing to look up**.
+**"Send Login" WhatsApps a teacher her own credentials, and it is not the student flow with a different table.** A student's password is a plaintext column, so `StudentsList` can quote it back at any time; a teacher's is a real Supabase Auth account, so the portal only ever sees a hash and **nothing can be recovered from it** — see the vault below for what is recorded going forward.
 
 **Sending therefore changes nothing and asks nothing.** One button, one job: it opens the chat. The message quotes a password only when the admin set one on this screen a moment ago — `knownPasswords`, in memory only, keyed by teacher id, fed by Add Teacher, by an edit that set a password, and by Reset Password — and otherwise names the office as where her password came from. **Setting a password lives behind "Reset Password" and nowhere else.** An earlier version prompted for one on send whenever it was not known, and then reset her login to match; that is wrong twice over, because the office usually presses send to pass on an email, and a teacher who is already signed in and working should not be logged out by it. The same map means Reset Password followed by Send sends the new password with no second dialog. Nothing is awaited between the click and the chat, so no window has to be reserved against the popup blocker.
 
 **`ManageAdmins`' "Send WhatsApp" is identical, for the identical reason** — a sub-admin login is a Supabase Auth account too. It originally asked for the password on every send through an empty box that read as a reset and was not one: what was typed went into the message and nowhere else, so a half-remembered password could reach someone who then could not sign in with it. Both screens now share one shape: send quotes what it knows, Reset Password is the only thing that writes.
+
+#### Reading a password back — super admin only
+
+The office needs to answer "what is her password" at the counter, for both rosters. The two halves are not the same problem and are not solved the same way.
+
+- **A student's is simply displayed.** `students.password` has always been plain text, because a student has no Auth account. So the Enrolled Students table grows a **Password** column for `is_super_admin` only — hidden behind a per-row eye, with a Copy button and a "Show all" in the heading. Nothing in the database changed and no new query runs; the column was already on every row the list fetches. It starts hidden because that table is read at a counter with parents on the other side of it.
+- **A teacher's cannot be read at all, so it is recorded when it is set.** Supabase Auth keeps a bcrypt hash; a password already in use is gone, and no key recovers it. `teacher_login_passwords` (one row per teacher, `on delete cascade`) is written by **server.js and nothing else** — the table deliberately has no insert/update/delete policy, so only the service-role key can put a value in it, on exactly the two routes that change a password (`/api/teacher/create`, `/api/teacher/password`). That is what guarantees the stored value is the one Auth was actually given. The select policy is `is_super_admin()`.
+
+Three consequences worth keeping in mind:
+
+- **A login created before this migration reads "not recorded", and that is the truth, not a bug.** It must never render as a blank value — an empty box reads as a password of nothing. Reset Password is the only way to give such a teacher a readable one.
+- **A failed vault write takes the old row down with it.** `recordTeacherPassword()` in `server.js` deletes rather than leaving a stale value, because a stale password reads as working and is not — the office would read it out to a teacher who then cannot sign in. It returns a `warning` in the response instead of failing the request, since the password change itself already succeeded; `Teachers.jsx` shows that warning, and it almost always means the SQL has not been pasted in yet.
+- **A sub-admin with the `teachers` permission can still set a password but never read one.** `requireTeacherManager` gates the write; `is_super_admin()` gates the read. And **RLS refuses a read as silently as a write**, so `fetchTeacherPasswords()` returns `{}` rather than raising — which is also what keeps the tab working before the migration is run.
+
+`knownPasswords` (in-memory, this visit only) still exists alongside the vault and still wins, because it is what an admin typed a moment ago and is never staler. It is what lets a sub-admin who cannot read the vault still press Add Teacher and then Send Login.
 
 Class tests are two tables on purpose: `class_tests` is one row per test conducted, `class_test_marks` one row per student per test with a `unique (class_test_id, student_id)` constraint that `ClassTestEntry` upserts against. That shape is what lets each subject carry a different number of tests — the student's `ClassTests` tab groups marks by subject and renders each subject's own horizontal strip of tests.
 
 A test can span groups: picking `"All Programs"` stores that literal in `class_tests.program` and the concrete groups it covered in `class_tests.programs[]`. Always build the roster from `programs[]`, falling back to `[program]` — reading `program` alone silently returns nobody for a combined test.
 
 `ClassTestEntry` is shared: pass a `teacher` and it locks to her subjects/programs and stamps her id on new tests; pass `teacher={null}` plus `teacherOptions` and it becomes the admin's full-range view.
+
+#### Student Uploads — the third view of `assignments` and `lms_materials`
+
+`TeacherUploads/TeacherUploads.jsx` is a **Teachers & Staff** sub-tab, super admin only, listing everything the staff has published to students — assignments and LMS material together, newest first, filterable by teacher — with **Edit** and **Delete** on each row.
+
+It exists because `AssignmentEntry` and `LmsManage` are both organised around *setting something new*: you pick a class, a subject and a group, and only then see what is there. Neither can answer "what has this teacher published", and **neither can change an item once it is up**. The office's actual questions are a paper uploaded to the wrong class, a due date that has to move, a chapter number wrong in a title.
+
+- **It adds no table and no SQL.** `assignments_update` / `assignments_delete` are `is_staff()`, and `lms_write_staff` is `for all` — a super admin already satisfies `admin_can_lms` (super admin, empty `allowed_programs` = unrestricted).
+- **There is no Add button, deliberately.** Creating belongs on the screens that know the eligibility rules — which groups study which subject, which years a subject is examined in — and a second copy of those rules would drift within a term.
+- **What may be edited is the content; what may not is the audience.** Subject, groups, and for an assignment the class, are fixed. They decide whose roster the item is graded against, and re-scoping an assignment girls have already submitted to leaves their `assignment_submissions` pointing at a roster they are no longer on. The screen says so and points at delete-and-set-again.
+- **Deleting reuses what already exists.** An assignment is a hard delete (submissions cascade, and the confirm says so); material goes through `removeMaterial` from `lib/lms.js`, which soft-deletes *and* removes the file — so there stays one definition of taking material down.
+- **Both writes ask for their rows back.** `.select("id")` on the update and on the assignment delete, zero rows → `WRITE_BLOCKED_HINT`, the rule from the RLS section.
+- **Replacing an LMS file deletes the one it replaced, after the row points at the new one.** Replacing an *assignment* file does not: the `assignments` bucket has no delete policy on purpose (a submission is a student's own work and the only copy of it), and that bucket is never swept, so a replaced question paper orphans. Accepted rather than hidden — question papers are capped at 10 MB by the `submission` upload kind and replaced rarely.
+
+Class tests are not in this list. Nothing is uploaded for one — it is marks, and the Class Tests and Report sub-tabs next door already cover them.
 
 ### Staff payroll — two rosters, one calculation
 

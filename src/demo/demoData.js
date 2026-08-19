@@ -124,7 +124,7 @@ export function buildDemoDatabase() {
     assignments: [], assignment_submissions: [], fees: [], payment_transactions: [],
     notices: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
     report_log: [], staff: [], staff_attendance: [], college_holidays: [], staff_salaries: [],
-    expenses: [],
+    expenses: [], teacher_login_passwords: [],
   };
 
   /* ------------------------------------------------------------- staff */
@@ -152,9 +152,25 @@ export function buildDemoDatabase() {
       employment_type: "Visiting", per_day_salary: 1500 },
   ];
 
+  // The vault a super admin reads on the Teachers tab. Only teachers who have a
+  // login get one, and Sadia (no login) deliberately has none — the demo should
+  // show both states, since a college always has a mix of them.
+  const teacherPasswordSeed = ["ayesha2481", "fatima3907", "hina5162"];
+
   teacherSeed.forEach((t, i) => {
+    // uid() advances a counter, so the id is taken once and reused. Calling it again
+    // for the password row would file that password against a teacher who does not exist.
+    const teacherId = uid(20 + i);
+    if (!t.noLogin && teacherPasswordSeed[i]) {
+      db.teacher_login_passwords.push({
+        teacher_id: teacherId,
+        password: teacherPasswordSeed[i],
+        set_at: at(daysAgo(30 + i * 10)),
+        set_by: null,
+      });
+    }
     db.teachers.push({
-      id: uid(20 + i),
+      id: teacherId,
       user_id: t.noLogin ? null : uid(120 + i),
       name: t.name,
       email: t.email,

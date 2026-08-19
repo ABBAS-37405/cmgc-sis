@@ -581,25 +581,45 @@ function handleApi(path, body) {
     return { ok: true, status: 200, json: { success: true } };
   }
 
+  // Records the password against the teacher, exactly as the real route does through
+  // the service-role key. Without it the demo's Teachers tab would show every teacher
+  // as "password not recorded", which is a real state but not the one to demonstrate.
+  const recordTeacherPassword = (teacherId, password) => {
+    if (!teacherId || !password) return;
+    const row = db.teacher_login_passwords.find((r) => r.teacher_id === teacherId);
+    if (row) row.password = password;
+    else db.teacher_login_passwords.push({ teacher_id: teacherId, password, set_at: nowIso(), set_by: null });
+  };
+
   if (path.endsWith("/api/teacher/create")) {
-    const { teacherId, email, name, qualification, phone, subjects = [], programs = [], rights = [] } = body;
+    const { teacherId, email, password, name, qualification, phone, subjects = [], programs = [], rights = [] } = body;
     const existing = teacherId ? db.teachers.find((t) => t.id === teacherId) : null;
+    let teacher;
     if (existing) {
       Object.assign(existing, { user_id: newId(), email, is_active: true });
+      teacher = existing;
     } else {
-      db.teachers.push({
+      teacher = {
         id: newId(), user_id: newId(), email, name, qualification, phone,
         subject: subjects[0] || null, subjects, programs, rights,
         is_active: true, created_at: nowIso(),
-      });
+      };
+      db.teachers.push(teacher);
     }
+    recordTeacherPassword(teacher.id, password);
+    // The real route answers with the row it wrote — Teachers.jsx reads it back to
+    // hold the password it just typed against the right teacher.
+    return { ok: true, status: 200, json: { success: true, teacher } };
+  }
+
+  if (path.endsWith("/api/teacher/password")) {
+    recordTeacherPassword(body.teacherId, body.password);
     return { ok: true, status: 200, json: { success: true } };
   }
 
-  if (path.endsWith("/api/teacher/password")) return { ok: true, status: 200, json: { success: true } };
-
   if (path.endsWith("/api/teacher/delete")) {
     db.teachers = db.teachers.filter((t) => t.id !== body.teacherId);
+    db.teacher_login_passwords = db.teacher_login_passwords.filter((r) => r.teacher_id !== body.teacherId);
     return { ok: true, status: 200, json: { success: true } };
   }
 

@@ -77,3 +77,29 @@ export function resetTeacherPassword(teacherId, password) {
 export function deleteTeacher(teacherId) {
   return callTeacherApi("/api/teacher/delete", { teacherId });
 }
+
+/**
+ * Every teacher password the college has on record, as `{ [teacherId]: password }`.
+ *
+ * There is no way to recover a Supabase Auth password, so this reads the vault
+ * table that server.js fills in each time one is set — see
+ * supabase_teacher_password_vault.sql. A login created before that migration ran has
+ * no row here at all, which is why callers must show "not recorded" rather than a
+ * blank: an empty box reads as a password of nothing.
+ *
+ * Only a super admin's select policy matches, and **RLS refuses a read as silently
+ * as it refuses a write** — anyone else gets zero rows and no error. So this is
+ * called only for a super admin, and a failure returns `{}` rather than raising:
+ * a portal running before the SQL was pasted in must still show the Teachers tab.
+ */
+export async function fetchTeacherPasswords() {
+  const { data, error } = await supabase
+    .from("teacher_login_passwords")
+    .select("teacher_id, password");
+
+  if (error || !data) return {};
+
+  const map = {};
+  data.forEach((row) => { map[row.teacher_id] = row.password; });
+  return map;
+}

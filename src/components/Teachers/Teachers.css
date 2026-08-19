@@ -33,6 +33,15 @@
 .teachers__card-info { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
 .teachers__name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .teachers__meta { font-size: 12px; color: var(--subtext); }
+/* Her portal password on the card, super admin only. It wraps rather than pushing
+   the card wide, because the "not recorded" branch is a sentence, not a value. */
+.teachers__password-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--subtext); }
+.teachers__password-line code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; letter-spacing: 0.04em; }
+.teachers__password-toggle { display: inline-flex; align-items: center; color: var(--subtext); background: none; padding: 2px; }
+.teachers__password-toggle:hover { color: var(--accent); }
+.teachers__password-copied { font-size: 11px; font-weight: 600; color: var(--accent); }
+.teachers__password-missing { flex: 1 1 240px; line-height: 1.5; }
+
 .teachers__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .teachers__tags-icon { color: var(--subtext); flex-shrink: 0; }
 .teachers__tag { font-size: 11px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }

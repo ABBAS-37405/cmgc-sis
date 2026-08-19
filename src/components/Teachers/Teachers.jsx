@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users, Wallet, HardHat } from "lucide-react";
+import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users, Wallet, HardHat, Copy, FolderOpen } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
-import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher } from "../../lib/teacherAuth";
+import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher, fetchTeacherPasswords } from "../../lib/teacherAuth";
 import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
@@ -11,6 +11,7 @@ import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
 import AdminStaff from "../AdminStaff/AdminStaff";
 import StaffPayroll from "../StaffPayroll/StaffPayroll";
+import TeacherUploads from "../TeacherUploads/TeacherUploads";
 import "./Teachers.css";
 
 const emptyForm = {
@@ -66,12 +67,16 @@ function suggestPassword() {
   return `${word}${Math.floor(100 + Math.random() * 900)}`;
 }
 
+// `superOnly` is the one thing that varies: Student Uploads can edit and delete
+// anything any teacher has published, so it is not a screen a sub-admin holding the
+// `teachers` permission should reach.
 const SUB_TABS = [
   { id: "list", label: "Teachers", icon: Users },
   { id: "staff", label: "Admin Staff", icon: HardHat },
   { id: "payroll", label: "Attendance & Salary", icon: Wallet },
   { id: "tests", label: "Class Tests", icon: ClipboardList },
   { id: "assignments", label: "Assignments", icon: FileText },
+  { id: "uploads", label: "Student Uploads", icon: FolderOpen, superOnly: true },
   { id: "report", label: "Report", icon: BarChart3 },
 ];
 
@@ -82,7 +87,7 @@ function toggleValue(list, value) {
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "";
 
-export default function Teachers({ allowedPrograms = [] }) {
+export default function Teachers({ allowedPrograms = [], adminProfile = null }) {
   const [tab, setTab] = useState("list");
   const [teachers, setTeachers] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -96,19 +101,54 @@ export default function Teachers({ allowedPrograms = [] }) {
 
   // Passwords set during this visit to the screen, by teacher id.
   //
-  // Nothing stores a teacher's password — Supabase Auth keeps a hash and the
-  // `teachers` table has no password column at all, which is exactly the point of
-  // her having a real login rather than the plaintext one a student gets. So the
-  // only password the portal can ever quote back is one the admin has just typed,
-  // and remembering it here is what lets "Add Teacher" be followed by "send her the
-  // details" without immediately resetting the password she just chose. Memory
-  // only: a reload forgets them, and the send flow then offers to set a new one.
+  // Supabase Auth keeps only a hash, so a password that has already been set can
+  // never be read back out of it. This map is what an admin typed a moment ago, and
+  // it is what lets "Add Teacher" be followed by "send her the details" without
+  // immediately resetting the password she just chose. Memory only — a reload
+  // forgets it. Every admin who can manage teachers has this much.
   const [knownPasswords, setKnownPasswords] = useState({});
   const rememberPassword = (id, password) =>
     setKnownPasswords((prev) => ({ ...prev, [id]: password }));
 
+  // The vault: what server.js recorded each time a password was set, so it survives
+  // a reload. Only a super admin's select policy matches it, so only a super admin
+  // asks for it — see supabase_teacher_password_vault.sql. What it cannot do is
+  // recover history: a login created before that migration ran has no row, and
+  // `passwordFor` says "not recorded" rather than pretending it is blank.
+  const isSuperAdmin = Boolean(adminProfile?.is_super_admin);
+  const [vaultPasswords, setVaultPasswords] = useState({});
+  const [revealed, setRevealed] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
+
+  // The in-session value wins: it is what was typed on this screen a moment ago, so
+  // it is at worst as fresh as the vault and never staler.
+  const passwordFor = (t) => knownPasswords[t.id] || vaultPasswords[t.id] || null;
+
+  const loadVault = async () => {
+    if (!isSuperAdmin) return;
+    setVaultPasswords(await fetchTeacherPasswords());
+  };
+
+  const copyPassword = async (t) => {
+    const password = passwordFor(t);
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopiedId(t.id);
+      window.setTimeout(() => setCopiedId((id) => (id === t.id ? null : id)), 1500);
+    } catch {
+      window.prompt(`Copy ${t.name}'s password:`, password);
+    }
+  };
+
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+
+  // A restored tab is validated, never trusted — the same rule AdminPortal follows
+  // for a permission withdrawn since the session was stored. Without this, `tab`
+  // could sit on a screen that no longer renders and leave a blank panel.
+  const visibleSubTabs = SUB_TABS.filter((s) => !s.superOnly || isSuperAdmin);
+  const activeTab = visibleSubTabs.some((s) => s.id === tab) ? tab : "list";
 
   // When editing a teacher who already has a login, email/password are managed through
   // Supabase Auth on the server, not through this form.
@@ -136,11 +176,14 @@ export default function Teachers({ allowedPrograms = [] }) {
     setStaffLoading(false);
   };
 
+  // Mount only: the three lists are re-fetched by the actions that change them, and
+  // adminProfile does not change while the tab is open.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTeachers();
     fetchStaff();
-  }, []);
+    loadVault();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
     setEditing(null);
@@ -227,6 +270,10 @@ export default function Teachers({ allowedPrograms = [] }) {
         // The route answers with the row it wrote, so the password she just typed can be
         // held against the right teacher and sent from her card without a reset.
         if (created?.teacher?.id) rememberPassword(created.teacher.id, form.password.trim());
+        // Not fatal: the login exists and works either way, so this is said rather than
+        // thrown. It is almost always the vault migration not having been run.
+        if (created?.warning) alert(created.warning);
+        await loadVault();
       } else {
         const { error: dbError } = await supabase
           .from("teachers")
@@ -268,9 +315,14 @@ export default function Teachers({ allowedPrograms = [] }) {
       return;
     }
     try {
-      await resetTeacherPassword(t.id, next.trim());
+      const result = await resetTeacherPassword(t.id, next.trim());
       rememberPassword(t.id, next.trim());
-      alert(`Password updated. ${t.name} can now sign in with ${t.email} and the new password. Use the WhatsApp button on her card to send it to her.`);
+      await loadVault();
+      alert(
+        `Password updated. ${t.name} can now sign in with ${t.email} and the new password. ` +
+        "Use the WhatsApp button on her card to send it to her." +
+        (result?.warning ? `\n\n${result.warning}` : "")
+      );
     } catch (err) {
       alert("Could not update password: " + err.message);
     }
@@ -283,11 +335,11 @@ export default function Teachers({ allowedPrograms = [] }) {
    * here and none is asked for, because a teacher who already has a working login
    * must not lose it just because the office wanted to message her the email.
    *
-   * Her password is not readable (Supabase Auth keeps a hash), so the message quotes
-   * one only when the admin set it on this screen a moment ago; otherwise it names
-   * the office as where her password came from. Setting a password lives behind
-   * "Reset Password", which is the button that says it is going to do that — and it
-   * feeds the same map, so resetting and then sending sends the new one.
+   * Her password is not readable out of Supabase Auth, so the message quotes one only
+   * when this screen knows it — set here a moment ago, or recorded in the vault a
+   * super admin can read. Otherwise it names the office as where her password came
+   * from. Setting a password still lives behind "Reset Password", which is the button
+   * that says it is going to do that.
    */
   const handleSendCredentials = (t) => {
     if (!t.user_id) {
@@ -318,7 +370,7 @@ export default function Teachers({ allowedPrograms = [] }) {
     // against the popup blocker — this is all still inside the click.
     const opened = openWhatsApp(
       number,
-      buildTeacherCredentialsMessage(t.name, t.email, knownPasswords[t.id] || null)
+      buildTeacherCredentialsMessage(t.name, t.email, passwordFor(t))
     );
     if (!opened) alert("Could not open WhatsApp. Please check the number and try again.");
   };
@@ -337,18 +389,18 @@ export default function Teachers({ allowedPrograms = [] }) {
   return (
     <div className="teachers">
       <div className="teachers__tabs" role="group" aria-label="Teachers sections">
-        {SUB_TABS.map((s) => (
+        {visibleSubTabs.map((s) => (
           <button
             key={s.id}
             onClick={() => setTab(s.id)}
-            className={`teachers__tab ${tab === s.id ? "teachers__tab--active" : ""}`}
+            className={`teachers__tab ${activeTab === s.id ? "teachers__tab--active" : ""}`}
           >
             <s.icon size={15} /> {s.label}
           </button>
         ))}
       </div>
 
-      {tab === "list" && (
+      {activeTab === "list" && (
         <>
           <div className="teachers__section">
             <h3 className="teachers__heading">
@@ -564,6 +616,44 @@ export default function Teachers({ allowedPrograms = [] }) {
                         {t.phone ? ` · ${t.phone}` : ""}
                         {t.joining_date ? ` · joined ${fmtDate(t.joining_date)}` : ""}
                       </p>
+
+                      {/* Her portal password, super admin only. Hidden until asked for,
+                          because these cards are read in an office with a counter in
+                          front of them. "Not recorded" is the honest answer for a login
+                          set before the vault existed — Auth cannot be asked. */}
+                      {isSuperAdmin && t.user_id && (
+                        <p className="teachers__password-line">
+                          <KeyRound size={12} />
+                          {passwordFor(t) ? (
+                            <>
+                              <code>{revealed[t.id] ? passwordFor(t) : "••••••••"}</code>
+                              <button
+                                type="button"
+                                onClick={() => setRevealed((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
+                                className="teachers__password-toggle"
+                                title={revealed[t.id] ? "Hide password" : `Show ${t.name}'s password`}
+                              >
+                                {revealed[t.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyPassword(t)}
+                                className="teachers__password-toggle"
+                                title="Copy password"
+                              >
+                                <Copy size={13} />
+                              </button>
+                              {copiedId === t.id && <span className="teachers__password-copied">Copied</span>}
+                            </>
+                          ) : (
+                            <span className="teachers__password-missing">
+                              Password not recorded — it was set before this was kept, and Supabase
+                              Auth cannot be asked for it. Use Reset Password to set a new one.
+                            </span>
+                          )}
+                        </p>
+                      )}
+
                       <div className="teachers__tags">
                         <BookOpen size={12} className="teachers__tags-icon" />
                         {(t.subjects || []).length === 0 ? (
@@ -626,21 +716,25 @@ export default function Teachers({ allowedPrograms = [] }) {
         </>
       )}
 
-      {tab === "staff" && (
+      {activeTab === "staff" && (
         <AdminStaff staff={staff} loading={staffLoading} onChanged={fetchStaff} />
       )}
 
-      {tab === "payroll" && <StaffPayroll teachers={teachers} staff={staff} />}
+      {activeTab === "payroll" && <StaffPayroll teachers={teachers} staff={staff} />}
 
-      {tab === "tests" && (
+      {activeTab === "tests" && (
         <ClassTestEntry teacher={null} allowedPrograms={allowedPrograms} teacherOptions={teachers} />
       )}
 
-      {tab === "assignments" && (
+      {activeTab === "assignments" && (
         <AssignmentEntry teacher={null} allowedPrograms={allowedPrograms} teacherOptions={teachers} />
       )}
 
-      {tab === "report" && <TeacherReport teachers={teachers} />}
+      {/* Super admin only — the tab is filtered out of `visibleSubTabs` for anyone
+          else, and `activeTab` can never land here without it. */}
+      {activeTab === "uploads" && <TeacherUploads teachers={teachers} />}
+
+      {activeTab === "report" && <TeacherReport teachers={teachers} />}
     </div>
   );
 }

@@ -64,6 +64,42 @@ const requireTeacherManager = async (accessToken) => {
   return userData.user.id;
 };
 
+/**
+ * Records the password a teacher's Supabase Auth login was just given, so a super
+ * admin can read it back later (see supabase_teacher_password_vault.sql).
+ *
+ * This is the only writer: the table has no insert/update/delete policy, so nothing
+ * but this service-role client can put a value in it. That is what guarantees the
+ * stored password is the one Auth actually holds.
+ *
+ * Returns a warning string, or null when it went in cleanly. It never throws and
+ * never fails the request around it — the password change has already happened by
+ * the time this runs, and reporting "could not save" for a change that did save
+ * would send the office looking for a problem that is not there. But a stale row is
+ * worse than no row, because it reads as a working password and is not one, so a
+ * failed write takes the old value down with it.
+ */
+const recordTeacherPassword = async (teacherId, password, setBy) => {
+  if (!teacherId || !password) return null;
+
+  const { error } = await supabaseAdmin
+    .from('teacher_login_passwords')
+    .upsert({ teacher_id: teacherId, password, set_at: new Date().toISOString(), set_by: setBy || null },
+      { onConflict: 'teacher_id' });
+
+  if (!error) return null;
+
+  await supabaseAdmin.from('teacher_login_passwords').delete().eq('teacher_id', teacherId);
+
+  // The likeliest cause by far is that supabase_teacher_password_vault.sql has not
+  // been run yet, so say so rather than quoting a bare PostgREST message.
+  return (
+    'The password was changed successfully, but it could not be saved for the ' +
+    'super admin to look up later. Run supabase_teacher_password_vault.sql in the ' +
+    `Supabase SQL editor if you have not already. (${error.message})`
+  );
+};
+
 const normalizePhone = (value) => {
   if (!value) return '';
   const digits = String(value).replace(/\D/g, '');
@@ -353,7 +389,9 @@ app.post('/api/teacher/create', async (req, res) => {
     return res.status(500).json({ error: `Failed to save the teacher record: ${rowError?.message || 'unknown error'}` });
   }
 
-  return res.json({ success: true, teacher: teacherRow });
+  const warning = await recordTeacherPassword(teacherRow.id, password, callerId);
+
+  return res.json({ success: true, teacher: teacherRow, warning });
 });
 
 app.post('/api/teacher/password', async (req, res) => {
@@ -387,7 +425,9 @@ app.post('/api/teacher/password', async (req, res) => {
     return res.status(500).json({ error: updateError.message });
   }
 
-  return res.json({ success: true });
+  const warning = await recordTeacherPassword(teacherId, password, callerId);
+
+  return res.json({ success: true, warning });
 });
 
 app.post('/api/student/password', async (req, res) => {

@@ -1,0 +1,72 @@
+.tup { display: flex; flex-direction: column; gap: 14px; }
+
+.tup__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tup__head h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+.tup__head p { font-size: 12px; color: var(--subtext); margin-top: 3px; max-width: 62ch; line-height: 1.5; }
+.tup__count { font-size: 11.5px; font-weight: 600; color: var(--subtext); white-space: nowrap; }
+
+/* ---- filters ---- */
+.tup__filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.tup__field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tup__field--grow { flex: 1 1 220px; }
+.tup__field--wide { grid-column: 1 / -1; }
+.tup__field label { font-size: 12px; font-weight: 600; color: var(--text); }
+.tup__field input[type="text"], .tup__field input[type="number"], .tup__field input[type="date"],
+.tup__field input:not([type]), .tup__field select, .tup__field textarea {
+  font: inherit; font-size: 13px; padding: 8px 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); width: 100%;
+}
+.tup__field textarea { resize: vertical; }
+
+/* Scoped past `.tup__field input:not([type])` above, which would otherwise put a
+   second border inside this one. */
+.tup__search { display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--subtext); }
+.tup__field .tup__search input { border: none; border-radius: 0; background: none; padding: 8px 0; width: 100%; }
+.tup__field .tup__search input:focus { outline: none; }
+
+/* ---- list ---- */
+.tup__empty { font-size: 13px; color: var(--subtext); }
+.tup__error { font-size: 13px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 12px; }
+.tup__list { display: flex; flex-direction: column; gap: 10px; }
+
+.tup__row { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px 15px; }
+.tup__row--editing { border-color: var(--accent); }
+.tup__row-head { display: flex; align-items: flex-start; gap: 12px; }
+.tup__row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.tup__row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text); }
+.tup__row-meta { font-size: 11.5px; color: var(--subtext); }
+.tup__row-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+
+.tup__kind { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-radius: 999px; padding: 3px 9px; border: 1px solid var(--border); color: var(--subtext); background: var(--bg); }
+.tup__kind--assignment { color: var(--accent); border-color: var(--accent); }
+
+.tup__tag { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--subtext); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; text-decoration: none; }
+.tup__tag:hover { color: var(--accent); border-color: var(--accent); }
+
+.tup__row-actions { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tup__btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.tup__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tup__btn--danger { color: #b91c1c; }
+.tup__btn--danger:hover { border-color: #fecaca; background: #fef2f2; }
+.tup__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ---- inline editor ---- */
+.tup__edit { margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.tup__edit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.tup__edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.tup__file { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 9px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg); color: var(--subtext); cursor: pointer; }
+.tup__file:hover { border-color: var(--accent); color: var(--text); }
+.tup__file-now { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--subtext); }
+.tup__file-now a { color: var(--accent); }
+.tup__link-btn { font-size: 12px; font-weight: 600; color: var(--accent); background: none; }
+.tup__link-btn:hover { text-decoration: underline; }
+
+.tup__fixed-note { font-size: 11.5px; color: var(--subtext); line-height: 1.55; max-width: 78ch; }
+
+@media (max-width: 640px) {
+  .tup__head { flex-direction: column; }
+  .tup__row-head { flex-direction: column; }
+  .tup__row-actions { width: 100%; }
+}

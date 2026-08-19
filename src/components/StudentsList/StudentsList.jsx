@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, Eye, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, KeyRound, Image as ImageIcon } from "lucide-react";
+import { Search, Eye, EyeOff, Copy, CheckCircle, XCircle, Clock, Plus, X, Save, DollarSign, ArrowLeft, Trash2, KeyRound, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, combinationsFor, formatCombination, groupHasChoice } from "../../lib/academics";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
@@ -245,6 +245,39 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   const [deletedApps, setDeletedApps] = useState([]);
   const [deletedStudents, setDeletedStudents] = useState([]);
   const [busyRow, setBusyRow] = useState(null);
+
+  // Which students' passwords are on screen, by id, plus "show the lot".
+  //
+  // `students.password` is a plain-text column — a student has no Supabase Auth
+  // account, so her password is stored as typed and there is nothing to decrypt.
+  // The column is therefore only ever a question of who is allowed to look, and the
+  // answer is a super admin. It starts hidden because this list is read at an office
+  // counter with parents standing on the other side of it.
+  const isSuperAdmin = Boolean(adminProfile?.is_super_admin);
+  const [revealedPasswords, setRevealedPasswords] = useState({});
+  const [showAllPasswords, setShowAllPasswords] = useState(false);
+  const [copiedPasswordId, setCopiedPasswordId] = useState(null);
+
+  const togglePassword = (id) =>
+    setRevealedPasswords((prev) => ({ ...prev, [id]: !(prev[id] ?? showAllPasswords) }));
+
+  const toggleAllPasswords = () => {
+    // Reset the per-row overrides, otherwise a row hidden by hand stays hidden after
+    // "Show all" and reads as a student with no password on record.
+    setRevealedPasswords({});
+    setShowAllPasswords((prev) => !prev);
+  };
+
+  const copyPassword = async (student) => {
+    if (!student.password) return;
+    try {
+      await navigator.clipboard.writeText(student.password);
+      setCopiedPasswordId(student.id);
+      window.setTimeout(() => setCopiedPasswordId((id) => (id === student.id ? null : id)), 1500);
+    } catch {
+      window.prompt(`Copy ${student.name}'s password:`, student.password);
+    }
+  };
 
   // The plan that applies to the application currently open for review — drives
   // the admission-fee figure shown in the confirmation modal and the WhatsApp
@@ -1524,7 +1557,18 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
                 <thead>
                   {/* Only what the office needs at a glance — everything else is
                       one click away under Details. */}
-                  <tr><th></th><th>Roll No</th><th>Name</th><th>Program</th><th>Year</th><th>WhatsApp</th><th>Actions</th></tr>
+                  <tr>
+                    <th></th><th>Roll No</th><th>Name</th><th>Program</th><th>Year</th><th>WhatsApp</th>
+                    {isSuperAdmin && (
+                      <th className="sl-password-head">
+                        Password
+                        <button type="button" onClick={toggleAllPasswords} className="sl-password-all">
+                          {showAllPasswords ? "Hide all" : "Show all"}
+                        </button>
+                      </th>
+                    )}
+                    <th>Actions</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {filteredStudents.map((s) => (
@@ -1555,6 +1599,36 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
                         {s.whatsapp || s.phone || "—"}
                         {!s.whatsapp && s.phone && <span className="sl-wa-fallback" title="No WhatsApp number on record — using her phone">phone</span>}
                       </td>
+                      {isSuperAdmin && (
+                        <td className="sl-password-cell">
+                          {s.password ? (
+                            <>
+                              <code>{(revealedPasswords[s.id] ?? showAllPasswords) ? s.password : "••••••"}</code>
+                              <button
+                                type="button"
+                                onClick={() => togglePassword(s.id)}
+                                className="sl-password-btn"
+                                title={(revealedPasswords[s.id] ?? showAllPasswords) ? "Hide password" : `Show ${s.name}'s password`}
+                              >
+                                {(revealedPasswords[s.id] ?? showAllPasswords) ? <EyeOff size={13} /> : <Eye size={13} />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyPassword(s)}
+                                className="sl-password-btn"
+                                title="Copy password"
+                              >
+                                <Copy size={13} />
+                              </button>
+                              {copiedPasswordId === s.id && <span className="sl-password-copied">Copied</span>}
+                            </>
+                          ) : (
+                            <span className="sl-password-none" title="No password on her record — she cannot sign in until one is set">
+                              none set
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td>
                         <button onClick={() => setDetailStudent({ student: s, edit: false })} className="sl-detail-btn">
                           <Eye size={13} /> Details

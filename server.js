@@ -27,41 +27,65 @@ const supabaseAdmin = (process.env.VITE_SUPABASE_URL && process.env.SUPABASE_SER
     })
   : null;
 
-// Verifies the caller's Supabase access token and confirms they are a super admin.
-// Returns the caller's auth user id on success, or null if unauthorized.
-const requireSuperAdmin = async (accessToken) => {
-  if (!supabaseAdmin || !accessToken) return null;
+/**
+ * Verifies the caller's Supabase access token and what it entitles them to.
+ *
+ * `right` is null for a super-admin-only route, or a permission key that a
+ * sub-admin may hold instead (`'teachers'` for the teacher-login routes).
+ *
+ * Returns `{ ok: true, callerId }`, or `{ ok: false, status, error }` **naming the
+ * step that failed**. These used to collapse into a bare null, and the routes then
+ * all answered "You do not have permission to manage teacher logins." That single
+ * sentence covered three unrelated situations, and was wrong in two of them: a
+ * super admin whose token had quietly expired was told she lacked a permission she
+ * has always had, and there was nothing on the screen to suggest signing in again.
+ * An expired token is the common one, because the portal keeps rendering from React
+ * state long after the session behind it has gone.
+ */
+const authorizeAdmin = async (accessToken, right = null) => {
+  if (!supabaseAdmin) {
+    return { ok: false, status: 500, error: 'The college server is not configured. Set SUPABASE_SERVICE_ROLE_KEY on it.' };
+  }
+  if (!accessToken) {
+    return {
+      ok: false, status: 401,
+      error: 'Your admin session has ended, so this could not be checked. Sign out, sign in again, and retry — nothing was changed.',
+    };
+  }
 
   const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
-  if (userError || !userData?.user) return null;
-
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('admin_profiles')
-    .select('is_super_admin')
-    .eq('user_id', userData.user.id)
-    .single();
-
-  if (profileError || !profile?.is_super_admin) return null;
-  return userData.user.id;
-};
-
-// Same idea, but for teacher logins: a super admin always qualifies, and so does a
-// sub-admin who has been given the `teachers` permission.
-const requireTeacherManager = async (accessToken) => {
-  if (!supabaseAdmin || !accessToken) return null;
-
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
-  if (userError || !userData?.user) return null;
+  if (userError || !userData?.user) {
+    return {
+      ok: false, status: 401,
+      error: 'Your admin session has expired. Sign out, sign in again, and retry — nothing was changed. ' +
+        '(The page can keep showing everything for a while after the session behind it has gone.)',
+    };
+  }
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('admin_profiles')
     .select('is_super_admin, permissions')
     .eq('user_id', userData.user.id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) return null;
-  if (!profile.is_super_admin && !(profile.permissions || []).includes('teachers')) return null;
-  return userData.user.id;
+  if (profileError) {
+    return { ok: false, status: 500, error: `Could not read your admin profile: ${profileError.message}` };
+  }
+  if (!profile) {
+    return { ok: false, status: 403, error: 'This login has no admin profile, so it cannot manage accounts.' };
+  }
+
+  const allowed = profile.is_super_admin || (right && (profile.permissions || []).includes(right));
+  if (!allowed) {
+    return {
+      ok: false, status: 403,
+      error: right
+        ? `Your account does not have the "${right}" permission, which is what this needs. A super admin can grant it from Manage Admins.`
+        : 'Only a super admin can do this.',
+    };
+  }
+
+  return { ok: true, callerId: userData.user.id };
 };
 
 /**
@@ -90,6 +114,11 @@ const recordTeacherPassword = async (teacherId, password, setBy) => {
   if (!error) return null;
 
   await supabaseAdmin.from('teacher_login_passwords').delete().eq('teacher_id', teacherId);
+
+  // The portal shows this as a strip on the Teachers tab rather than as an alert on
+  // the reset itself, so log it here too — otherwise a failure that is not the
+  // missing migration leaves no trace anywhere.
+  console.warn('[teacher password vault] could not record password:', error.message);
 
   // The likeliest cause by far is that supabase_teacher_password_vault.sql has not
   // been run yet, so say so rather than quoting a bare PostgREST message.
@@ -196,10 +225,9 @@ app.post('/api/admin/create', async (req, res) => {
 
   const { accessToken, email, password, name, whatsapp, permissions, allowedPrograms } = req.body || {};
 
-  const callerId = await requireSuperAdmin(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'Only a super admin can create sub-admin accounts.' });
-  }
+  const auth = await authorizeAdmin(accessToken);
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+  const callerId = auth.callerId;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -240,10 +268,8 @@ app.post('/api/admin/update', async (req, res) => {
   }
 
   const { accessToken, targetUserId, email, password, name, whatsapp, permissions, allowedPrograms } = req.body || {};
-  const callerId = await requireSuperAdmin(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'Only a super admin can update sub-admin accounts.' });
-  }
+  const auth = await authorizeAdmin(accessToken);
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
   if (!targetUserId) {
     return res.status(400).json({ error: 'targetUserId is required.' });
   }
@@ -300,10 +326,9 @@ app.post('/api/admin/delete', async (req, res) => {
 
   const { accessToken, targetUserId } = req.body || {};
 
-  const callerId = await requireSuperAdmin(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'Only a super admin can remove admin accounts.' });
-  }
+  const auth = await authorizeAdmin(accessToken);
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+  const callerId = auth.callerId;
 
   if (!targetUserId) {
     return res.status(400).json({ error: 'targetUserId is required.' });
@@ -338,10 +363,9 @@ app.post('/api/teacher/create', async (req, res) => {
     employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
   } = req.body || {};
 
-  const callerId = await requireTeacherManager(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
-  }
+  const auth = await authorizeAdmin(accessToken, 'teachers');
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+  const callerId = auth.callerId;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -401,10 +425,9 @@ app.post('/api/teacher/password', async (req, res) => {
 
   const { accessToken, teacherId, password } = req.body || {};
 
-  const callerId = await requireTeacherManager(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
-  }
+  const auth = await authorizeAdmin(accessToken, 'teachers');
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+  const callerId = auth.callerId;
 
   if (!teacherId || !password) {
     return res.status(400).json({ error: 'teacherId and a new password are required.' });
@@ -476,10 +499,8 @@ app.post('/api/teacher/delete', async (req, res) => {
 
   const { accessToken, teacherId } = req.body || {};
 
-  const callerId = await requireTeacherManager(accessToken);
-  if (!callerId) {
-    return res.status(403).json({ error: 'You do not have permission to manage teacher logins.' });
-  }
+  const auth = await authorizeAdmin(accessToken, 'teachers');
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
   if (!teacherId) {
     return res.status(400).json({ error: 'teacherId is required.' });

@@ -33,6 +33,12 @@
 .teachers__card-info { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
 .teachers__name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .teachers__meta { font-size: 12px; color: var(--subtext); }
+/* The vault is not set up. A strip, not a modal: nothing is broken, and the reset
+   button next to it still does its job. */
+.teachers__vault-warning { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 12px; }
+.teachers__vault-warning svg { flex-shrink: 0; margin-top: 2px; }
+.teachers__vault-warning code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: #fef3c7; border-radius: 4px; padding: 1px 5px; }
+
 /* Her portal password on the card, super admin only. It wraps rather than pushing
    the card wide, because the "not recorded" branch is a sentence, not a value. */
 .teachers__password-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--subtext); }

@@ -117,6 +117,8 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
   // `passwordFor` says "not recorded" rather than pretending it is blank.
   const isSuperAdmin = Boolean(adminProfile?.is_super_admin);
   const [vaultPasswords, setVaultPasswords] = useState({});
+  // Starts true so nothing accuses the database before the first read comes back.
+  const [vaultReady, setVaultReady] = useState(true);
   const [revealed, setRevealed] = useState({});
   const [copiedId, setCopiedId] = useState(null);
 
@@ -126,7 +128,9 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
 
   const loadVault = async () => {
     if (!isSuperAdmin) return;
-    setVaultPasswords(await fetchTeacherPasswords());
+    const { ready, passwords } = await fetchTeacherPasswords();
+    setVaultPasswords(passwords);
+    setVaultReady(ready);
   };
 
   const copyPassword = async (t) => {
@@ -270,9 +274,9 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
         // The route answers with the row it wrote, so the password she just typed can be
         // held against the right teacher and sent from her card without a reset.
         if (created?.teacher?.id) rememberPassword(created.teacher.id, form.password.trim());
-        // Not fatal: the login exists and works either way, so this is said rather than
-        // thrown. It is almost always the vault migration not having been run.
-        if (created?.warning) alert(created.warning);
+        // A `warning` on the response means the vault could not be written. Same
+        // reasoning as handleResetPassword: the login exists and works, so this is
+        // not raised here — reloading the vault raises the strip above the list.
         await loadVault();
       } else {
         const { error: dbError } = await supabase
@@ -315,13 +319,17 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
       return;
     }
     try {
-      const result = await resetTeacherPassword(t.id, next.trim());
+      await resetTeacherPassword(t.id, next.trim());
       rememberPassword(t.id, next.trim());
+      // The route also answers with a `warning` when it could not file the password
+      // in the vault. It is deliberately not shown here: the reset itself succeeded,
+      // and an alert that says "done" and "failed" in the same breath is read as a
+      // broken button. Reloading the vault raises the strip above the list instead,
+      // which says it once, in the place that can do something about it.
       await loadVault();
       alert(
         `Password updated. ${t.name} can now sign in with ${t.email} and the new password. ` +
-        "Use the WhatsApp button on her card to send it to her." +
-        (result?.warning ? `\n\n${result.warning}` : "")
+        "Use the WhatsApp button on her card to send it to her."
       );
     } catch (err) {
       alert("Could not update password: " + err.message);
@@ -588,6 +596,20 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
 
           <div className="teachers__section">
             <h3 className="teachers__heading">Teaching Staff ({teachers.length})</h3>
+
+            {/* Said once, here, rather than on every reset. The office cannot run
+                SQL from this screen, but it is the person who reports it. */}
+            {isSuperAdmin && !vaultReady && (
+              <p className="teachers__vault-warning">
+                <KeyRound size={13} />
+                <span>
+                  Passwords are not being recorded yet — <code>supabase_teacher_password_vault.sql</code> has
+                  not been run in Supabase. Reset Password still works and the teacher can sign in with the
+                  new one, but nothing is kept for you to look up afterwards. Run that file once and every
+                  password set from then on will show on her card.
+                </span>
+              </p>
+            )}
             {loading ? (
               <p className="teachers__empty">Loading...</p>
             ) : teachers.length === 0 ? (
@@ -647,8 +669,11 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                             </>
                           ) : (
                             <span className="teachers__password-missing">
-                              Password not recorded — it was set before this was kept, and Supabase
-                              Auth cannot be asked for it. Use Reset Password to set a new one.
+                              {vaultReady
+                                ? "Password not recorded — it was set before this was kept, and Supabase " +
+                                  "Auth cannot be asked for it. Use Reset Password to set a new one."
+                                : "Password not recorded, and resetting it will not record one either " +
+                                  "until the file named above has been run."}
                             </span>
                           )}
                         </p>

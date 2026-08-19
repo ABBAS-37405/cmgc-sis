@@ -24,6 +24,19 @@ export async function callServiceApi(path, body) {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token;
 
+  // Stopped here rather than sent without one. getSession() refreshes an expired
+  // token by itself, so no token means the session is genuinely over — and the
+  // portal will not have noticed, because every screen on it is React state that
+  // keeps rendering long after the session behind it has gone. Sending anyway
+  // earns a 403 that reads as "you are not allowed", which is the wrong thing to
+  // tell a super admin about a right she has always had.
+  if (!accessToken) {
+    throw new Error(
+      "Your admin session has ended, so nothing was changed. Sign out and sign in again, then retry. " +
+      "(The page keeps showing everything for a while after the session behind it expires.)"
+    );
+  }
+
   let res;
   try {
     res = await fetch(`${API_URL}${path}`, {

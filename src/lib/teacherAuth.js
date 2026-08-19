@@ -79,7 +79,8 @@ export function deleteTeacher(teacherId) {
 }
 
 /**
- * Every teacher password the college has on record, as `{ [teacherId]: password }`.
+ * Every teacher password the college has on record, as
+ * `{ ready, passwords: { [teacherId]: password } }`.
  *
  * There is no way to recover a Supabase Auth password, so this reads the vault
  * table that server.js fills in each time one is set — see
@@ -87,19 +88,28 @@ export function deleteTeacher(teacherId) {
  * no row here at all, which is why callers must show "not recorded" rather than a
  * blank: an empty box reads as a password of nothing.
  *
- * Only a super admin's select policy matches, and **RLS refuses a read as silently
- * as it refuses a write** — anyone else gets zero rows and no error. So this is
- * called only for a super admin, and a failure returns `{}` rather than raising:
- * a portal running before the SQL was pasted in must still show the Teachers tab.
+ * `ready` is the part worth having. "No rows" and "no table" look identical from a
+ * map of passwords, and they are not the same thing at all: the first means nothing
+ * has been set yet and Reset Password will record one, the second means the
+ * migration has not been run and Reset Password will record nothing. Telling the
+ * admin to reset a password to make it appear, when it cannot appear, is the kind
+ * of wrong instruction she follows twice before doubting it.
+ *
+ * Never raises. Only a super admin's select policy matches, and **RLS refuses a
+ * read as silently as it refuses a write** — anyone else gets zero rows and no
+ * error at all, so a refusal reads as `ready` with nothing in it, which is exactly
+ * right for someone who is not meant to see any of this.
  */
 export async function fetchTeacherPasswords() {
   const { data, error } = await supabase
     .from("teacher_login_passwords")
     .select("teacher_id, password");
 
-  if (error || !data) return {};
+  // 42P01 is "relation does not exist" — the migration has not been run. Anything
+  // else that errors is equally unusable, so both land on ready: false.
+  if (error || !data) return { ready: false, passwords: {} };
 
-  const map = {};
-  data.forEach((row) => { map[row.teacher_id] = row.password; });
-  return map;
+  const passwords = {};
+  data.forEach((row) => { passwords[row.teacher_id] = row.password; });
+  return { ready: true, passwords };
 }

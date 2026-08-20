@@ -40,6 +40,9 @@
 .staff__card-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .staff__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
 .staff__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+/* "Left" is not a delete — amber, not red: the record stays, only the register changes. */
+.staff__left-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #fcd34d; color: #92400e; background: #fffbeb; }
+.staff__card--left { opacity: 0.85; background: var(--card); }
 
 @media (max-width: 768px) {
   .staff__form-row { grid-template-columns: 1fr; }

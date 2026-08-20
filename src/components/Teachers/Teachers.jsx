@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users, Wallet, HardHat, Copy, FolderOpen } from "lucide-react";
+import { Plus, Trash2, Save, X, Eye, EyeOff, KeyRound, BookOpen, ClipboardList, FileText, BarChart3, Users, Wallet, HardHat, Copy, FolderOpen, UserMinus, Undo2 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS } from "../../lib/adminAuth";
+import { PROGRAMS, WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
 import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher, fetchTeacherPasswords } from "../../lib/teacherAuth";
 import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
@@ -87,6 +87,9 @@ function toggleValue(list, value) {
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "";
 
+// Today as "YYYY-MM-DD" in local time — toISOString would slip a day near midnight.
+const todayISO = () => new Date().toLocaleDateString("en-CA");
+
 export default function Teachers({ allowedPrograms = [], adminProfile = null }) {
   const [tab, setTab] = useState("list");
   const [teachers, setTeachers] = useState([]);
@@ -144,6 +147,10 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
       window.prompt(`Copy ${t.name}'s password:`, password);
     }
   };
+
+  // Null `left_date` is the active roster; a date is the register of those gone.
+  const activeTeachers = teachers.filter((t) => !t.left_date);
+  const leftTeachers = teachers.filter((t) => t.left_date);
 
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
@@ -383,6 +390,38 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
     if (!opened) alert("Could not open WhatsApp. Please check the number and try again.");
   };
 
+  // Off the active roster and the payroll register, but nothing is deleted: her
+  // record, attendance, salary and class-test history all stay where they are.
+  // Her login goes with her — a working password for someone who no longer works
+  // here is not a courtesy worth keeping.
+  const handleMarkLeft = async (t) => {
+    if (!window.confirm(
+      `Mark ${t.name} as left? She moves to the Left Teachers list and comes off the ` +
+      `attendance and salary register.${t.user_id ? " Her portal login is disabled." : ""}\n\n` +
+      `Nothing is deleted — her record and history stay, and Rejoin brings her back.`
+    )) return;
+    const { data, error: dbError } = await supabase
+      .from("teachers")
+      .update({ left_date: todayISO(), is_active: false })
+      .eq("id", t.id)
+      .select("id");
+    if (dbError) return setError(dbError.message);
+    if (!data || data.length === 0) return setError(WRITE_BLOCKED_HINT);
+    if (editing?.id === t.id) resetForm();
+    await fetchTeachers();
+  };
+
+  const handleRejoin = async (t) => {
+    const { data, error: dbError } = await supabase
+      .from("teachers")
+      .update({ left_date: null, is_active: true })
+      .eq("id", t.id)
+      .select("id");
+    if (dbError) return setError(dbError.message);
+    if (!data || data.length === 0) return setError(WRITE_BLOCKED_HINT);
+    await fetchTeachers();
+  };
+
   const handleDelete = async (t) => {
     if (!window.confirm(`Remove ${t.name}? Their login will be deleted. Their class tests stay in the records but will no longer show a teacher name.`)) return;
     try {
@@ -595,7 +634,7 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
           </div>
 
           <div className="teachers__section">
-            <h3 className="teachers__heading">Teaching Staff ({teachers.length})</h3>
+            <h3 className="teachers__heading">Teaching Staff ({activeTeachers.length})</h3>
 
             {/* Said once, here, rather than on every reset. The office cannot run
                 SQL from this screen, but it is the person who reports it. */}
@@ -612,11 +651,11 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
             )}
             {loading ? (
               <p className="teachers__empty">Loading...</p>
-            ) : teachers.length === 0 ? (
+            ) : activeTeachers.length === 0 ? (
               <p className="teachers__empty">No teachers added yet.</p>
             ) : (
               <div className="teachers__list">
-                {teachers.map((t) => (
+                {activeTeachers.map((t) => (
                   <div key={t.id} className="teachers__card">
                     <div className="teachers__card-info">
                       <p className="teachers__name">
@@ -729,6 +768,13 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                           <WhatsappIcon /> Send Login
                         </button>
                       )}
+                      <button
+                        onClick={() => handleMarkLeft(t)}
+                        className="teachers__left-btn"
+                        title={`Move ${t.name} to the Left Teachers list`}
+                      >
+                        <UserMinus size={13} /> Left
+                      </button>
                       <button onClick={() => handleDelete(t)} className="teachers__delete-btn">
                         <Trash2 size={13} /> Remove
                       </button>
@@ -738,6 +784,40 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
               </div>
             )}
           </div>
+
+          {leftTeachers.length > 0 && (
+            <div className="teachers__section">
+              <h3 className="teachers__heading">Left Teachers ({leftTeachers.length})</h3>
+              <div className="teachers__list">
+                {leftTeachers.map((t) => (
+                  <div key={t.id} className="teachers__card teachers__card--left">
+                    <div className="teachers__card-info">
+                      <p className="teachers__name">
+                        {t.name}
+                        <span className="teachers__tag teachers__tag--off">
+                          Left {fmtDate(t.left_date)}
+                        </span>
+                      </p>
+                      <p className="teachers__meta">
+                        {t.email || "no login email"}
+                        {t.qualification ? ` · ${t.qualification}` : ""}
+                        {t.phone ? ` · ${t.phone}` : ""}
+                        {t.joining_date ? ` · joined ${fmtDate(t.joining_date)}` : ""}
+                      </p>
+                    </div>
+                    <div className="teachers__card-actions">
+                      <button onClick={() => handleRejoin(t)} className="teachers__edit-btn">
+                        <Undo2 size={13} /> Rejoin
+                      </button>
+                      <button onClick={() => handleDelete(t)} className="teachers__delete-btn">
+                        <Trash2 size={13} /> Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 

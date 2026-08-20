@@ -63,6 +63,9 @@
 .teachers__card-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .teachers__edit-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--card); }
 .teachers__delete-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+/* "Left" is not a delete — amber, not red: the record stays, only the roster changes. */
+.teachers__left-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #fcd34d; color: #92400e; background: #fffbeb; }
+.teachers__card--left { opacity: 0.85; background: var(--card); }
 /* WhatsApp's own green, same as the student credential button — the one place a
    fixed colour beats the theme, because it is naming another app. */
 .teachers__wa-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #86efac; color: #16a34a; background: #f0fdf4; }

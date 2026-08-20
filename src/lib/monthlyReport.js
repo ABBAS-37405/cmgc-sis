@@ -174,7 +174,7 @@ export async function buildMonthlyReports(students, month, { examName = EXAM_CLA
   if (assignments.length > 0) {
     const { data } = await supabase
       .from("assignment_submissions")
-      .select("assignment_id, student_id, file_url, submitted_at, marks_obtained")
+      .select("assignment_id, student_id, file_url, submitted_at, submitted_in_class, marks_obtained")
       .in("assignment_id", assignments.map((a) => a.id))
       .in("student_id", ids);
     submissions = data || [];
@@ -337,7 +337,7 @@ export function summariseAssignments(student, allAssignments, submissions) {
         subject: a.subject,
         dueDate: a.due_date,
         totalMarks: num(a.total_marks) || 0,
-        submitted: !!(sub?.file_url || submittedAt || marks !== null),
+        submitted: !!(sub?.file_url || sub?.submitted_in_class || submittedAt || marks !== null),
         // Graded work handed in on paper has no submitted_at, so a late flag is
         // only meaningful when we know when it arrived.
         late: submittedAt ? submittedAt.slice(0, 10) > a.due_date : false,

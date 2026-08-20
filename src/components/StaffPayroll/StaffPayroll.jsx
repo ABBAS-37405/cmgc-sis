@@ -86,9 +86,9 @@ export default function StaffPayroll({ teachers = [], staff = [] }) {
       ...teachers.map((t) => ({ ...t, kind: "teacher" })),
       ...staff.map((s) => ({ ...s, kind: "staff" })),
     ];
-    // Retired staff keep their history but should not appear on a live register.
+    // Retired and left staff keep their history but should not appear on a live register.
     return merged
-      .filter((p) => p.kind === "teacher" || p.is_active !== false)
+      .filter((p) => !p.left_date && (p.kind === "teacher" || p.is_active !== false))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [teachers, staff]);
 

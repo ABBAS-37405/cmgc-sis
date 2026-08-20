@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Save, X, Phone, Briefcase } from "lucide-react";
+import { Plus, Trash2, Save, X, Phone, Briefcase, UserMinus, Undo2 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { STAFF_DEPARTMENTS, STAFF_DESIGNATIONS, departmentFor } from "../../lib/staff";
@@ -27,6 +27,9 @@ const emptyForm = {
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "";
 
+// Today as "YYYY-MM-DD" in local time — toISOString would slip a day near midnight.
+const todayISO = () => new Date().toLocaleDateString("en-CA");
+
 /**
  * The non-teaching register: accounts, office, security, maintenance, transport.
  *
@@ -44,14 +47,18 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
 
   const isVisiting = form.employment_type === "Visiting";
 
+  // Null `left_date` is the active register; a date is those who have gone.
+  const activeStaff = useMemo(() => staff.filter((s) => !s.left_date), [staff]);
+  const leftStaff = useMemo(() => staff.filter((s) => s.left_date), [staff]);
+
   const departments = useMemo(() => {
-    const used = new Set(staff.map((s) => s.department).filter(Boolean));
+    const used = new Set(activeStaff.map((s) => s.department).filter(Boolean));
     return ["All", ...STAFF_DEPARTMENTS.filter((d) => used.has(d))];
-  }, [staff]);
+  }, [activeStaff]);
 
   const visible = useMemo(
-    () => (department === "All" ? staff : staff.filter((s) => s.department === department)),
-    [staff, department]
+    () => (department === "All" ? activeStaff : activeStaff.filter((s) => s.department === department)),
+    [activeStaff, department]
   );
 
   const resetForm = () => {
@@ -144,6 +151,36 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Off the active register and the payroll sheet, but nothing is deleted: the
+  // record, attendance and salary history all stay where they are.
+  const handleMarkLeft = async (s) => {
+    if (!window.confirm(
+      `Mark ${s.name} (${s.designation}) as left? They move to the Left Staff list and ` +
+      `come off the attendance and salary register.\n\n` +
+      `Nothing is deleted — their record and history stay, and Rejoin brings them back.`
+    )) return;
+    const { data, error: dbError } = await supabase
+      .from("staff")
+      .update({ left_date: todayISO(), is_active: false })
+      .eq("id", s.id)
+      .select("id");
+    if (dbError) return setError(dbError.message);
+    if (!data || data.length === 0) return setError(WRITE_BLOCKED_HINT);
+    if (editing?.id === s.id) resetForm();
+    if (onChanged) await onChanged();
+  };
+
+  const handleRejoin = async (s) => {
+    const { data, error: dbError } = await supabase
+      .from("staff")
+      .update({ left_date: null, is_active: true })
+      .eq("id", s.id)
+      .select("id");
+    if (dbError) return setError(dbError.message);
+    if (!data || data.length === 0) return setError(WRITE_BLOCKED_HINT);
+    if (onChanged) await onChanged();
   };
 
   const handleDelete = async (s) => {
@@ -322,7 +359,7 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
           <p className="staff__empty">Loading...</p>
         ) : visible.length === 0 ? (
           <p className="staff__empty">
-            {staff.length === 0
+            {activeStaff.length === 0
               ? "No non-teaching staff added yet."
               : `Nobody in ${department} yet.`}
           </p>
@@ -364,6 +401,14 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
                 </div>
                 <div className="staff__card-actions">
                   <button type="button" onClick={() => startEdit(s)} className="staff__edit-btn">Edit</button>
+                  <button
+                    type="button"
+                    onClick={() => handleMarkLeft(s)}
+                    className="staff__left-btn"
+                    title={`Move ${s.name} to the Left Staff list`}
+                  >
+                    <UserMinus size={13} /> Left
+                  </button>
                   <button type="button" onClick={() => handleDelete(s)} className="staff__delete-btn">
                     <Trash2 size={13} /> Remove
                   </button>
@@ -373,6 +418,40 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
           </div>
         )}
       </div>
+
+      {leftStaff.length > 0 && (
+        <div className="staff__section">
+          <h3 className="staff__heading">Left Staff ({leftStaff.length})</h3>
+          <div className="staff__list">
+            {leftStaff.map((s) => (
+              <div key={s.id} className="staff__card staff__card--left">
+                <div className="staff__card-info">
+                  <p className="staff__name">
+                    {s.name}
+                    <span className="staff__tag staff__tag--role">
+                      <Briefcase size={11} /> {s.designation}
+                    </span>
+                    <span className="staff__tag staff__tag--off">Left {fmtDate(s.left_date)}</span>
+                  </p>
+                  <p className="staff__meta">
+                    {s.department || "No department"}
+                    {s.phone ? ` · ${s.phone}` : ""}
+                    {s.joining_date ? ` · joined ${fmtDate(s.joining_date)}` : ""}
+                  </p>
+                </div>
+                <div className="staff__card-actions">
+                  <button type="button" onClick={() => handleRejoin(s)} className="staff__edit-btn">
+                    <Undo2 size={13} /> Rejoin
+                  </button>
+                  <button type="button" onClick={() => handleDelete(s)} className="staff__delete-btn">
+                    <Trash2 size={13} /> Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

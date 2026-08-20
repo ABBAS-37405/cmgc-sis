@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, Plus, Trash2, FileText, Search, Upload, Eye, Paperclip } from "lucide-react";
+import { Check, Plus, Trash2, FileText, Search, Upload, Eye, Paperclip, Hand } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { YEARS, subjectsFor, subjectsForPrograms } from "../../lib/academics";
@@ -76,6 +76,7 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   const [subs, setSubs] = useState({});   // student_id -> submission row
   const [marks, setMarks] = useState({}); // student_id -> typed marks
   const [remarks, setRemarks] = useState({});
+  const [inClass, setInClass] = useState({}); // student_id -> handed in on paper
   const [search, setSearch] = useState("");
 
   const [loadingList, setLoadingList] = useState(false);
@@ -142,20 +143,24 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
     const byStudent = {};
     const m = {};
     const r = {};
+    const h = {};
     (rows || []).forEach((row) => {
       byStudent[row.student_id] = row;
       m[row.student_id] = row.marks_obtained ?? "";
       r[row.student_id] = row.remarks ?? "";
+      h[row.student_id] = Boolean(row.submitted_in_class);
     });
     (roster || []).forEach((s) => {
       if (m[s.id] === undefined) m[s.id] = "";
       if (r[s.id] === undefined) r[s.id] = "";
+      if (h[s.id] === undefined) h[s.id] = false;
     });
 
     setStudents(roster || []);
     setSubs(byStudent);
     setMarks(m);
     setRemarks(r);
+    setInClass(h);
     setLoadingGrades(false);
   };
 
@@ -239,15 +244,17 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
     setError("");
     setSaving(true);
 
-    // Only students who have a mark or a remark get a row: an ungraded girl who
-    // handed in nothing should not gain an empty submission record.
+    // Only students who have a mark, a remark, or a hand-in get a row: an
+    // ungraded girl who handed in nothing should not gain an empty submission
+    // record.
     const rows = students
-      .filter((s) => marks[s.id] !== "" || (remarks[s.id] || "").trim() || subs[s.id])
+      .filter((s) => marks[s.id] !== "" || (remarks[s.id] || "").trim() || inClass[s.id] || subs[s.id])
       .map((s) => ({
         assignment_id: active.id,
         student_id: s.id,
         file_url: subs[s.id]?.file_url ?? null,
         submitted_at: subs[s.id]?.submitted_at ?? null,
+        submitted_in_class: Boolean(inClass[s.id]),
         marks_obtained: marks[s.id] === "" ? null : parseFloat(marks[s.id]),
         remarks: (remarks[s.id] || "").trim() || null,
         graded_at: marks[s.id] === "" ? null : new Date().toISOString(),
@@ -288,7 +295,7 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   );
 
   const isCombined = assignmentPrograms(active).length > 1;
-  const submittedCount = students.filter((s) => subs[s.id]?.file_url).length;
+  const submittedCount = students.filter((s) => subs[s.id]?.file_url || inClass[s.id]).length;
   const gradedCount = students.filter((s) => marks[s.id] !== "" && marks[s.id] != null).length;
 
   return (
@@ -524,8 +531,10 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
                         </div>
 
                         <div className="asn__sub-cell">
-                          {/* A View button only for work actually uploaded. Anything
-                              handed in on paper leaves just the marks box. */}
+                          {/* A View button only for work actually uploaded. Work
+                              handed in on paper is recorded by the tick below —
+                              either the student ticked it on her portal or the
+                              teacher ticks it here, and marks apply either way. */}
                           {sub?.file_url ? (
                             <>
                               <a href={sub.file_url} target="_blank" rel="noopener noreferrer" className="asn__view-btn">
@@ -536,6 +545,14 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
                           ) : (
                             <span className="asn__no-sub">Not uploaded</span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => { setInClass({ ...inClass, [s.id]: !inClass[s.id] }); setSaved(false); }}
+                            className={"asn__hand " + (inClass[s.id] ? "asn__hand--on" : "")}
+                            title={inClass[s.id] ? "Handed in by hand in class — click to undo" : "Mark as handed in by hand in class"}
+                          >
+                            <Hand size={12} /> {inClass[s.id] ? "By hand in class" : "By hand?"}
+                          </button>
                         </div>
 
                         <input

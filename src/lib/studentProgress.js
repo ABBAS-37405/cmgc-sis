@@ -100,7 +100,7 @@ export async function buildStudentProgress(student, can = () => true) {
   if (assignments.length > 0) {
     const { data } = await supabase
       .from("assignment_submissions")
-      .select("assignment_id, student_id, file_url, submitted_at, marks_obtained")
+      .select("assignment_id, student_id, file_url, submitted_at, submitted_in_class, marks_obtained")
       .in("assignment_id", assignments.map((a) => a.id))
       .eq("student_id", id);
     submissions = data || [];

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileText, Upload, Paperclip, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { FileText, Upload, Paperclip, CheckCircle, Clock, AlertTriangle, Hand } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { prepareUpload } from "../../lib/uploads";
 import "./Assignments.css";
@@ -16,6 +16,7 @@ export default function Assignments({ student }) {
   const [subs, setSubs] = useState({}); // assignment_id -> submission
   const [loading, setLoading] = useState(Boolean(student?.id));
   const [uploadingId, setUploadingId] = useState(null);
+  const [markingId, setMarkingId] = useState(null);
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState(null);
   // Fixed for the session: calling new Date() while rendering makes the render
@@ -113,6 +114,38 @@ export default function Assignments({ student }) {
     await fetchAssignments();
   };
 
+  // The other way of handing in: she showed the teacher her work on paper in
+  // class. The flag lives on the same row as an upload, so doing both is fine.
+  const toggleInClass = async (assignment) => {
+    const existing = subs[assignment.id];
+    const next = !existing?.submitted_in_class;
+    setMarkingId(assignment.id);
+    setError("");
+
+    const { error: dbError } = await supabase
+      .from("assignment_submissions")
+      .upsert(
+        {
+          assignment_id: assignment.id,
+          student_id: student.id,
+          submitted_in_class: next,
+          file_url: existing?.file_url ?? null,
+          submitted_at: existing?.submitted_at ?? null,
+          marks_obtained: existing?.marks_obtained ?? null,
+          remarks: existing?.remarks ?? null,
+          graded_at: existing?.graded_at ?? null,
+        },
+        { onConflict: "assignment_id,student_id" }
+      );
+
+    setMarkingId(null);
+    if (dbError) {
+      setError("Could not save: " + dbError.message);
+      return;
+    }
+    await fetchAssignments();
+  };
+
   if (loading) {
     return <div className="asg"><p className="asg__empty">Loading assignments...</p></div>;
   }
@@ -129,7 +162,8 @@ export default function Assignments({ student }) {
     );
   }
 
-  const pendingCount = rows.filter((a) => !subs[a.id]?.file_url && a.due_date >= today).length;
+  const handedIn = (sub) => Boolean(sub?.file_url || sub?.submitted_in_class);
+  const pendingCount = rows.filter((a) => !handedIn(subs[a.id]) && a.due_date >= today).length;
   const gradedCount = rows.filter((a) => subs[a.id]?.marks_obtained != null).length;
 
   return (
@@ -153,6 +187,7 @@ export default function Assignments({ student }) {
 
       {rows.map((a) => {
         const sub = subs[a.id];
+        const submitted = handedIn(sub);
         const overdue = a.due_date < today;
         const left = daysLeft(a.due_date, today);
         const graded = sub?.marks_obtained != null;
@@ -171,6 +206,8 @@ export default function Assignments({ student }) {
                 </span>
               ) : sub?.file_url ? (
                 <span className="asg__badge asg__badge--submitted"><CheckCircle size={12} /> Submitted</span>
+              ) : sub?.submitted_in_class ? (
+                <span className="asg__badge asg__badge--submitted"><Hand size={12} /> By hand in class</span>
               ) : overdue ? (
                 <span className="asg__badge asg__badge--overdue"><AlertTriangle size={12} /> Overdue</span>
               ) : (
@@ -224,7 +261,20 @@ export default function Assignments({ student }) {
                   onChange={(e) => { upload(a, e.target.files[0]); e.target.value = ""; }}
                 />
               </label>
-              {overdue && !sub?.file_url && (
+              <button
+                type="button"
+                disabled={markingId === a.id}
+                onClick={() => toggleInClass(a)}
+                className={"asg__inclass " + (sub?.submitted_in_class ? "asg__inclass--on" : "")}
+              >
+                <Hand size={14} />
+                {markingId === a.id
+                  ? "Saving…"
+                  : sub?.submitted_in_class
+                    ? "Handed in by hand in class ✓"
+                    : "I handed it in by hand in class"}
+              </button>
+              {overdue && !submitted && (
                 <span className="asg__late-note">The due date has passed — it will be marked late.</span>
               )}
             </div>

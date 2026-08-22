@@ -15,6 +15,11 @@ const ALL_PROGRAMS = "All Programs";
 const WARN_ABSENCES = 3;
 const STRIKE_ABSENCES = 6;
 
+// Monthly attendance percentage: an alert goes into the absence message below
+// 80%, and below 60% she is to be moved out of the register.
+const ALERT_PCT = 80;
+const EXCLUDE_PCT = 60;
+
 const isoDate = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -29,19 +34,54 @@ const weekRangeOf = (dateStr) => {
   return { from: isoDate(monday), to: isoDate(sunday) };
 };
 
-const buildAbsenceMessage = (studentName, rollNo, status, dateStr) => {
+// The calendar month containing the selected date — the span the monthly
+// attendance percentage is computed over.
+const monthRangeOf = (dateStr) => {
+  const d = new Date(dateStr + "T00:00:00");
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { from: isoDate(first), to: isoDate(last) };
+};
+
+/*
+ * The daily notice now also states where the month stands: how many absences she
+ * has and her monthly attendance percentage, with an alert paragraph once the
+ * percentage falls below the 80% line. `stats` is null until the month's rows
+ * have loaded, and the message degrades to the plain daily notice.
+ */
+const buildAbsenceMessage = (studentName, rollNo, status, dateStr, stats = null) => {
   const formattedDate = new Date(dateStr).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
+  const monthName = new Date(dateStr).toLocaleDateString("en-PK", { month: "long", year: "numeric" });
   const statusText = status === "Leave" ? "on leave" : "absent";
-  return [
+
+  const lines = [
     "Assalamualaikum,",
     "",
     `This is to inform you that your daughter ${studentName} (Roll No: ${rollNo}) is ${statusText} from CMGC today, ${formattedDate}.`,
+  ];
+
+  if (stats && stats.marked > 0) {
+    lines.push(
+      "",
+      `So far in ${monthName}, she has been marked absent ${stats.absent} time${stats.absent === 1 ? "" : "s"}, and her monthly attendance stands at ${stats.pct}%.`
+    );
+    if (stats.pct < ALERT_PCT) {
+      lines.push(
+        "",
+        `ATTENTION: Her monthly attendance has fallen below ${ALERT_PCT}%. Please ensure her regular attendance immediately — if it falls below ${EXCLUDE_PCT}%, her name will be removed from the daily attendance register.`
+      );
+    }
+  }
+
+  lines.push(
     "",
     "Kindly ensure she is aware of and catches up on today's coursework. If this absence was unplanned or you have any concerns, please contact the college office.",
     "",
     "Regards,",
-    "CMGC Administration",
-  ].join("\n");
+    "CMGC Administration"
+  );
+
+  return lines.join("\n");
 };
 
 /**
@@ -109,8 +149,27 @@ const openChatWith = (student, message) => {
   return openWhatsApp(number, message);
 };
 
-const sendAbsenceWhatsApp = (student, status, date) =>
-  openChatWith(student, buildAbsenceMessage(student.name, student.roll_no, status, date));
+const sendAbsenceWhatsApp = (student, status, date, stats = null) =>
+  openChatWith(student, buildAbsenceMessage(student.name, student.roll_no, status, date, stats));
+
+/**
+ * Sent when a girl is put back on the register: the re-admission is confirmed in
+ * writing, and so is what it depends on — regular attendance from here on.
+ */
+const buildReadmissionMessage = (studentName, rollNo) => [
+  "Assalamualaikum,",
+  "",
+  "RE-ADMISSION TO ATTENDANCE REGISTER — CMGC",
+  "",
+  `We are pleased to inform you that your daughter ${studentName} (Roll No: ${rollNo}) has been re-admitted to the daily attendance register at CMGC.`,
+  "",
+  "Please ensure that she remains regular in her attendance from now on. Any further absences without a genuine reason may lead to her removal from the register again, and repeated shortage of attendance can result in her name being struck off the college rolls.",
+  "",
+  "We look forward to her regular presence in class.",
+  "",
+  "Regards,",
+  "CMGC Administration",
+].join("\n");
 
 /**
  * `adminProfile` is passed by the admin portal and left out by the teacher portal,
@@ -149,6 +208,9 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
   // Saved Absent marks per student for the week containing the selected date —
   // what the warning badge, the warning message, and the strike line all count.
   const [weekAbsences, setWeekAbsences] = useState({});
+  // Per student for the month containing the selected date: marked days, absences,
+  // and the attendance percentage the daily message reports.
+  const [monthStats, setMonthStats] = useState({});
   /*
    * Taking a girl out (or putting her back) changes `students`, which re-runs the
    * effect that loads the day's register — and that rebuilds it from the database,
@@ -320,9 +382,42 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     setWeekAbsences(counts);
   };
 
+  /*
+   * Monthly attendance percentage, from saved marks only: Present over every
+   * marked day. A Leave day is a marked day she was not present, so it lowers the
+   * percentage without being counted among her absences — the absence number in
+   * the message is Absent days alone.
+   */
+  const fetchMonthStats = async () => {
+    if (students.length === 0) {
+      setMonthStats({});
+      return;
+    }
+    const { from, to } = monthRangeOf(date);
+    const { data } = await supabase
+      .from("attendance")
+      .select("student_id, status")
+      .gte("date", from)
+      .lte("date", to)
+      .in("student_id", students.map((s) => s.id));
+
+    const stats = {};
+    (data || []).forEach((r) => {
+      const entry = stats[r.student_id] || (stats[r.student_id] = { marked: 0, present: 0, absent: 0 });
+      entry.marked += 1;
+      if (r.status === "Present") entry.present += 1;
+      if (r.status === "Absent") entry.absent += 1;
+    });
+    Object.values(stats).forEach((entry) => {
+      entry.pct = entry.marked > 0 ? Math.round((entry.present / entry.marked) * 100) : null;
+    });
+    setMonthStats(stats);
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchWeekAbsences();
+    fetchMonthStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, students]);
 
@@ -482,6 +577,23 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     );
   };
 
+  // The monthly line: her attendance percentage has fallen below the limit. Same
+  // confirmed move as the weekly strike, with the percentage written as the reason.
+  const moveLowAttendance = async (student, pct) => {
+    if (!window.confirm(
+      `${student.name}'s monthly attendance is ${pct}% — below the ${EXCLUDE_PCT}% limit.\n\n` +
+      "Move her out of the daily attendance register?\n\n" +
+      "She will appear in the Out of Attendance tab with her attendance percentage as the comment, " +
+      "from where her parents are sent the final struck-off warning. She stays enrolled and " +
+      "keeps every attendance mark already recorded."
+    )) return;
+
+    await takeOutOfRegister(
+      student,
+      `Monthly attendance ${pct}% — below ${EXCLUDE_PCT}% (short attendance)`
+    );
+  };
+
   const restoreToAttendance = async (student) => {
     if (!window.confirm(
       `Put ${student.name} back into the daily attendance register?\n\n` +
@@ -507,6 +619,16 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     // screen — fetchStudents decides that, not this handler.
     carryRecordsRef.current = records;
     fetchStudents();
+
+    // Her re-admission is confirmed to the family in writing, along with what it
+    // depends on: regular attendance from here on.
+    if (window.confirm(
+      `${student.name} is back on the attendance register.\n\n` +
+      "Send her parents the re-admission message on WhatsApp? It confirms she has been " +
+      "re-admitted and asks them to ensure she stays regular from now on."
+    )) {
+      openChatWith(student, buildReadmissionMessage(student.name, student.roll_no));
+    }
   };
 
   const absentees = students.filter((s) => records[s.id] === "Absent" || records[s.id] === "Leave");
@@ -514,6 +636,13 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
   // Saved absences this week, split at the two policy lines.
   const weeklyWarnable = students.filter((s) => (weekAbsences[s.id] || 0) >= WARN_ABSENCES);
   const overStrikeLimit = students.filter((s) => (weekAbsences[s.id] || 0) >= STRIKE_ABSENCES);
+
+  // Monthly attendance below the exclusion line — marked days only, so an
+  // unmarked month flags nobody.
+  const lowAttendance = students.filter((s) => {
+    const st = monthStats[s.id];
+    return st && st.marked > 0 && st.pct < EXCLUDE_PCT;
+  });
 
   // How many of the girls out of the register belong to the class on screen — the
   // register itself never shows them, so it says how many are missing and why.
@@ -807,7 +936,7 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
         id: s.id,
         name: s.name,
         number,
-        message: buildAbsenceMessage(s.name, s.roll_no, records[s.id], date),
+        message: buildAbsenceMessage(s.name, s.roll_no, records[s.id], date, monthStats[s.id] || null),
       });
     });
 
@@ -846,8 +975,9 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     if (!error) {
       setSaved(true);
       setAlreadyMarked(true);
-      // Today's marks are now saved absences, so the weekly counts move with them.
+      // Today's marks are now saved absences, so the counts move with them.
       fetchWeekAbsences();
+      fetchMonthStats();
     }
   };
 
@@ -1095,6 +1225,17 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                 : " Ask a super admin to move them to Out of Attendance."}
             </div>
           )}
+          {lowAttendance.length > 0 && (
+            <div className="mark-attendance__strike-banner">
+              ⚠️ {lowAttendance.length === 1
+                ? `${lowAttendance[0].name}'s monthly attendance is below ${EXCLUDE_PCT}%`
+                : `${lowAttendance.length} girls have monthly attendance below ${EXCLUDE_PCT}%`}
+              {" "}— under college policy they are to be taken out of the attendance register.
+              {canExclude
+                ? " Use “Move out — low attendance” on their rows below. A girl re-admitted this month stays on the register — move her out only if she falls short again next month."
+                : " Ask a super admin to move them to Out of Attendance."}
+            </div>
+          )}
           <div className="mark-attendance__download-controls">
             <button
               type="button"
@@ -1133,6 +1274,15 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                     {(weekAbsences[s.id] || 0) >= STRIKE_ABSENCES ? " — liable to be struck off" : ""}
                   </p>
                 )}
+                {monthStats[s.id]?.marked > 0 && monthStats[s.id].pct < ALERT_PCT && (
+                  <p className={
+                    "mark-attendance__week-warn" +
+                    (monthStats[s.id].pct < EXCLUDE_PCT ? " mark-attendance__week-warn--strike" : "")
+                  }>
+                    Monthly attendance {monthStats[s.id].pct}%
+                    {monthStats[s.id].pct < EXCLUDE_PCT ? ` — below ${EXCLUDE_PCT}%` : ` — below ${ALERT_PCT}%`}
+                  </p>
+                )}
               </div>
               <div className="mark-attendance__buttons">
                 <button
@@ -1153,7 +1303,7 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                 {(records[s.id] === "Absent" || records[s.id] === "Leave") && (
                   <button
                     type="button"
-                    onClick={() => sendAbsenceWhatsApp(s, records[s.id], date)}
+                    onClick={() => sendAbsenceWhatsApp(s, records[s.id], date, monthStats[s.id] || null)}
                     className="mark-attendance__whatsapp-btn"
                     title={`Notify parent via WhatsApp — ${records[s.id]}`}>
                     <WhatsappIcon />
@@ -1176,6 +1326,16 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                     className="mark-attendance__strike-btn"
                     title={`Move ${s.name} to Out of Attendance — continuously absent`}>
                     <UserMinus size={14} /> Move out — continuous absent
+                  </button>
+                )}
+                {canExclude && monthStats[s.id]?.marked > 0 && monthStats[s.id].pct < EXCLUDE_PCT && (
+                  <button
+                    type="button"
+                    onClick={() => moveLowAttendance(s, monthStats[s.id].pct)}
+                    disabled={busyId === s.id}
+                    className="mark-attendance__strike-btn"
+                    title={`Move ${s.name} to Out of Attendance — monthly attendance ${monthStats[s.id].pct}%`}>
+                    <UserMinus size={14} /> Move out — low attendance
                   </button>
                 )}
                 {canExclude && (

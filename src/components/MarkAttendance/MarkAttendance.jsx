@@ -11,6 +11,24 @@ import "./MarkAttendance.css";
 
 const ALL_PROGRAMS = "All Programs";
 
+// A student is warned at 3 absences in a week and moved out of the register at 6.
+const WARN_ABSENCES = 3;
+const STRIKE_ABSENCES = 6;
+
+const isoDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// The week containing the selected date, Monday through Sunday — the span the
+// absence counts and the warning message both talk about.
+const weekRangeOf = (dateStr) => {
+  const d = new Date(dateStr + "T00:00:00");
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { from: isoDate(monday), to: isoDate(sunday) };
+};
+
 const buildAbsenceMessage = (studentName, rollNo, status, dateStr) => {
   const formattedDate = new Date(dateStr).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
   const statusText = status === "Leave" ? "on leave" : "absent";
@@ -27,24 +45,46 @@ const buildAbsenceMessage = (studentName, rollNo, status, dateStr) => {
 };
 
 /**
- * The warning sent to a girl who is off the attendance register: come to the
- * office, or her name is struck off.
+ * The formal warning sent while she is still on the register: her absences this
+ * week have reached the warning line, and the struck-off line is named so the
+ * family knows exactly where it sits.
+ */
+const buildWeeklyWarningMessage = (studentName, rollNo, count) => [
+  "Assalamualaikum,",
+  "",
+  "OFFICIAL ABSENCE WARNING — CMGC",
+  "",
+  `This is to formally notify you that your daughter ${studentName} (Roll No: ${rollNo}) has been marked absent ${count} times during the current week.`,
+  "",
+  `Please be advised that, under college policy, if her absences reach ${STRIKE_ABSENCES}, her name will be struck off the college rolls.`,
+  "",
+  "You are expected to ensure her regular attendance with immediate effect. If there is a genuine reason for these absences, contact the college office at once.",
+  "",
+  "Regards,",
+  "CMGC Administration",
+].join("\n");
+
+/**
+ * The final notice sent to a girl who is off the attendance register: come to the
+ * office immediately, or her name is struck off.
  *
  * It is deliberately not the absence message with harder words. That one reports a
  * day; this one is the last step before her enrolment ends, so it says what has
- * already happened (she is off the register), what is being asked (come in), and
- * what follows if nobody does — in that order, with no date invented for the
- * deadline. Where she is asked to reply is honest too: this arrives from whichever
- * WhatsApp the office is signed into, so replying to it reaches the college.
+ * already happened (she is off the register), what is required (contact the office
+ * immediately), and what follows if nobody does — in that order. Where she is
+ * asked to reply is honest too: this arrives from whichever WhatsApp the office is
+ * signed into, so replying to it reaches the college.
  */
 const buildStruckOffMessage = (studentName, rollNo) => [
   "Assalamualaikum,",
   "",
-  `Your daughter ${studentName} (Roll No: ${rollNo}) has not been attending classes at CMGC, and her name has been taken off the daily attendance register.`,
+  "FINAL NOTICE — CMGC",
   "",
-  "Please contact the college office immediately — reply to this message or come to the office — and tell us whether she intends to continue her studies.",
+  `Your daughter ${studentName} (Roll No: ${rollNo}) has remained continuously absent from CMGC. Due to her prolonged absence, her name has been removed from the daily attendance register.`,
   "",
-  "If we do not hear from you, her name will be struck off the college rolls.",
+  "You are required to contact the college office IMMEDIATELY — reply to this message or come to the office in person — and state whether she intends to continue her studies.",
+  "",
+  "If the office does not hear from you, her name will be STRUCK OFF the college rolls without further intimation, and her re-admission will not be guaranteed.",
   "",
   "Regards,",
   "CMGC Administration",
@@ -106,6 +146,9 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
   const [excluded, setExcluded] = useState([]);
   const [excludedLoading, setExcludedLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  // Saved Absent marks per student for the week containing the selected date —
+  // what the warning badge, the warning message, and the strike line all count.
+  const [weekAbsences, setWeekAbsences] = useState({});
   /*
    * Taking a girl out (or putting her back) changes `students`, which re-runs the
    * effect that loads the day's register — and that rebuilds it from the database,
@@ -251,6 +294,38 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, students, classesHeld]);
 
+  /*
+   * Counts only what has been SAVED: the marks on screen are not absences until
+   * Save writes them, so the counts refresh after a save too. Leave days are not
+   * counted — a leave the office accepted is not the absence the policy is about.
+   */
+  const fetchWeekAbsences = async () => {
+    if (students.length === 0) {
+      setWeekAbsences({});
+      return;
+    }
+    const { from, to } = weekRangeOf(date);
+    const { data } = await supabase
+      .from("attendance")
+      .select("student_id")
+      .eq("status", "Absent")
+      .gte("date", from)
+      .lte("date", to)
+      .in("student_id", students.map((s) => s.id));
+
+    const counts = {};
+    (data || []).forEach((r) => {
+      counts[r.student_id] = (counts[r.student_id] || 0) + 1;
+    });
+    setWeekAbsences(counts);
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchWeekAbsences();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, students]);
+
   // "Classes held?" is a question about this class on this date, so changing either
   // asks it again instead of carrying the last answer across. Without this, an
   // admin who marked 1st year as off and then switched to 2nd year would find the
@@ -352,6 +427,31 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
    * read as a second confirmation: OK does it, Cancel does not, and an empty reason
    * is fine.
    */
+  const takeOutOfRegister = async (student, reason) => {
+    setBusyId(student.id);
+    const { data, error } = await supabase
+      .from("students")
+      .update({
+        attendance_excluded_at: new Date().toISOString(),
+        attendance_excluded_reason: reason || null,
+      })
+      .eq("id", student.id)
+      .select("id");
+    setBusyId(null);
+
+    if (error || !data || data.length === 0) {
+      alert(error ? `Could not take her out of the register: ${error.message}` : WRITE_BLOCKED_HINT);
+      return false;
+    }
+
+    const rest = { ...records };
+    delete rest[student.id];
+    carryRecordsRef.current = rest;
+    setStudents((prev) => prev.filter((s) => s.id !== student.id));
+    fetchExcluded();
+    return true;
+  };
+
   const excludeFromAttendance = async (student) => {
     const reason = window.prompt(
       `Take ${student.name} out of the daily attendance register?\n\n` +
@@ -361,28 +461,25 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
       ""
     );
     if (reason === null) return;
+    await takeOutOfRegister(student, reason.trim());
+  };
 
-    setBusyId(student.id);
-    const { data, error } = await supabase
-      .from("students")
-      .update({
-        attendance_excluded_at: new Date().toISOString(),
-        attendance_excluded_reason: reason.trim() || null,
-      })
-      .eq("id", student.id)
-      .select("id");
-    setBusyId(null);
+  // The strike line: her absences this week have reached the limit, so she is
+  // moved to Out of Attendance with the reason written for her. Confirmed, never
+  // silent — the register must not lose a girl without the admin saying so.
+  const moveContinuousAbsent = async (student, count) => {
+    if (!window.confirm(
+      `${student.name} has ${count} absences this week — the limit is ${STRIKE_ABSENCES}.\n\n` +
+      "Move her out of the daily attendance register?\n\n" +
+      'She will appear in the Out of Attendance tab with the comment "Continuously absent", ' +
+      "from where her parents are sent the final struck-off warning. She stays enrolled and " +
+      "keeps every attendance mark already recorded."
+    )) return;
 
-    if (error || !data || data.length === 0) {
-      alert(error ? `Could not take her out of the register: ${error.message}` : WRITE_BLOCKED_HINT);
-      return;
-    }
-
-    const rest = { ...records };
-    delete rest[student.id];
-    carryRecordsRef.current = rest;
-    setStudents((prev) => prev.filter((s) => s.id !== student.id));
-    fetchExcluded();
+    await takeOutOfRegister(
+      student,
+      `Continuously absent — ${count} absences in one week (short attendance)`
+    );
   };
 
   const restoreToAttendance = async (student) => {
@@ -413,6 +510,10 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
   };
 
   const absentees = students.filter((s) => records[s.id] === "Absent" || records[s.id] === "Leave");
+
+  // Saved absences this week, split at the two policy lines.
+  const weeklyWarnable = students.filter((s) => (weekAbsences[s.id] || 0) >= WARN_ABSENCES);
+  const overStrikeLimit = students.filter((s) => (weekAbsences[s.id] || 0) >= STRIKE_ABSENCES);
 
   // How many of the girls out of the register belong to the class on screen — the
   // register itself never shows them, so it says how many are missing and why.
@@ -452,6 +553,28 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     });
 
     wa.start({ entries, skipped, what: "the struck-off warning", recipientNoun: "parent" });
+  };
+
+  // The weekly warning, sent to every parent whose daughter has crossed the
+  // warning line — same queue discipline as the other bulk sends.
+  const warnWeeklyAbsentees = () => {
+    const entries = [];
+    const skipped = [];
+    weeklyWarnable.forEach((s) => {
+      const number = whatsappNumberFor(s);
+      if (!isValidWhatsAppNumber(number)) {
+        skipped.push(s);
+        return;
+      }
+      entries.push({
+        id: s.id,
+        name: s.name,
+        number,
+        message: buildWeeklyWarningMessage(s.name, s.roll_no, weekAbsences[s.id] || 0),
+      });
+    });
+
+    wa.start({ entries, skipped, what: "the absence warning", recipientNoun: "parent" });
   };
 
   // Each view renders its own copy of the banner, so a switch either way ends the
@@ -723,6 +846,8 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     if (!error) {
       setSaved(true);
       setAlreadyMarked(true);
+      // Today's marks are now saved absences, so the weekly counts move with them.
+      fetchWeekAbsences();
     }
   };
 
@@ -801,6 +926,9 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                 </p>
                 <p className="mark-attendance__roll">{s.roll_no}</p>
                 <p className="mark-attendance__excluded-note">
+                  {/short attendance|continuous/i.test(s.attendance_excluded_reason || "") && (
+                    <span className="mark-attendance__short-tag">Short attendance</span>
+                  )}
                   Out of the register since {excludedSince(s.attendance_excluded_at)}
                   {s.attendance_excluded_reason ? ` — ${s.attendance_excluded_reason}` : ""}
                 </p>
@@ -946,7 +1074,27 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
               className="mark-attendance__notify-btn">
               <WhatsappIcon /> Notify Absent/Leave Parents ({absentees.length})
             </button>
+            {weeklyWarnable.length > 0 && (
+              <button
+                type="button"
+                onClick={warnWeeklyAbsentees}
+                className="mark-attendance__warn-btn"
+                title={`Send the official absence warning to every girl with ${WARN_ABSENCES}+ absences this week`}>
+                <WhatsappIcon /> Send Absence Warnings ({weeklyWarnable.length})
+              </button>
+            )}
           </div>
+          {overStrikeLimit.length > 0 && (
+            <div className="mark-attendance__strike-banner">
+              ⚠️ {overStrikeLimit.length === 1
+                ? `${overStrikeLimit[0].name} has reached ${STRIKE_ABSENCES} or more absences this week`
+                : `${overStrikeLimit.length} girls have reached ${STRIKE_ABSENCES} or more absences this week`}
+              {" "}— under college policy they are to be taken out of the attendance register.
+              {canExclude
+                ? " Use “Move out — continuous absent” on their rows below."
+                : " Ask a super admin to move them to Out of Attendance."}
+            </div>
+          )}
           <div className="mark-attendance__download-controls">
             <button
               type="button"
@@ -976,6 +1124,15 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                   )}
                 </p>
                 <p className="mark-attendance__roll">{s.roll_no}</p>
+                {(weekAbsences[s.id] || 0) >= WARN_ABSENCES && (
+                  <p className={
+                    "mark-attendance__week-warn" +
+                    ((weekAbsences[s.id] || 0) >= STRIKE_ABSENCES ? " mark-attendance__week-warn--strike" : "")
+                  }>
+                    {weekAbsences[s.id]} absences this week
+                    {(weekAbsences[s.id] || 0) >= STRIKE_ABSENCES ? " — liable to be struck off" : ""}
+                  </p>
+                )}
               </div>
               <div className="mark-attendance__buttons">
                 <button
@@ -1000,6 +1157,25 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
                     className="mark-attendance__whatsapp-btn"
                     title={`Notify parent via WhatsApp — ${records[s.id]}`}>
                     <WhatsappIcon />
+                  </button>
+                )}
+                {(weekAbsences[s.id] || 0) >= WARN_ABSENCES && (
+                  <button
+                    type="button"
+                    onClick={() => openChatWith(s, buildWeeklyWarningMessage(s.name, s.roll_no, weekAbsences[s.id] || 0))}
+                    className="mark-attendance__warn-btn"
+                    title={`Send ${s.name}'s parents the official absence warning — ${weekAbsences[s.id]} absences this week`}>
+                    <WhatsappIcon /> Warn ({weekAbsences[s.id]})
+                  </button>
+                )}
+                {canExclude && (weekAbsences[s.id] || 0) >= STRIKE_ABSENCES && (
+                  <button
+                    type="button"
+                    onClick={() => moveContinuousAbsent(s, weekAbsences[s.id] || 0)}
+                    disabled={busyId === s.id}
+                    className="mark-attendance__strike-btn"
+                    title={`Move ${s.name} to Out of Attendance — continuously absent`}>
+                    <UserMinus size={14} /> Move out — continuous absent
                   </button>
                 )}
                 {canExclude && (

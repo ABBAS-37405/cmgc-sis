@@ -56,6 +56,14 @@
    enrolment ends. */
 .mark-attendance__warn-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid #fbbf24; color: #b45309; background: #fffbeb; }
 .mark-attendance__warn-btn:hover:not(:disabled) { background: #fef3c7; }
+/* Red, unlike the amber warning: this is the strike line itself. */
+.mark-attendance__strike-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px; border: 1px solid #f87171; color: #b91c1c; background: #fef2f2; }
+.mark-attendance__strike-btn:hover:not(:disabled) { background: #fee2e2; }
+.mark-attendance__strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mark-attendance__strike-banner { font-size: 13px; font-weight: 500; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; margin: 10px 0; line-height: 1.6; }
+.mark-attendance__week-warn { font-size: 12px; font-weight: 600; color: #b45309; margin-top: 3px; }
+.mark-attendance__week-warn--strike { color: #b91c1c; }
+.mark-attendance__short-tag { display: inline-block; font-size: 11px; font-weight: 600; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 999px; padding: 1px 8px; margin-right: 6px; }
 .mark-attendance__restore-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid #86efac; color: #15803d; background: #f0fdf4; }
 .mark-attendance__restore-btn:hover:not(:disabled) { background: #dcfce7; }
 .mark-attendance__restore-btn:disabled { opacity: 0.5; cursor: not-allowed; }

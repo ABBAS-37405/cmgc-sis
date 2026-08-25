@@ -20,3 +20,12 @@
 .noticeboard__tag--event { background: #fdf4ff; color: #7e22ce; }
 .noticeboard__tag--fee { background: #ecfdf5; color: #047857; }
 .noticeboard__tag--academic { background: #fff7ed; color: #c2410c; }
+/* --- Body and attachment, added with the notice upgrade --- */
+
+.noticeboard__body { font-size: 13px; color: var(--subtext); line-height: 1.6; margin-top: 4px; white-space: pre-wrap; }
+
+.noticeboard__attachment {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+  font-size: 13px; font-weight: 500; color: var(--accent); overflow-wrap: anywhere;
+}
+.noticeboard__attachment:hover { text-decoration: underline; }

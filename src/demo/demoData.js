@@ -591,13 +591,22 @@ export function buildDemoDatabase() {
     app.phone1 = app.phone1 || "123456";
   });
 
+  // `audience` is stamped on every seeded notice because the three reader screens
+  // filter on it — a row without one is returned to nobody. The last entry is the
+  // staff-only kind, so the demo shows a teacher something her students cannot see.
   [
     { title: "Annual Prize Distribution on 25th of this month — all students must attend in uniform.", category: "Event" },
     { title: "Pre-Board result cards will be issued to parents next week.", category: "Exam" },
     { title: "Fee for the current installment is due by the 10th. Please clear dues at the office.", category: "Fee" },
     { title: "College will remain closed on Friday for maintenance.", category: "Holiday" },
     { title: "Extra Physics classes for 2nd year start Monday, 2:00 PM.", category: "Academic" },
-  ].forEach((n, i) => db.notices.push({ id: uid(10), ...n, created_at: at(daysAgo(i * 4 + 1)) }));
+    { title: "Staff meeting on Thursday at 11:00 AM in the principal's office.", category: "Staff",
+      body: "Class test marks for the current month must be entered before the meeting. Bring your attendance registers.",
+      audience: "teachers" },
+  ].forEach((n, i) => db.notices.push({
+    id: uid(10), audience: "all", body: null, file_url: null, file_name: null,
+    ...n, created_at: at(daysAgo(i * 4 + 1)),
+  }));
 
   const lmsSeed = [
     { subject: "Physics", category: "lecture", title: "Motion & Force — recorded lecture",

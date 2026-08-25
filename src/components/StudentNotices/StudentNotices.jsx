@@ -1,43 +1,46 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { Paperclip } from "lucide-react";
+import { CATEGORY_ICON, longDate, fetchNotices } from "../../lib/notices";
 import "./StudentNotices.css";
 
 /**
- * Everything the admin has posted, in her own portal.
+ * The notice board inside a portal — the student's and the teacher's.
  *
- * `notices` carries no audience column — a notice is posted to the college, not
- * to a group — so this is the same query the public board runs, and a girl sees
- * exactly what is on the board without leaving the portal.
+ * One component with a `reader` prop, the same arrangement as `ClassTestEntry`
+ * and `LmsManage` serving two portals: the screen is identical, only the audience
+ * differs. A student is shown what was posted to the college; a teacher is shown
+ * that plus the instructions addressed to the staff.
+ *
+ *   reader="public"   -> student portal (and what the landing page shows)
+ *   reader="teacher"  -> teacher portal: college notices + staff instructions
+ *
+ * The filter here decides what the screen *asks* for. What a student is actually
+ * *allowed* is decided in the database — the anon select policy in
+ * supabase_notices_upgrade.sql returns `audience = 'all'` and nothing else, so a
+ * staff instruction is refused rather than merely unrequested. Both halves are
+ * wanted: RLS drops rows as silently as it drops writes, so a screen that asked
+ * for everything and trusted the refusal would look identical whether the policy
+ * was doing its job or not.
  */
 
-// Must stay in step with CATEGORIES in Notices.jsx, same as NoticeBoard.jsx:
-// a category the admin can post but this file does not know renders with no
-// icon and an unstyled tag.
-const CATEGORY_ICON = {
-  General: "📢", Exam: "📝", Fee: "💰", Holiday: "🎉", Event: "🎭", Academic: "📚",
-};
+const FILTERS = ["All", "Exam", "Fee", "Holiday", "Event", "Academic", "Staff", "General"];
 
-const FILTERS = ["All", "Exam", "Fee", "Holiday", "Event", "Academic", "General"];
-
-const longDate = (value) =>
-  new Date(value).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
-
-export default function StudentNotices() {
+export default function StudentNotices({ reader = "public" }) {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    const fetchNotices = async () => {
-      const { data } = await supabase
-        .from("notices")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (data) setNotices(data);
+    let live = true;
+    const load = async () => {
+      const { notices: rows } = await fetchNotices(reader);
+      if (!live) return;
+      setNotices(rows);
       setLoading(false);
     };
-    fetchNotices();
-  }, []);
+    load();
+    return () => { live = false; };
+  }, [reader]);
 
   const filtered = filter === "All" ? notices : notices.filter((n) => n.category === filter);
 
@@ -45,7 +48,11 @@ export default function StudentNotices() {
     <div className="student-notices">
       <div className="student-notices__head">
         <h3>Notice Board</h3>
-        <p className="student-notices__sub">Announcements from the college office</p>
+        <p className="student-notices__sub">
+          {reader === "teacher"
+            ? "College announcements and instructions from the office"
+            : "Announcements from the college office"}
+        </p>
       </div>
 
       {/* Only the categories that were actually posted, plus All — a filter that
@@ -75,7 +82,25 @@ export default function StudentNotices() {
               <span className="student-notices__icon">{CATEGORY_ICON[n.category] || "📢"}</span>
               <div className="student-notices__content">
                 <p className="student-notices__title">{n.title}</p>
-                <p className="student-notices__date">{longDate(n.created_at)}</p>
+                {n.body && <p className="student-notices__body">{n.body}</p>}
+                <p className="student-notices__date">
+                  {longDate(n.created_at)}
+                  {/* Only a teacher ever sees one of these, but she should know
+                      which notices her students can also read and which are hers. */}
+                  {n.audience === "teachers" && (
+                    <span className="student-notices__audience-tag">For teachers</span>
+                  )}
+                </p>
+                {n.file_url && (
+                  <a
+                    className="student-notices__attachment"
+                    href={n.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Paperclip size={12} /> {n.file_name || "Open attachment"}
+                  </a>
+                )}
               </div>
               <span className="student-notices__tag">{n.category}</span>
             </div>

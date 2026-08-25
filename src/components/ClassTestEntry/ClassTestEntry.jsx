@@ -53,7 +53,23 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
   const [subjectChoice, setSubject] = useState(availableSubjects[0] || "");
   const subject = availableSubjects.includes(subjectChoice) ? subjectChoice : (availableSubjects[0] || "");
 
-  const [picked, setPicked] = useState(() => (visiblePrograms[0] ? [visiblePrograms[0]] : []));
+  // Every group she was assigned starts ticked, not just the first one. A teacher is
+  // scoped to her groups precisely because those are the ones she teaches, so "all of
+  // mine" is the honest default — the same reasoning as the Students roster defaulting
+  // to All Programs rather than her first group.
+  //
+  // Defaulting to `visiblePrograms[0]` alone is what hid most of a subject teacher's
+  // class: Economics is studied in General Science, FA-IT and Humanities, PROGRAMS puts
+  // General Science first, and General Science has one girl in it. Her tests were
+  // created against that single group and the other two groups' students never
+  // appeared — and because the list below filters on `.overlaps("programs", selected)`,
+  // a test she had made for another group vanished from her own screen too.
+  //
+  // Nothing is widened by this: `eligiblePrograms` still drops any group that does not
+  // study the chosen subject, and an unrestricted admin (six groups, none of them
+  // particularly hers) keeps the pick-one default.
+  const [picked, setPicked] = useState(() =>
+    isRestricted ? visiblePrograms : visiblePrograms.slice(0, 1));
 
   // Being assigned to a group does not mean that group studies the subject: a Mathematics
   // teacher may be assigned Pre-Medical, whose curriculum is Biology and has no

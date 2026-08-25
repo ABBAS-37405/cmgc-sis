@@ -1,21 +1,19 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { Paperclip } from "lucide-react";
+import { CATEGORY_ICON, CATEGORY_COLOR, fetchNotices } from "../../lib/notices";
 import "./NoticeBoard.css";
 
-// Must stay in step with CATEGORIES in Notices.jsx — a category the admin can
-// post but this file does not know renders with no icon and an unstyled tag.
-const CATEGORY_ICON = {
-  General: "📢", Exam: "📝", Fee: "💰", Holiday: "🎉", Event: "🎭", Academic: "📚",
-};
-
-const CATEGORY_COLOR = {
-  General: "noticeboard__tag--general",
-  Exam: "noticeboard__tag--exam",
-  Fee: "noticeboard__tag--fee",
-  Holiday: "noticeboard__tag--holiday",
-  Event: "noticeboard__tag--event",
-  Academic: "noticeboard__tag--academic",
-};
+/**
+ * The public notice board on the landing page.
+ *
+ * It reads as `public`, which is the college's own notices and never the ones
+ * addressed to the teaching staff. That is enforced by the anon select policy in
+ * supabase_notices_upgrade.sql — this filter only states the intent, since RLS
+ * refuses a read as silently as it refuses a write.
+ *
+ * The category list and icons come from lib/notices.js, shared with the three
+ * other screens that render a notice.
+ */
 
 export default function NoticeBoard() {
   const [notices, setNotices] = useState([]);
@@ -23,15 +21,15 @@ export default function NoticeBoard() {
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    const fetchNotices = async () => {
-      const { data } = await supabase
-        .from("notices")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (data) setNotices(data);
+    let live = true;
+    const load = async () => {
+      const { notices: rows } = await fetchNotices("public");
+      if (!live) return;
+      setNotices(rows);
       setLoading(false);
     };
-    fetchNotices();
+    load();
+    return () => { live = false; };
   }, []);
 
   const filtered = filter === "All" ? notices : notices.filter((n) => n.category === filter);
@@ -61,7 +59,13 @@ export default function NoticeBoard() {
                 <span className="noticeboard__icon">{CATEGORY_ICON[n.category] || "📢"}</span>
                 <div className="noticeboard__content">
                   <p className="noticeboard__title">{i === 0 && "📌 "}{n.title}</p>
+                  {n.body && <p className="noticeboard__body">{n.body}</p>}
                   <p className="noticeboard__date">{new Date(n.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}</p>
+                  {n.file_url && (
+                    <a className="noticeboard__attachment" href={n.file_url} target="_blank" rel="noopener noreferrer">
+                      <Paperclip size={12} /> {n.file_name || "Open attachment"}
+                    </a>
+                  )}
                 </div>
                 <span className={`noticeboard__tag ${CATEGORY_COLOR[n.category]}`}>{n.category}</span>
               </div>

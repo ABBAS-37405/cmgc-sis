@@ -16,6 +16,61 @@
 .notices__delete { color: #ef4444; padding: 4px; }
 .notices__form-hint { font-size: 11.5px; color: var(--subtext); line-height: 1.55; margin-top: 10px; }
 
+/* --- Body, attachment and audience, added with the notice upgrade --- */
+
+/* The textarea is styled with the inputs above rather than beside them: it is the
+   same field, only taller, and a second border radius here would show. */
+.notices__form .notices__body-input {
+  width: 100%; font-size: 14px; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 12px; background: var(--bg); color: var(--text);
+  font-family: inherit; line-height: 1.5; resize: vertical; min-height: 68px;
+}
+
+/* Sits directly under its select, so the select loses its own gap to it. */
+.notices__form .notices__audience-select { margin-bottom: 6px; }
+.notices__audience-hint { font-size: 11.5px; color: var(--subtext); line-height: 1.5; margin-bottom: 12px; }
+
+.notices__file-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+
+/* A label wrapping a hidden input: the native file button cannot be styled, and
+   its "No file chosen" text repeats what the chip beside it already says. */
+.notices__file-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--text);
+  border: 1px dashed var(--border); border-radius: 8px; padding: 7px 12px; background: var(--bg);
+}
+.notices__file-btn:hover { border-color: var(--accent); color: var(--accent); }
+.notices__file-btn input { display: none; }
+
+.notices__file-chosen {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  color: var(--subtext); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px 6px 4px 10px; max-width: 100%; overflow-wrap: anywhere;
+}
+.notices__file-chosen button { color: #ef4444; padding: 2px; display: inline-flex; }
+
+.notices__error {
+  font-size: 12.5px; line-height: 1.5; color: #b91c1c; background: #fef2f2;
+  border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; margin-top: 10px;
+}
+[data-theme="dark"] .notices__error { color: #fca5a5; background: #2a1416; border-color: #7f1d1d; }
+
+.notices__body { font-size: 12.5px; color: var(--subtext); line-height: 1.5; margin-top: 3px; white-space: pre-wrap; }
+
+/* Never left as a bare colour difference: "Teachers only" is the difference
+   between a notice on the public board and one that is not. */
+.notices__audience-tag {
+  display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px;
+}
+
+.notices__attachment {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 5px;
+  font-size: 12px; color: var(--accent); overflow-wrap: anywhere;
+}
+.notices__attachment:hover { text-decoration: underline; }
+
 @media (min-width: 1024px) {
   .notices { grid-template-columns: 1fr 1fr; }
 }

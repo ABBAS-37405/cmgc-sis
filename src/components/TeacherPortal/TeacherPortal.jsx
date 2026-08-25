@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet, TrendingUp } from "lucide-react";
+import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet, TrendingUp, Megaphone } from "lucide-react";
 import Sidebar from "../Sidebar/Sidebar";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
 import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
@@ -8,6 +8,7 @@ import MarkAttendance from "../MarkAttendance/MarkAttendance";
 import EnterResults from "../EnterResults/EnterResults";
 import TeacherSalary from "../TeacherSalary/TeacherSalary";
 import ClassPerformance from "../Performance/ClassPerformance";
+import StudentNotices from "../StudentNotices/StudentNotices";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
@@ -36,6 +37,17 @@ const NAV_ITEMS = [
 const SALARY_ITEM = { id: "salary", label: "My Salary", icon: Wallet };
 
 /**
+ * The notice board. Like My Salary, deliberately NOT in NAV_ITEMS and never
+ * filtered by `hasTeacherRight`: an instruction from the office is not a duty the
+ * admin hands out, it is how the office reaches her at all. A teacher with no
+ * rights yet still has to be able to read "staff meeting, Thursday, 11am".
+ *
+ * She sees the college's notices — the same ones her students and the public
+ * board get — plus the ones addressed to the staff, which reach nobody else.
+ */
+const NOTICES_ITEM = { id: "notices", label: "Notices", icon: Megaphone };
+
+/**
  * How her classes are doing. Offered to whoever can conduct class tests, because
  * that right is what produces the marks this screen is drawn from — a teacher
  * without it would open an empty chart and learn nothing.
@@ -48,7 +60,12 @@ export default function TeacherPortal({ teacher, onLogout }) {
 
   const dutyItems = NAV_ITEMS.filter((it) => hasTeacherRight(teacher, it.id));
   const canSeePerformance = hasTeacherRight(teacher, "class_tests");
-  const items = [...dutyItems, ...(canSeePerformance ? [PERFORMANCE_ITEM] : []), SALARY_ITEM];
+  const items = [
+    ...dutyItems,
+    ...(canSeePerformance ? [PERFORMANCE_ITEM] : []),
+    NOTICES_ITEM,
+    SALARY_ITEM,
+  ];
   // Restored only if that tab is still one of hers — rights can be withdrawn
   // between one visit and the next.
   const [active, setActive] = useState(() => {
@@ -114,14 +131,19 @@ export default function TeacherPortal({ teacher, onLogout }) {
           </div>
         </div>
 
-        {/* Salary is checked first: it is always available, so a teacher with no
-            duties assigned yet still has a working portal rather than a dead end. */}
+        {/* Salary and Notices are checked first: both are available to every
+            teacher, so one with no duties assigned yet still lands on a working
+            portal rather than a dead end. */}
         {active === "salary" ? (
           <TeacherSalary teacher={teacher} />
+        ) : active === "notices" ? (
+          <StudentNotices reader="teacher" />
         ) : dutyItems.length === 0 ? (
           <div className="teacher-portal__blocked">
             <p>No duties have been assigned to your account yet.</p>
-            <p className="teacher-portal__blocked-hint">Ask the admin to give you rights from the Teachers tab.</p>
+            <p className="teacher-portal__blocked-hint">
+              Ask the admin to give you rights from the Teachers tab. Notices and My Salary are open to you meanwhile.
+            </p>
           </div>
         ) : (
           <>

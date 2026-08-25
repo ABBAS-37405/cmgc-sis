@@ -187,8 +187,19 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
 
   const [students, setStudents] = useState([]);
   const [records, setRecords] = useState({});
-  const [program, setProgram] = useState(isRestricted ? (visiblePrograms[0] || ALL_PROGRAMS) : "Pre-Medical");
-  const [yearFilter, setYearFilter] = useState("Both");
+  // Everyone opens on every group they are allowed to see, rather than on whichever
+  // one PROGRAMS happens to list first — for a restricted teacher that default
+  // showed a subject teacher a single girl and no sign that the rest of her class
+  // existed, and for an admin it was a hardcoded "Pre-Medical" that had nothing to
+  // do with her. "All Programs" is scoped to hers in fetchRoster below, so this
+  // shows nobody anything they were not already allowed.
+  const [program, setProgram] = useState(
+    visiblePrograms.length > 1 ? ALL_PROGRAMS : (visiblePrograms[0] || ALL_PROGRAMS),
+  );
+  // 1st Year rather than Both: the register is filled in one class at a time, and a
+  // roll call that opens with both years mixed together is the longer list to scroll
+  // and the easier one to mark the wrong girl on. Both is still one press away.
+  const [yearFilter, setYearFilter] = useState("1st Year");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [downloadMonth, setDownloadMonth] = useState(() => {
     const now = new Date();
@@ -915,6 +926,98 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
     });
   };
 
+  /**
+   * The third sheet: who is in this class and how the office reaches them.
+   *
+   * Not an attendance sheet at all — no month, no day columns, nothing to write in.
+   * It is the list the office actually keeps asking for: roll number, name, father's
+   * name, group, class, and every phone number on the record, in something that can
+   * be sorted and filtered in Google Sheets.
+   *
+   * Two deliberate differences from the attendance sheets above:
+   *
+   * - **The full roll number, not the last three digits.** `shortRollNo` exists
+   *   because thirty day columns leave no width for it; there is width here, and a
+   *   number to ring up against a truncated roll number is no use to anybody.
+   * - **The full group name.** Same reason: `GROUP_SHORT` is a width compromise, and
+   *   this sheet does not have to make it.
+   *
+   * `whatsapp` and `phone` are separate columns rather than one "number", because
+   * they are often different numbers — that is the whole reason
+   * `whatsappNumberFor()` exists. Collapsing them would throw away the distinction
+   * the office needs when one of the two does not answer.
+   */
+  const downloadContactSheet = async () => {
+    const studentsList = await fetchRoster(
+      "id, name, roll_no, father_name, program, year_of_study, phone, phone2, whatsapp",
+    ) || [];
+
+    if (studentsList.length === 0) {
+      alert("No students found for the selected year/program scope.");
+      return;
+    }
+
+    const headerRows = [
+      [{ v: "Community Model Girls College", s: S.TITLE }],
+      [{ v: `Student Contact List - ${selectionLabel}`, s: S.LABEL }],
+      [`Group filter: ${program}`, `Year filter: ${yearFilter}`, `Students: ${studentsList.length}`],
+      [`Generated: ${new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })}`],
+      [],
+    ];
+
+    const headings = ["Roll No.", "Name", "Father Name", "Group", "Class", "WhatsApp", "Phone", "Alt. Phone"];
+    const headRow = headings.map((h) => ({ v: h, s: S.HEAD }));
+
+    // Grouped and banded exactly like the attendance sheets, so a mixed-group
+    // download is still readable a class at a time.
+    const grouped = new Map();
+    const order = visiblePrograms.length > 0 ? visiblePrograms : PROGRAMS;
+    order.forEach((programKey) => grouped.set(programKey, []));
+    studentsList.forEach((student) => {
+      if (!grouped.has(student.program)) grouped.set(student.program, []);
+      grouped.get(student.program).push(student);
+    });
+
+    const bodyRows = [];
+    grouped.forEach((studentsInProgram, programKey) => {
+      if (studentsInProgram.length === 0) return;
+      bodyRows.push([
+        { v: programKey, s: S.BAND },
+        ...Array.from({ length: headings.length - 1 }, () => ({ v: "", s: S.BAND })),
+      ]);
+      studentsInProgram.forEach((student) => {
+        bodyRows.push([
+          { v: student.roll_no || "", s: S.CENTER },
+          { v: student.name || "", s: S.TEXT },
+          { v: student.father_name || "", s: S.TEXT },
+          { v: student.program || "", s: S.TEXT },
+          { v: student.year_of_study || "", s: S.CENTER },
+          // Written as text, not as numbers: a leading 0 is part of a Pakistani
+          // mobile number and a spreadsheet that reads 03001234567 as a number
+          // drops it. Every cell here is a string for that reason.
+          { v: student.whatsapp || "", s: S.CENTER },
+          { v: student.phone || "", s: S.CENTER },
+          { v: student.phone2 || "", s: S.CENTER },
+        ]);
+      });
+      bodyRows.push([]);
+    });
+
+    const columns = [
+      { width: 16 }, { width: 26 }, { width: 24 }, { width: 18 },
+      { width: 10 }, { width: 15 }, { width: 15 }, { width: 15 },
+    ];
+
+    const scope = `${program.replace(/ /g, "_")}_${yearFilter.replace(/ /g, "_")}`;
+    await downloadXlsx(`Student_Contact_List_${scope}.xlsx`, {
+      sheetName: "Contacts",
+      rows: [...headerRows, headRow, ...bodyRows],
+      columns,
+      // Below the single heading row, right of the father's name.
+      freeze: { row: headerRows.length + 1, col: 3 },
+    });
+  };
+
   const notifyAbsentees = () => {
     if (absentees.length === 0) {
       alert("No students are marked Absent or Leave for this date.");
@@ -1250,6 +1353,16 @@ export default function MarkAttendance({ allowedPrograms = [], adminProfile = nu
               className="mark-attendance__btn mark-attendance__download-btn"
             >
               Download Blank Attendance Sheet
+            </button>
+            {/* Not an attendance sheet — the roster with its phone numbers. It
+                ignores the download month for that reason: there is nothing in it
+                that belongs to a month. */}
+            <button
+              type="button"
+              onClick={downloadContactSheet}
+              className="mark-attendance__btn mark-attendance__download-btn"
+            >
+              Download Student Contact List
             </button>
           </div>
 

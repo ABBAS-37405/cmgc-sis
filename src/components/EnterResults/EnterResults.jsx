@@ -36,7 +36,14 @@ export default function EnterResults({ allowedPrograms = [] }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
 
-  const [program, setProgram] = useState(isRestricted ? (visiblePrograms[0] || ALL_PROGRAMS) : "Pre-Medical");
+  // Open on every group she was assigned rather than the first one PROGRAMS lists —
+  // the same default that showed an Economics teacher one girl out of ten. The query
+  // below already narrows "All Programs" to hers.
+  const [program, setProgram] = useState(
+    isRestricted
+      ? (visiblePrograms.length > 1 ? ALL_PROGRAMS : (visiblePrograms[0] || ALL_PROGRAMS))
+      : "Pre-Medical",
+  );
   const [yearFilter, setYearFilter] = useState("Both");
   const storedExam = loadStoredExamSelection();
   const [examType, setExamType] = useState(storedExam?.examType || EXAM_TYPES[0]);

@@ -56,7 +56,13 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   const [subjectChoice, setSubject] = useState(availableSubjects[0] || "");
   const subject = availableSubjects.includes(subjectChoice) ? subjectChoice : (availableSubjects[0] || "");
 
-  const [picked, setPicked] = useState(() => (visiblePrograms[0] ? [visiblePrograms[0]] : []));
+  // All of her groups start ticked, not just the first — see the same default in
+  // ClassTestEntry. An Economics teacher assigned General Science, FA-IT and Humanities
+  // was silently set to General Science alone (PROGRAMS order), so an assignment reached
+  // one girl and the rest of her class never saw it. `eligiblePrograms` still drops any
+  // group that does not study the subject; an unrestricted admin keeps pick-one.
+  const [picked, setPicked] = useState(() =>
+    isRestricted ? visiblePrograms : visiblePrograms.slice(0, 1));
 
   // A group that does not study the subject cannot be set this assignment.
   const eligiblePrograms = subject ? visiblePrograms.filter((p) => subjectsFor(p, year).includes(subject)) : visiblePrograms;

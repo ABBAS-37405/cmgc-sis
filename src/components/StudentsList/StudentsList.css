@@ -204,3 +204,47 @@
 
 .sl-promote-btn { background: #2563eb; color: white; }
 .sl-promote-btn:hover { background: #1e40af; }
+
+/* --- The message the WhatsApp button on each row sends --- */
+
+.sl-msg {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.sl-msg__modes { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+.sl-msg__mode { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13.5px; color: var(--text); }
+.sl-msg__mode input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.sl-msg__mode em { font-style: normal; font-size: 11.5px; color: var(--subtext); }
+
+.sl-msg__box {
+  width: 100%;
+  margin-top: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.sl-msg__foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px; }
+.sl-msg__hint { flex: 1; min-width: 260px; margin: 0; font-size: 12px; line-height: 1.55; color: var(--subtext); }
+.sl-msg__hint code { font-size: 11.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+.sl-msg__send-all {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  background: #25d366; color: #fff; border: none; border-radius: 8px; padding: 9px 15px;
+}
+.sl-msg__send-all:hover:not(:disabled) { background: #1eb855; }
+.sl-msg__send-all:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sl-msg__scope { margin: 8px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--subtext); }

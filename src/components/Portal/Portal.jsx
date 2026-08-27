@@ -14,6 +14,8 @@ import MyPerformance from "../Performance/MyPerformance";
 import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
 import { useLmsAlerts } from "../LmsAlert/useLmsAlerts";
+import TestAlert from "../TestAlert/TestAlert";
+import { useTestAlert } from "../TestAlert/useTestAlert";
 // A student signing in should not be made to wait for the admin and teacher
 // portals, which are far bigger than everything she can actually see.
 const AdminPortal = lazy(() => import("../AdminPortal/AdminPortal"));
@@ -105,6 +107,18 @@ export default function Portal({ onExit }) {
   useEffect(() => {
     if (activeTab === "lms" && newLmsCount > 0) markLmsSeen();
   }, [activeTab, newLmsCount, markLmsSeen]);
+
+  /*
+   * The next weekly test, decided for her own class only.
+   *
+   * A null viewer key while an admin or a teacher is signed in is what keeps
+   * this hook idle for them — the schedule is not even fetched: their own
+   * portals raise their own box, for both classes rather than one.
+   */
+  const testAlert = useTestAlert({
+    viewerKey: role === "student" && loggedIn ? studentData?.id : null,
+    year: studentData?.year_of_study,
+  });
 
   /**
    * Signing in is one screen deep, so Back from the portal's first tab lands on
@@ -232,6 +246,18 @@ export default function Portal({ onExit }) {
 
   return (
     <div className="portal">
+      {/* Her own class's paper, worked out from her group and the combination she
+          picked at admission — the sheet's "MATHS/BIO/CVS" is not an answer. */}
+      {testAlert.open && (
+        <TestAlert
+          test={testAlert.test}
+          total={testAlert.total}
+          year={studentData?.year_of_study}
+          student={{ group: studentData?.program, combination: studentData?.subject_combination }}
+          onClose={testAlert.close}
+          onOpenSchedule={() => { testAlert.close(); goToTab("notices"); }}
+        />
+      )}
       <Sidebar
         active={activeTab}
         setActive={goToTab}

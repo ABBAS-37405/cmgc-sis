@@ -74,3 +74,17 @@
 @media (min-width: 1024px) {
   .notices { grid-template-columns: 1fr 1fr; }
 }
+
+/* --- The tab shell, added with the test schedule --- */
+
+.notices-tab { display: flex; flex-direction: column; gap: 14px; }
+.notices-tab__head { display: flex; flex-direction: column; gap: 3px; }
+.notices-tab__title { font-size: 19px; font-weight: 700; color: var(--text); margin: 0; }
+.notices-tab__sub { font-size: 13px; color: var(--subtext); margin: 0; max-width: 70ch; }
+
+.notices-tab__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.notices-tab__tab {
+  font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--subtext); background: var(--card); cursor: pointer;
+}
+.notices-tab__tab--active { background: var(--accent); color: #fff; border-color: var(--accent); }

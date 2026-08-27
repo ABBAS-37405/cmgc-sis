@@ -7,6 +7,8 @@ import { findBFormClash, describeUniqueViolation, isValidBForm, formatBForm } fr
 import StudentDetail from "../StudentDetail/StudentDetail";
 import EditRequests from "../EditRequests/EditRequests";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
+import WhatsAppQueue from "../WhatsAppQueue/WhatsAppQueue";
+import { useWhatsAppQueue } from "../WhatsAppQueue/useWhatsAppQueue";
 import { DETAIL_GROUPS, blankDetails, detailsToRow, matricPercentage } from "../../lib/studentFields";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { fetchFeePlans, findPlan, buildFeeRows } from "../../lib/feePlans";
@@ -83,20 +85,46 @@ const sendRejectionNotice = (application, message, waWindowRef) => {
   return true;
 };
 
-const sendStudentCredentialsWhatsApp = (student) => {
+/**
+ * Her WhatsApp number, asking for one when the record has none.
+ *
+ * Shared by both single-row send paths so a missing number behaves the same way
+ * whichever message is going out. Deliberately **not** used by the bulk send: a
+ * prompt half way through a queue strands everyone after it, which is why
+ * `useWhatsAppQueue` takes entries that are already screened.
+ */
+const askWhatsAppNumber = (student) => {
   // Her WhatsApp number, not her phone: the two are often different and a
   // landline-style phone may have no WhatsApp on it at all.
-  let number = whatsappNumberFor(student);
-  if (!isValidWhatsAppNumber(number)) {
-    const entered = window.prompt(
-      `WhatsApp number for ${student?.name || "this student"} is missing or invalid. Enter one (03XXXXXXXXX):`,
-      number || ""
-    );
-    if (!entered || !entered.trim()) return;
-    number = entered.trim();
-  }
+  const number = whatsappNumberFor(student);
+  if (isValidWhatsAppNumber(number)) return number;
+
+  const entered = window.prompt(
+    `WhatsApp number for ${student?.name || "this student"} is missing or invalid. Enter one (03XXXXXXXXX):`,
+    number || ""
+  );
+  return entered && entered.trim() ? entered.trim() : null;
+};
+
+const sendStudentCredentialsWhatsApp = (student) => {
+  const number = askWhatsAppNumber(student);
+  if (!number) return;
   openWhatsApp(number, buildCredentialsMessage(student?.name || "Student", student?.roll_no, student?.password));
 };
+
+/**
+ * The office's own message, with the two things worth filling in per girl.
+ *
+ * Everything else goes out exactly as typed — this is a message the admin wrote,
+ * not a template the app owns. `{name}` and `{roll}` are offered because a
+ * message to two hundred girls that does not say who it is for reads as a
+ * circular, and they are the only two fields she would otherwise have to send
+ * two hundred separate messages to include.
+ */
+const personaliseMessage = (template, student) =>
+  String(template || "")
+    .replace(/\{name\}/gi, student?.name || "")
+    .replace(/\{roll\}/gi, student?.roll_no || "");
 
 const shareCredentials = (application, rollNo, password, waWindowRef) => {
   let email = (application?.email || "").trim();
@@ -200,6 +228,19 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
   const [selected, setSelected] = useState(null);
   const [activeTab, setActiveTab] = useState("applications");
   const [yearFilter, setYearFilter] = useState("Both");
+
+  /*
+   * What the WhatsApp button on a row sends.
+   *
+   * "credentials" is the default and is exactly what this screen has always
+   * done — the mode exists to add a second thing, not to change the first. The
+   * office's own message is opt-in, because a button whose meaning changed under
+   * an admin who did not choose it is how her login details end up in a chat
+   * that was supposed to say the college is closed on Friday.
+   */
+  const [messageMode, setMessageMode] = useState("credentials");
+  const [customMessage, setCustomMessage] = useState("");
+  const wa = useWhatsAppQueue();
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -337,6 +378,65 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
   }, [students, search, yearFilter]);
+
+  /**
+   * The WhatsApp button on one row, in whichever mode is selected.
+   *
+   * The credentials path is untouched; the office's own message goes through the
+   * same `openWhatsApp`, so it lands in the one named tab this app uses rather
+   * than opening a second one beside it.
+   */
+  const sendWhatsAppTo = (student) => {
+    if (messageMode !== "custom") return sendStudentCredentialsWhatsApp(student);
+
+    const text = customMessage.trim();
+    if (!text) {
+      alert("Type the message first — the box above the list is empty, so there would be nothing to send.");
+      return;
+    }
+    const number = askWhatsAppNumber(student);
+    if (!number) return;
+    openWhatsApp(number, personaliseMessage(text, student));
+  };
+
+  /**
+   * The same message to everyone currently listed — a queue, never a loop.
+   *
+   * It follows the filters rather than ignoring them: whoever is on screen is
+   * who it goes to, so "2nd Year" plus a search is how the office narrows it.
+   * Screened before it starts, because a prompt for a missing number half way
+   * through would strand every recipient after it; whoever has no usable number
+   * is named when the run finishes instead of stopping it.
+   */
+  const sendCustomToAll = () => {
+    const text = customMessage.trim();
+    if (!text) return;
+
+    const entries = [];
+    const skipped = [];
+    filteredStudents.forEach((s) => {
+      const number = whatsappNumberFor(s);
+      if (!isValidWhatsAppNumber(number)) {
+        skipped.push(s);
+        return;
+      }
+      entries.push({ id: s.id, name: s.name, number, message: personaliseMessage(text, s) });
+    });
+
+    wa.start({ entries, skipped, what: "your message", recipientNoun: "student" });
+  };
+
+  /*
+   * Leaving the Enrolled Students tab stops any run in progress. The banner is
+   * rendered inside that tab, and a queue that keeps opening chats with nothing
+   * on screen saying so is the failure the WhatsApp section of CLAUDE.md warns
+   * about — the hook lives in the screen, so the screen has to stop it wherever
+   * it stops showing the banner.
+   */
+  const changeTab = (tab) => {
+    if (tab !== activeTab) wa.stop();
+    setActiveTab(tab);
+  };
 
   const applicationCounts = useMemo(() => ({
     pending: applications.filter((a) => a.status === "Pending").length,
@@ -1298,17 +1398,17 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
 
       {/* Tabs */}
       <div className="sl-tabs">
-        <button onClick={() => setActiveTab("applications")} className={"sl-tab " + (activeTab === "applications" ? "sl-tab--active" : "")}>
+        <button onClick={() => changeTab("applications")} className={"sl-tab " + (activeTab === "applications" ? "sl-tab--active" : "")}>
           Applications ({applications.length})
         </button>
-        <button onClick={() => setActiveTab("students")} className={"sl-tab " + (activeTab === "students" ? "sl-tab--active" : "")}>
+        <button onClick={() => changeTab("students")} className={"sl-tab " + (activeTab === "students" ? "sl-tab--active" : "")}>
           Enrolled Students ({students.length})
         </button>
-        <button onClick={() => setActiveTab("editRequests")} className={"sl-tab " + (activeTab === "editRequests" ? "sl-tab--active" : "")}>
+        <button onClick={() => changeTab("editRequests")} className={"sl-tab " + (activeTab === "editRequests" ? "sl-tab--active" : "")}>
           Edit Requests
           {pendingRequestCount > 0 && <span className="sl-tab-badge">{pendingRequestCount}</span>}
         </button>
-        <button onClick={() => setActiveTab("deleted")} className={"sl-tab " + (activeTab === "deleted" ? "sl-tab--active" : "")}>
+        <button onClick={() => changeTab("deleted")} className={"sl-tab " + (activeTab === "deleted" ? "sl-tab--active" : "")}>
           <Trash2 size={13} /> Deleted Items ({deletedApps.length + deletedStudents.length})
         </button>
       </div>
@@ -1408,6 +1508,71 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
       {/* Students Tab */}
       {activeTab === "students" && (
         <div>
+          {/* What the WhatsApp button on each row sends. Credentials is the
+              default and is what this screen has always done; the office's own
+              message is the opt-in second mode. */}
+          <div className="sl-msg">
+            <div className="sl-msg__modes" role="radiogroup" aria-label="What the WhatsApp button sends">
+              <label className="sl-msg__mode">
+                <input
+                  type="radio"
+                  name="sl-message-mode"
+                  checked={messageMode === "credentials"}
+                  onChange={() => setMessageMode("credentials")}
+                />
+                <span>Login ID &amp; password <em>(default)</em></span>
+              </label>
+              <label className="sl-msg__mode">
+                <input
+                  type="radio"
+                  name="sl-message-mode"
+                  checked={messageMode === "custom"}
+                  onChange={() => setMessageMode("custom")}
+                />
+                <span>A message you type</span>
+              </label>
+            </div>
+
+            {messageMode === "custom" && (
+              <>
+                <textarea
+                  className="sl-msg__box"
+                  rows={4}
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  placeholder={
+                    "Type the message here.\n\n" +
+                    "Example: Assalamualaikum {name}, the college will remain closed on Friday."
+                  }
+                />
+                <div className="sl-msg__foot">
+                  <p className="sl-msg__hint">
+                    Goes out exactly as typed. <code>{"{name}"}</code> and <code>{"{roll}"}</code> are
+                    filled in for each girl. Every WhatsApp button on the list below now opens her chat
+                    with this message already in it — you only press <strong>Send</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    className="sl-msg__send-all"
+                    onClick={sendCustomToAll}
+                    disabled={!customMessage.trim() || filteredStudents.length === 0}
+                    title="Opens one chat at a time, following the filters above"
+                  >
+                    <WhatsappIcon /> Send to all {filteredStudents.length} on this list
+                  </button>
+                </div>
+                <p className="sl-msg__scope">
+                  &quot;All&quot; means whoever is listed below right now — the year filter and the search
+                  box decide that. Chats open one by one; nothing is sent until you press Send in WhatsApp.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Rendered here rather than inside the custom-mode branch, so a run
+              already going stays visible if she switches the mode back. */}
+          <WhatsAppQueue queue={wa.queue} onNext={wa.next} onStop={wa.stop} />
+
           {showAddForm && (
             <div className="sl-add-form">
               <h3>Add New Student</h3>
@@ -1645,7 +1810,13 @@ export default function StudentsList({ allowedPrograms = [], adminProfile = null
                         <button onClick={() => setShowPictureModal(s)} className="sl-picture-btn">
                           <ImageIcon size={13} /> Picture
                         </button>
-                        <button onClick={() => sendStudentCredentialsWhatsApp(s)} className="sl-whatsapp-btn" title="Send login ID & password via WhatsApp">
+                        <button
+                          onClick={() => sendWhatsAppTo(s)}
+                          className="sl-whatsapp-btn"
+                          title={messageMode === "custom"
+                            ? "Open WhatsApp with the message you typed above"
+                            : "Send login ID & password via WhatsApp"}
+                        >
                           <WhatsappIcon />
                         </button>
                         {adminProfile?.is_super_admin ? (

@@ -10,6 +10,7 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { takesSubject } from "./studentSubjects";
 
 /**
  * The groups a test actually covered.
@@ -81,7 +82,9 @@ export async function buildTestReport(test, { allowedPrograms = [] } = {}) {
   const [{ data: students, error: rosterError }, { data: marks, error: marksError }] = await Promise.all([
     supabase
       .from("students")
-      .select("id, name, roll_no, program, year_of_study, father_name")
+      // subject_combination too: the roster below is filtered by who actually
+      // sits this subject, and inside FA-IT and Humanities the group cannot say.
+      .select("id, name, roll_no, program, year_of_study, father_name, subject_combination")
       .in("program", scoped)
       .eq("year_of_study", test.year_of_study)
       .is("deleted_at", null)
@@ -100,7 +103,18 @@ export async function buildTestReport(test, { allowedPrograms = [] } = {}) {
 
   const total = Number(test.total_marks) || 0;
 
-  const rows = (students || []).map((student) => {
+  /*
+   * Only the girls who sit this subject.
+   *
+   * Without this a Mathematics test listed every Humanities girl as `notMarked`,
+   * inflated the class size on the result sheet, and printed a slip to send home
+   * to a parent whose daughter has never sat the paper. `takesSubject` keeps
+   * whoever has no combination on record — she may well be in the class, and
+   * dropping her would delete a real mark from the sheet.
+   */
+  const roster = (students || []).filter((s) => takesSubject(s, test.subject));
+
+  const rows = roster.map((student) => {
     const m = byStudent[student.id];
     const isAbsent = !!m?.is_absent;
     // No mark row at all is not the same as a zero — she simply has not been

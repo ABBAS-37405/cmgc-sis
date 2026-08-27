@@ -12,6 +12,8 @@ import Teachers from "../Teachers/Teachers";
 import MonthlyReports from "../MonthlyReports/MonthlyReports";
 import ManageAdmins from "../ManageAdmins/ManageAdmins";
 import StorageCleanup from "../StorageCleanup/StorageCleanup";
+import TestAlert from "../TestAlert/TestAlert";
+import { useTestAlert } from "../TestAlert/useTestAlert";
 import { fetchUsage, runSafeSweep } from "../../lib/storageSweep";
 import { needsSweep, percentFull } from "../../lib/storageCleanup";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
@@ -44,6 +46,15 @@ export default function AdminPortal({ adminProfile, onExit }) {
   const allowedPrograms = useMemo(() => allowedProgramsFor(adminProfile), [adminProfile]);
   // Back walks the tabs she has actually visited, newest first.
   const goToTab = useTabHistory(active, setActive);
+
+  /*
+   * The next weekly test, both classes and as published — the office answers for
+   * the college, not for one group. Keyed on `user_id` rather than the profile's
+   * own id because that is the one column that cannot change under her.
+   */
+  const testAlert = useTestAlert({
+    viewerKey: adminProfile?.user_id ? `admin:${adminProfile.user_id}` : null,
+  });
 
   /*
    * Storage housekeeping, without anyone having to remember to do it.
@@ -80,6 +91,20 @@ export default function AdminPortal({ adminProfile, onExit }) {
 
   return (
     <div className="admin-portal">
+      {testAlert.open && (
+        <TestAlert
+          test={testAlert.test}
+          total={testAlert.total}
+          onClose={testAlert.close}
+          // Only offered where she may actually open that tab — a button that
+          // lands on a blank main area is worse than no button.
+          onOpenSchedule={
+            hasPermission(adminProfile, "notices")
+              ? () => { testAlert.close(); goToTab("notices"); }
+              : null
+          }
+        />
+      )}
       <AdminSidebar active={active} setActive={goToTab} onLogout={onExit} adminProfile={adminProfile} />
       <main className="admin-portal__main">
         {/* Inside main, not beside it: .admin-portal is a flex row, so a sibling

@@ -20,7 +20,7 @@ import { useTestAlert } from "../TestAlert/useTestAlert";
 // portals, which are far bigger than everything she can actually see.
 const AdminPortal = lazy(() => import("../AdminPortal/AdminPortal"));
 const TeacherPortal = lazy(() => import("../TeacherPortal/TeacherPortal"));
-import { supabase } from "../../lib/supabaseClient";
+import { supabase, forgetAuthToken } from "../../lib/supabaseClient";
 import { pushStep, useTabHistory } from "../../lib/backStack";
 import { storedSession, rememberSession, rememberTab, clearSession } from "../../lib/session";
 import { restoreSession } from "../../lib/sessionRestore";
@@ -28,6 +28,50 @@ import { preloadPortalFor } from "../../lib/preload";
 import "./Portal.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+/**
+ * How long a sign-out may hang before the portal closes anyway.
+ *
+ * `supabase.auth.signOut()` is a network call with no timeout of its own, and
+ * this project has already watched Supabase Auth take a request and never answer
+ * it — the same failure the sign-in timeout in `LoginPage` exists for. Awaiting
+ * it here is what made the Logout button do nothing at all: the state below it
+ * never ran, so nothing on screen changed and the admin was left pressing a
+ * button that looked broken.
+ *
+ * Short on purpose. Nothing the admin can see depends on the answer; the screen
+ * is hers back either way, and the fallback below is what makes that honest.
+ */
+const SIGN_OUT_TIMEOUT_MS = 4000;
+const TIMED_OUT = Symbol("sign-out-timeout");
+
+/**
+ * Ends the Supabase Auth session, and never keeps anybody waiting for it.
+ *
+ * A hung request and a failed one look identical from the portal, and in both
+ * cases supabase-js has *not* removed the stored session — it does that only
+ * after the server answers. A live refresh token left behind while our own
+ * marker says the session is over is a logout in appearance only, which is the
+ * one thing `session.js` and `supabaseClient.js` agree must not happen. So
+ * whichever way it goes wrong, the token is dropped locally.
+ *
+ * Never throws, so the caller can fire it and move on.
+ */
+async function revokeAuthSession() {
+  let timer;
+  try {
+    const result = await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), SIGN_OUT_TIMEOUT_MS); }),
+    ]);
+    if (result !== TIMED_OUT && !result?.error) return;
+  } catch {
+    // A rejection here is the same story as an error in the result.
+  } finally {
+    clearTimeout(timer);
+  }
+  forgetAuthToken();
+}
 
 export default function Portal({ onExit }) {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -128,9 +172,11 @@ export default function Portal({ onExit }) {
    * during the same handler that set `role`, where the state variable is still
    * the old one.
    */
-  const signOutToLogin = async (r) => {
+  const signOutToLogin = (r) => {
     // Admins and teachers are both real Supabase Auth sessions; students are not.
-    if (r === "admin" || r === "teacher") await supabase.auth.signOut();
+    // Deliberately not awaited: telling the server is slow and can hang, and the
+    // screen must never wait on it — see `revokeAuthSession` above.
+    if (r === "admin" || r === "teacher") revokeAuthSession();
     // Signing out is the one thing that must outlive the page, or a reload would
     // put back the session she just left.
     clearSession();
@@ -219,8 +265,8 @@ export default function Portal({ onExit }) {
    * back to the website. `onExit` truncates the whole stack from the portal
    * down, so the tab steps and the login step above it go with it.
    */
-  const handleLogout = async () => {
-    await signOutToLogin(role);
+  const handleLogout = () => {
+    signOutToLogin(role);
     loginStep.current = null;
     onExit && onExit();
   };

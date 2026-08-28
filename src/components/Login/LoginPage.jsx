@@ -21,6 +21,42 @@ const PLACEHOLDERS = {
   teacher: "Teacher Email",
 };
 
+/**
+ * How long a sign-in may hang before the screen is given back.
+ *
+ * Supabase Auth answering in half a second or not at all is a failure this
+ * project has actually seen: the REST API stayed healthy on every request while
+ * `/auth/v1/token` accepted the login and never replied. `signInWithPassword`
+ * has no timeout of its own, so the button sat on "Logging in..." for as long as
+ * the admin was willing to watch it, with nothing on screen saying anything was
+ * wrong — and the office reads a frozen portal as a broken portal.
+ *
+ * The timeout cannot cancel anything: the request is already in flight and the
+ * session may still land in storage a minute later. It only releases the screen
+ * and names the cause, which is the difference between "press it again" and
+ * "the portal is down". Generous on purpose — a slow phone must not be told the
+ * service is unreachable when it is merely slow.
+ */
+const AUTH_TIMEOUT_MS = 20000;
+const TIMED_OUT = Symbol("auth-timeout");
+
+const AUTH_TIMEOUT_MESSAGE =
+  "The sign-in service did not respond. This is not your password — Supabase Auth is not answering. " +
+  "Wait a moment and press Login again.";
+
+async function signInWithTimeout(email, password) {
+  let timer;
+  try {
+    const result = await Promise.race([
+      supabase.auth.signInWithPassword({ email, password }),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), AUTH_TIMEOUT_MS); }),
+    ]);
+    return result === TIMED_OUT ? { timedOut: true } : result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default function LoginPage({ onLogin, onBack, onRoleHint = () => {} }) {
   const [role, setRole] = useState("student");
   const [id, setId] = useState("");
@@ -50,10 +86,12 @@ export default function LoginPage({ onLogin, onBack, onRoleHint = () => {} }) {
     onRoleHint(r);
 
     if (r === "admin") {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: identifier,
-        password: pass,
-      });
+      const { data: authData, error: authError, timedOut } = await signInWithTimeout(identifier, pass);
+      if (timedOut) {
+        setLoading(false);
+        setError(AUTH_TIMEOUT_MESSAGE);
+        return;
+      }
       if (authError) {
         setLoading(false);
         setError("Invalid email or password");
@@ -76,10 +114,12 @@ export default function LoginPage({ onLogin, onBack, onRoleHint = () => {} }) {
     if (r === "teacher") {
       // Same Supabase Auth mechanism as the admin login above — a teacher's account is
       // just an auth user whose `teachers` row holds her subjects and rights.
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: identifier,
-        password: pass,
-      });
+      const { data: authData, error: authError, timedOut } = await signInWithTimeout(identifier, pass);
+      if (timedOut) {
+        setLoading(false);
+        setError(AUTH_TIMEOUT_MESSAGE);
+        return;
+      }
       if (authError) {
         setLoading(false);
         setError("Invalid email or password");

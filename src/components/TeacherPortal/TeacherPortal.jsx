@@ -9,8 +9,6 @@ import EnterResults from "../EnterResults/EnterResults";
 import TeacherSalary from "../TeacherSalary/TeacherSalary";
 import ClassPerformance from "../Performance/ClassPerformance";
 import StudentNotices from "../StudentNotices/StudentNotices";
-import TestAlert from "../TestAlert/TestAlert";
-import { useTestAlert } from "../TestAlert/useTestAlert";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
@@ -79,14 +77,6 @@ export default function TeacherPortal({ teacher, onLogout }) {
 
   useEffect(() => { rememberTab(active); }, [active]);
 
-  /*
-   * The next weekly test, both classes. No year is passed on purpose: she is not
-   * in one of the two, she is setting and invigilating for both, and the papers
-   * are left exactly as the office entered them because there is no single group
-   * whose subject a "Mathematics / Biology / Civics" paper could be narrowed to.
-   */
-  const testAlert = useTestAlert({ viewerKey: teacher?.id ? `teacher:${teacher.id}` : null });
-
   const handleChangePassword = async () => {
     const next = window.prompt(`Set a new login password for ${teacher?.name || teacher?.email} (minimum 6 characters):`, "");
     if (next === null) return;
@@ -106,14 +96,6 @@ export default function TeacherPortal({ teacher, onLogout }) {
 
   return (
     <div className="portal">
-      {testAlert.open && (
-        <TestAlert
-          test={testAlert.test}
-          total={testAlert.total}
-          onClose={testAlert.close}
-          onOpenSchedule={() => { testAlert.close(); goToTab("notices"); }}
-        />
-      )}
       <Sidebar
         items={items}
         active={active}

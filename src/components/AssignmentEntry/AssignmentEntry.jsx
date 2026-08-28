@@ -3,10 +3,8 @@ import { Check, Plus, Trash2, FileText, Search, Upload, Eye, Paperclip, Hand } f
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { YEARS, subjectsFor, subjectsForPrograms } from "../../lib/academics";
-import { splitBySubject } from "../../lib/studentSubjects";
 import { teacherSubjectsFor } from "../../lib/teacherAuth";
 import { prepareUpload } from "../../lib/uploads";
-import RosterNote from "../RosterNote/RosterNote";
 import "./AssignmentEntry.css";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -81,9 +79,6 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
   const [file, setFile] = useState(null);
 
   const [students, setStudents] = useState([]);
-  // Who this subject leaves off the sheet, and who is on it only because her
-  // combination was never recorded. See RosterNote.
-  const [rosterSplit, setRosterSplit] = useState({ notTaking: 0, unknown: [] });
   const [subs, setSubs] = useState({});   // student_id -> submission row
   const [marks, setMarks] = useState({}); // student_id -> typed marks
   const [remarks, setRemarks] = useState({});
@@ -142,9 +137,7 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
     const [{ data: roster }, { data: rows }] = await Promise.all([
       supabase
         .from("students")
-        // subject_combination travels with her: a group is not a subject list,
-        // and only one of Humanities' three combinations takes Mathematics.
-        .select("id, name, roll_no, program, year_of_study, subject_combination")
+        .select("id, name, roll_no, program")
         .is("deleted_at", null)
         .in("program", assignmentPrograms(a))
         .eq("year_of_study", a.year_of_study)
@@ -163,17 +156,13 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
       r[row.student_id] = row.remarks ?? "";
       h[row.student_id] = Boolean(row.submitted_in_class);
     });
-    // Only the girls who actually study this subject. Whoever has no combination
-    // on record stays and is flagged rather than dropped — see subjectStatusFor.
-    const split = splitBySubject(roster || [], a.subject);
-    split.taking.forEach((s) => {
+    (roster || []).forEach((s) => {
       if (m[s.id] === undefined) m[s.id] = "";
       if (r[s.id] === undefined) r[s.id] = "";
       if (h[s.id] === undefined) h[s.id] = false;
     });
 
-    setStudents(split.taking);
-    setRosterSplit({ notTaking: split.notTaking.length, unknown: split.unknown });
+    setStudents(roster || []);
     setSubs(byStudent);
     setMarks(m);
     setRemarks(r);
@@ -519,18 +508,10 @@ export default function AssignmentEntry({ teacher = null, allowedPrograms = [], 
                 </div>
               )}
 
-              <RosterNote subject={active.subject} split={rosterSplit} />
-
               {loadingGrades ? (
                 <p className="asn__empty">Loading students...</p>
               ) : students.length === 0 ? (
-                <p className="asn__empty">
-                  Nobody in {assignmentPrograms(active).join(", ")} {active.year_of_study} studies{" "}
-                  {active.subject}
-                  {rosterSplit.notTaking > 0
-                    ? ` — all ${rosterSplit.notTaking} of them take a different combination.`
-                    : "."}
-                </p>
+                <p className="asn__empty">No students in {assignmentPrograms(active).join(", ")} {active.year_of_study}.</p>
               ) : (
                 <>
                   <div className="asn__search">

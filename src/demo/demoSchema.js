@@ -37,7 +37,6 @@ export const TABLES = [
   "college_holidays",
   "staff_salaries",
   "expenses",
-  "test_schedule",
 ];
 
 /**

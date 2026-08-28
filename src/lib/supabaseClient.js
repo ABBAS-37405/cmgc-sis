@@ -48,23 +48,3 @@ if (!__DEMO__) {
     // ignore — storage denied does not stop the app from working
   }
 }
-
-/**
- * Drops the stored auth session by hand, for when `signOut()` could not.
- *
- * supabase-js removes the session from storage only *after* the server answers
- * `/auth/v1/logout`; a request that hangs or fails therefore leaves a live
- * refresh token behind. Our own marker saying the session is over while that
- * token stays is a logout in appearance only — the exact thing the sessionStorage
- * decision above exists to prevent — so the caller falls back to this.
- */
-export function forgetAuthToken() {
-  if (__DEMO__) return;
-  try {
-    Object.keys(sessionStorage)
-      .filter((k) => /^sb-.*-auth-token/.test(k))
-      .forEach((k) => sessionStorage.removeItem(k));
-  } catch {
-    // ignore — storage denied does not stop the app from working
-  }
-}

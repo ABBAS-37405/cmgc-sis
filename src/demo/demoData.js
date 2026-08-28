@@ -16,7 +16,7 @@
  *   are of real girls and must never be dressed up as fake records.
  */
 
-import { PROGRAMS, YEARS, subjectsFor, combinationsFor, formatCombination, compulsoryFor } from "../lib/academics";
+import { PROGRAMS, SUBJECTS, YEARS, subjectsFor } from "../lib/academics";
 // Safe to import, unlike lib/feePlans below: payroll reaches nothing that touches
 // the Supabase client, so there is no cycle back into the client being built.
 import { computeSalary, salaryRowFor } from "../lib/payroll";
@@ -56,35 +56,6 @@ const daysAgo = (n) => {
 const longDate = (d) => d.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
 const pick = (rand, list) => list[Math.floor(rand() * list.length)];
-
-/**
- * Does this seeded girl sit this subject.
- *
- * Deliberately a local string check rather than `takesSubject` from
- * `lib/studentSubjects.js`: importing that here puts it in the **production**
- * landing chunk — measured at **+686 bytes** — because `src/demo` is only
- * removed after Rollup has assigned modules to chunks. It is not a second
- * definition of the rule either; the seed writes an exact combination string on
- * every student, so this is the seed staying consistent with itself.
- */
-const sitsSubject = (s, subject) =>
-  compulsoryFor(s.year_of_study).includes(subject) ||
-  (s.subject_combination || "").includes(subject);
-
-/**
- * A real elective combination for this group, spread across the ones it offers.
- *
- * Not `SUBJECTS[group].slice(0, 3)`, which happened to spell out combination one
- * and gave every Humanities girl the same three subjects — so a Civics class
- * test in the demo would find nobody, now that marks entry filters the roster by
- * who actually sits the subject. Deterministic like everything else here.
- */
-const comboFor = (rand, group) => {
-  const combos = combinationsFor(group);
-  if (combos.length === 0) return null;
-  return formatCombination(combos[Math.floor(rand() * combos.length)]);
-};
-
 const between = (rand, lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
 
 /**
@@ -153,7 +124,7 @@ export function buildDemoDatabase() {
     assignments: [], assignment_submissions: [], fees: [], payment_transactions: [],
     notices: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
     report_log: [], staff: [], staff_attendance: [], college_holidays: [], staff_salaries: [],
-    expenses: [], teacher_login_passwords: [], test_schedule: [],
+    expenses: [], teacher_login_passwords: [],
   };
 
   /* ------------------------------------------------------------- staff */
@@ -331,7 +302,7 @@ export function buildDemoDatabase() {
           cnic: `${cnicDigits.slice(0, 5)}-${cnicDigits.slice(5, 12)}-${cnicDigits.slice(12)}`,
           program,
           year_of_study: year,
-          subject_combination: comboFor(rand, program),
+          subject_combination: (SUBJECTS[program] || []).slice(0, 3).join(", "),
           password: "cmgc123",
           phone: `030${between(rand, 10000000, 99999999)}`,
           whatsapp: `030${between(rand, 10000000, 99999999)}`,
@@ -407,23 +378,11 @@ export function buildDemoDatabase() {
 
   PROGRAMS.forEach((program) => {
     YEARS.forEach((year) => {
-      const classList = db.students.filter((s) => s.program === program && s.year_of_study === year && !s.deleted_at);
-      if (classList.length === 0) return;
+      const roster = db.students.filter((s) => s.program === program && s.year_of_study === year && !s.deleted_at);
+      if (roster.length === 0) return;
       const subjects = subjectsFor(program, year).slice(0, 3);
 
       subjects.forEach((subject) => {
-        // Only the girls who actually sit it — Humanities offers three
-        // combinations and only one takes Mathematics. Marking the whole class
-        // would leave the demo holding marks that its own entry screens filter
-        // out, which is exactly the inconsistency the seed exists to avoid.
-        // Only the girls who actually sit it — Humanities offers three
-        // combinations and only one takes Mathematics. Marking the whole class
-        // would leave the demo holding marks its own entry screens filter out,
-        // which is the inconsistency this seed exists to avoid.
-        const roster = classList.filter((s) => sitsSubject(s, subject));
-        if (roster.length === 0) return;
-        if (roster.length === 0) return;
-
         const teacher =
           db.teachers.find((t) => (t.subjects || []).includes(subject) && (t.programs.length === 0 || t.programs.includes(program))) ||
           db.teachers[1];
@@ -521,7 +480,6 @@ export function buildDemoDatabase() {
 
       db.students
         .filter((s) => !s.deleted_at && a.programs.includes(s.program) && s.year_of_study === year)
-
         .forEach((s) => {
           if (rand() < 0.25) return; // she has not handed it in
           const graded = a.days > 0 && rand() < 0.7;
@@ -600,7 +558,7 @@ export function buildDemoDatabase() {
       address: `${pick(rand, CITY_AREAS)}, Gujranwala`,
       program,
       group_selected: program,
-      subject_combination: comboFor(rand, program),
+      subject_combination: (SUBJECTS[program] || []).slice(0, 3).join(", "),
       year_of_study: "1st Year",
       board: pick(rand, BOARDS),
       matric_marks: marks,
@@ -649,37 +607,6 @@ export function buildDemoDatabase() {
     id: uid(10), audience: "all", body: null, file_url: null, file_name: null,
     ...n, created_at: at(daysAgo(i * 4 + 1)),
   }));
-
-  /*
-   * The weekly test schedule behind the box every portal opens with.
-   *
-   * Dated relative to today like everything else here, and centred so that some
-   * tests are already sat and one is a few days away — a schedule seeded entirely
-   * in the past would demonstrate the feature by not appearing. The alternating
-   * two sets are the real college's: Maths/Bio/Civics · Chem/Comp/Education ·
-   * Islamiat/TQ/PakStudies one week, Urdu · Physics/Eco/Sociology · English the
-   * next.
-   */
-  const SET_A = [
-    ["Mathematics", "Biology", "Civics"],
-    ["Chemistry", "Computer Science", "Education"],
-    ["Islamiat", "Tarjama Tul Quran", "Pakistan Studies"],
-  ];
-  const SET_B = [["Urdu"], ["Physics", "Economics", "Sociology"], ["English"]];
-
-  // Four behind, one in three days' time, five ahead of that.
-  [-25, -18, -11, -4, 3, 10, 17, 24, 31, 38].forEach((offset, i) => {
-    db.test_schedule.push({
-      id: uid(11),
-      test_date: iso(daysAgo(-offset)),
-      // Swapped each week, so the two classes never sit the same papers together.
-      first_year_papers: i % 2 === 0 ? SET_B : SET_A,
-      second_year_papers: i % 2 === 0 ? SET_A : SET_B,
-      note: null,
-      created_at: at(daysAgo(30)),
-      updated_at: at(daysAgo(30)),
-    });
-  });
 
   const lmsSeed = [
     { subject: "Physics", category: "lecture", title: "Motion & Force — recorded lecture",

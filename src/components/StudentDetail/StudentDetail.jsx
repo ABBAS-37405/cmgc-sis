@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Save, Pencil, Upload, Eye, FileText } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS, combinationsFor, formatCombination, groupHasChoice } from "../../lib/academics";
+import { PROGRAMS, subjectsFor } from "../../lib/academics";
 import {
   DETAIL_GROUPS, DOCUMENT_FIELDS, detailsFrom, detailsToRow, matricPercentage,
 } from "../../lib/studentFields";
@@ -155,43 +155,7 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
     if (onSaved) onSaved();
   };
 
-  // The combinations this group actually offers. Humanities has three and FA-IT
-  // two, so the group name does not settle which subjects she sits — and typing
-  // that line by hand is what produced the wrong entries this screen exists to
-  // correct. Offering the list is the only way an admin can pick the right one.
-  const comboOptions = combinationsFor(core.program).map(formatCombination);
-  const comboOnRecord = (core.subject_combination || "").trim();
-
-  // A value the group does not offer is kept as an option rather than dropped.
-  // Dropping it would blank the field the moment the modal opened and quietly
-  // take the record with it on the next save; it is shown, marked, and left for
-  // the admin to replace.
-  const comboUnlisted = Boolean(comboOnRecord) && !comboOptions.includes(comboOnRecord);
-  const comboChoices = [
-    ...comboOptions.map((c) => ({ value: c, label: c })),
-    ...(comboUnlisted ? [{ value: comboOnRecord, label: `${comboOnRecord} (on record — not offered by ${core.program})` }] : []),
-  ];
-
-  const comboHint = comboUnlisted
-    ? `This is not one of ${core.program}'s combinations. Pick the right one to correct it.`
-    : groupHasChoice(core.program)
-      ? `${core.program} offers ${comboOptions.length} combinations — pick the one she actually studies. It decides whose class-test and marks sheets she appears on.`
-      : comboOptions.length === 1
-        ? `${core.program} has one combination, so every girl in the group studies these.`
-        : undefined;
-
-  // Changing the group changes what the combination may be. A group with a
-  // single combination settles it, so it is filled in; a group with a choice
-  // cannot be guessed, so anything the new group does not offer is cleared and
-  // the admin picks. Nothing is left pointing at another group's electives.
-  const changeProgram = (program) => {
-    const options = combinationsFor(program).map(formatCombination);
-    const current = (core.subject_combination || "").trim();
-    const next = options.length === 1
-      ? options[0]
-      : options.includes(current) ? current : "";
-    setCore({ ...core, program, subject_combination: next });
-  };
+  const subjectOptions = subjectsFor(core.program, core.year_of_study);
 
   return (
     <div className="sd-overlay" onClick={onClose}>
@@ -228,7 +192,7 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
               <Field label="B-Form No." editing={editing} value={core.cnic}
                 onChange={(v) => setCore({ ...core, cnic: v })} />
               <Field label="Program" editing={editing} value={core.program} type="select" options={visiblePrograms}
-                onChange={changeProgram} />
+                onChange={(v) => setCore({ ...core, program: v })} />
               <Field label="Class" editing={editing} value={core.year_of_study} type="select" options={YEARS}
                 onChange={(v) => setCore({ ...core, year_of_study: v })} />
               <Field label="Phone" editing={editing} value={core.phone}
@@ -237,11 +201,9 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
                 hint="Stored as typed — this is what she enters on the portal."
                 onChange={(v) => setCore({ ...core, password: v })} />
               <Field
-                label="Subject Combination" wide type="select"
+                label="Subject Combination" wide
                 editing={editing} value={core.subject_combination}
-                options={comboChoices}
-                emptyLabel="— Not recorded —"
-                hint={comboHint}
+                hint={subjectOptions.length ? `Group offers: ${subjectOptions.join(", ")}` : undefined}
                 onChange={(v) => setCore({ ...core, subject_combination: v })}
               />
             </div>
@@ -318,7 +280,7 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
 }
 
 /** One label + value, rendered as text or as an input depending on `editing`. */
-function Field({ label, value, editing, onChange, type = "text", options, placeholder, hint, wide, emptyLabel = "— Select —" }) {
+function Field({ label, value, editing, onChange, type = "text", options, placeholder, hint, wide }) {
   return (
     <div className={"sd-field " + (wide ? "sd-field--wide" : "")}>
       <label>{label}</label>
@@ -326,15 +288,8 @@ function Field({ label, value, editing, onChange, type = "text", options, placeh
         <p className="sd-value">{show(value)}</p>
       ) : type === "select" ? (
         <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-          <option value="">{emptyLabel}</option>
-          {/* An option may be a plain string or { value, label } — the second form
-              is what lets a combination be shown under a label that says it is
-              not one this group offers, without changing what gets saved. */}
-          {(options || []).map((o) => (
-            typeof o === "string"
-              ? <option key={o}>{o}</option>
-              : <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          <option value="">— Select —</option>
+          {(options || []).map((o) => <option key={o}>{o}</option>)}
         </select>
       ) : type === "boolean" ? (
         <label className="sd-check">

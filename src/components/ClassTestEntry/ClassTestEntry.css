@@ -73,16 +73,3 @@
 .cte__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
 
 @media (min-width: 768px) { .cte__layout { grid-template-columns: 260px 1fr; } }
-
-/* A girl kept on the sheet because her subject combination was never recorded.
-   See RosterNote for why she is shown rather than dropped. */
-.cte__unknown-tag {
-  margin-left: 6px;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 1px 7px;
-  border: 1px dashed var(--border);
-  color: var(--subtext);
-  white-space: nowrap;
-}

@@ -3,9 +3,7 @@ import { Check, Plus, Trash2, ClipboardList, Search } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { YEARS, subjectsFor, subjectsForPrograms } from "../../lib/academics";
-import { splitBySubject } from "../../lib/studentSubjects";
 import { teacherSubjectsFor } from "../../lib/teacherAuth";
-import RosterNote from "../RosterNote/RosterNote";
 import "./ClassTestEntry.css";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -88,13 +86,6 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
   const [newTest, setNewTest] = useState({ title: "", test_date: todayStr(), total_marks: "10", teacher_id: "" });
 
   const [students, setStudents] = useState([]);
-  /*
-   * Who was left off this sheet, and who is on it only because we could not
-   * tell. Said on screen rather than left silent: a teacher who knows the class
-   * has forty girls and counts thirty-one needs to see why, and a girl with no
-   * combination recorded is a record to fix, not a row to wonder about.
-   */
-  const [rosterSplit, setRosterSplit] = useState({ notTaking: 0, unknown: [] });
   const [marks, setMarks] = useState({});
   const [absents, setAbsents] = useState({});
   const [search, setSearch] = useState("");
@@ -150,22 +141,15 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
 
     const { data: studentRows } = await supabase
       .from("students")
-      // subject_combination travels with her because a group is not the answer:
-      // Humanities offers three combinations, and only one of them takes
-      // Mathematics. Without it every Humanities girl lands on a Maths sheet.
-      .select("id, name, roll_no, program, year_of_study, subject_combination")
+      .select("id, name, roll_no, program")
       .is("deleted_at", null)
       .in("program", testPrograms(test))
       .eq("year_of_study", test.year_of_study)
       .order("program")
       .order("name");
 
-    // Only the girls who actually sit this subject. Whoever has no combination
-    // on record is kept and flagged rather than dropped — see subjectStatusFor.
-    const split = splitBySubject(studentRows || [], test.subject);
-    const roster = split.taking;
+    const roster = studentRows || [];
     setStudents(roster);
-    setRosterSplit({ notTaking: split.notTaking.length, unknown: split.unknown });
 
     const nextMarks = {};
     const nextAbsents = {};
@@ -458,18 +442,10 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
                 </div>
               </div>
 
-              <RosterNote subject={activeTest.subject} split={rosterSplit} />
-
               {loadingMarks ? (
                 <p className="cte__empty">Loading students...</p>
               ) : students.length === 0 ? (
-                <p className="cte__empty">
-                  Nobody in {testPrograms(activeTest).join(", ")} {activeTest.year_of_study} studies{" "}
-                  {activeTest.subject}
-                  {rosterSplit.notTaking > 0
-                    ? ` — all ${rosterSplit.notTaking} of them take a different combination.`
-                    : "."}
-                </p>
+                <p className="cte__empty">No students found in {testPrograms(activeTest).join(", ")} {activeTest.year_of_study}.</p>
               ) : (
                 <>
                   <div className="cte__search">
@@ -489,14 +465,6 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
                         <p className="cte__student-name">
                           {s.name}
                           {isCombined && <span className="cte__program-tag">{s.program}</span>}
-                          {rosterSplit.unknown.some((u) => u.id === s.id) && (
-                            <span
-                              className="cte__unknown-tag"
-                              title="No subject combination on her record, so we cannot tell whether she takes this subject. Set it from Students - Edit."
-                            >
-                              combination not set
-                            </span>
-                          )}
                         </p>
                         <p className="cte__student-roll">{s.roll_no}</p>
                       </div>

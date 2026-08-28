@@ -37,15 +37,3 @@
 .enter-results__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
 
 @media (min-width: 768px) { .enter-results__layout { grid-template-columns: 240px 1fr; } }
-/* Which combination this girl actually takes — shown only for FA-IT and
-   Humanities, the two groups where the group name does not settle it. */
-.enter-results__combination {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--subtext);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 11px;
-  margin: 10px 0 0;
-}

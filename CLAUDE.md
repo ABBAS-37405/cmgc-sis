@@ -83,7 +83,7 @@ Refreshing used to drop whoever was working back onto the landing page, because 
 
 Most groups have a single combination. **FA-IT (2 options) and Humanities (3) let the applicant choose**, and `groupHasChoice()` is what drives that branch in `AdmissionPage`. The pick is stored as a readable string in `applications.subject_combination`, then copied to `students.subject_combination` on approval (`supabase_fa_it_group.sql`).
 
-**`subject_combination` is a filter, not just a record**, and `src/lib/studentSubjects.js` is the single definition of it. Offering a group's whole list to every girl in it was wrong wherever a group has more than one combination: a Maths class test listed every Humanities girl, including the two thirds who take Civics instead, and an Economics test did the same across FA-IT and Humanities. Four screens go through that file now — `ClassTestEntry` and `AssignmentEntry` filter their roster by `splitBySubject(students, subject)`, `EnterResults` builds one girl's marks sheet from `studiedSubjects(...)`, and `buildTestReport` filters the class it ranks and prints slips for. See "Who actually sits a subject" below.
+Note the asymmetry this creates: marks entry (`EnterResults`, `ClassTestEntry`) offers the group's **whole** subject list, not one student's chosen three, because a teacher records a subject across the group rather than per student. `subject_combination` is currently a record of what she opted for, not a filter.
 
 **The year is the one thing that does narrow that list.** `COMPULSORY_SUBJECTS` is the union of both years, and `YEAR_ONLY_COMPULSORY` marks the two that belong to one year only — **Islamiat is examined in 1st year and Pakistan Studies in 2nd**. So `subjectsFor(group)` and `SUBJECTS[group]` (no year) are the union, for the screens with no class in hand — the teacher's subject chips, `ALL_SUBJECTS`, the public Programs note; every screen that *does* know the class passes it (`EnterResults` from `student.year_of_study`, `ClassTestEntry`/`AssignmentEntry` from their year selector, `subjectsForPrograms(programs, year)`, `teacherSubjectsFor(teacher, programs, year)`). Nothing in the database constrains `results.subject`, so this is a UI list only — which is why `EnterResults` unions in any subject the girl **already has a mark in**: saving deletes that exam's rows and writes back the list on screen, so a subject missing from the sheet would silently discard marks entered under an older list.
 
@@ -102,7 +102,6 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_student_details.sql` — the 25 columns that bring `students` up to parity with `applications` (`whatsapp`, contact, personal, family/finance, matric record, and the five document URLs), plus a backfill joining `applications a` on `a.bform = s.cnic` with `coalesce` so nothing already set is overwritten, and a `whatsapp = phone` fallback.
 - `supabase_monthly_reports.sql` — the `reports` storage bucket and the `report_log` table behind Monthly Reports. Adds no columns to anything: the report is assembled in the browser from tables that already exist. Note the security trade recorded at the bottom of that file — report PDFs sit in a public bucket because the parent opening the link has no login.
 - `supabase_notices_upgrade.sql` — `notices.body` / `file_url` / `file_name` / `audience`, the `notice-files` bucket, and a **rebuild of every RLS policy on `notices`**. The rebuild is the part to read: the select policy was open to `anon` with no condition, which was right while every notice really did go to the college and is a leak the moment one does not. It now returns `audience = 'all'` to anon and everything to signed-in staff. Existing policy names differ between databases (this table predates the SQL files here), so they are read out of `pg_policies` and dropped in a `do` block rather than guessed at — a permissive policy is OR'd in, so one survivor undoes the whole thing.
-- `supabase_test_schedule.sql` — the `test_schedule` table behind the weekly test alert every portal opens with. Adds no column to anything else and needs no new permission key: the write policy reuses `admin_can_notices()`, so **it must be run after `supabase_notices_upgrade.sql`** and a `do` block at the top says so rather than failing on a missing function. Reads are open to `anon`, because the schedule is already a public document and a student has no auth account. It seeds the college's own 2026-27 sheet, `on conflict (test_date) do nothing`, so re-running never overwrites an edit the office has made.
 - `supabase_teacher_password_vault.sql` — `teacher_login_passwords`, the one table a super admin can read a teacher's portal password out of. See "Reading a password back" below.
 - `SUPABASE_TEACHERS_CLASS_TESTS.md` — `teachers.user_id`/`rights[]`/`subjects[]`, `class_tests` + `class_test_marks`, the `is_staff()` / `teacher_can()` helpers and every policy built on them. Note the `teacher read students` policy is mandatory: `students_select` is scoped to `anon`, and admins only read students through their own write policy, so without it a teacher's portal shows an empty roster everywhere.
 
@@ -111,7 +110,7 @@ Schema changes are hand-run SQL documented in markdown at the repo root, and app
 - `supabase_expenses.sql` — the `expenses` table behind Reports → Accounts. Adds nothing else: income is read from `payment_transactions` and the wage bill from `staff_salaries`, both of which already exist. Gated on `can_manage_teachers()`, and the reason is written up in the file — see the Accounts section below.
 - `SUPABASE_STAFF_PAYROLL.md` / `supabase_staff_payroll.sql` — payroll for everyone the college pays: `teachers.employment_type`/`monthly_salary`/`per_day_salary`/`whatsapp`, the `staff` table (non-teaching), plus `staff_attendance`, `college_holidays` and `staff_salaries`. The markdown explains it, the `.sql` is what gets pasted — keep them in sync, same arrangement as the teachers migration. Section 0 of the `.sql` renames the tables from an earlier teacher-only version of this migration, so it is safe on a database that already ran that one.
 
-Tables in use: `teacher_login_passwords`, `test_schedule`, `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`, `expenses`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports`, `lms-materials`, `notice-files` (all public).
+Tables in use: `teacher_login_passwords`, `students`, `admin_profiles`, `teachers`, `staff`, `applications`, `attendance`, `results`, `class_tests`, `class_test_marks`, `assignments`, `assignment_submissions`, `fees`, `payment_transactions`, `notices`, `report_log`, `staff_attendance`, `college_holidays`, `staff_salaries`, `expenses`. Storage buckets: `student-profiles`, `admission-documents`, `assignments`, `reports`, `lms-materials`, `notice-files` (all public).
 
 ### Fee flow
 
@@ -191,22 +190,6 @@ Three rules there:
 The honest cost: "last looked" is per browser, so her mother's phone has its own idea of what she has seen. The alternative needs real student accounts.
 
 Unlike the `class_tests` policies, which settle for `is_staff()`, the write policy checks entitlement to **every** group the row covers — `bool_and(teacher_can('lms', p))` for a teacher, `admin_can_lms()` (the `lms` permission plus `programs <@ allowed_programs`) for an admin. A combined item is therefore not a way to reach a group you were never assigned.
-
-### Who actually sits a subject
-
-`src/lib/studentSubjects.js` answers one question — does this girl study this subject — and everything that needs it goes through that file, so there is one definition. Her group is the floor, not the answer: Humanities offers three elective combinations and only one of them takes Mathematics, so "Humanities" cannot decide a Maths roster. `students.subject_combination` can, and does.
-
-**Three states, not two, and the third is the load-bearing one.** `subjectStatusFor()` returns `"yes"`, `"no"` or `"unknown"`. A student enrolled before that column existed, or added by hand without one, carries no combination; in a group that offers a choice there is then genuinely no way to tell. **Excluding her would hide her from marks entry entirely and nothing would ever say why** — her marks simply would not exist. So `"unknown"` counts as taking (`takesSubject`), and `splitBySubject()` carries those girls out separately so the screen can name them. The same rule as `notMarked` never printing as 0 and as the storage sweep never deleting on the strength of a failed read: show too much and say so, never quietly show too little.
-
-`components/RosterNote` is that sentence, shared by Class Tests and Assignments rather than written twice — how many the subject left off the sheet, and which girls are on it only because their combination is missing, with where to fix it. `EnterResults` says the same thing in its own words, and only for the two groups where the group name does not settle it.
-
-Three more things to keep:
-
-- **Every screen that filters must also select the column.** `subject_combination` (and `year_of_study`, for the compulsory half) has to be in the `select(...)`, or every girl comes back `"unknown"` and the filter silently does nothing. That is the failure mode to watch for: it looks exactly like the bug it was meant to fix.
-- **Compulsory subjects are nobody's choice**, and the year still narrows them — Islamiat is 1st year, Pakistan Studies 2nd. A single-combination group (Pre-Engineering, Pre-Medical, ICS, General Science) is decided by the group alone and never reports `"unknown"`.
-- **It is split from `academics.js` for bundle reasons.** That file is reached from the landing page, so anything in it ships to a first-time visitor; leaving this logic there measured **+703 bytes on a bundle held at ~431 kB**. Same split as `session.js` / `sessionRestore.js` and `notices.js` / `noticesAdmin.js`. It imports only `academics.js`, so it stays Node-drivable.
-
-**Marks already recorded are not touched.** A mark written before this — a Maths score against a Humanities girl who does not take Maths — stays in `class_test_marks`. It drops off the entry sheet and the test report, because both build their roster through this file, but nothing deletes it, and `monthlyReport.js` and `classPerformance.js` read marks directly and will still count it. Cleaning that up is a decision for the office, not something to do silently.
 
 ### Teachers & class tests
 
@@ -419,7 +402,7 @@ Cells are primitives or `{ v, s }`, where `s` is an index into `S` — the style
 
 Click-to-chat can only pre-fill — a human must press Send. Actual automated delivery needs the WhatsApp Business API: `POST /api/send-credentials` in `server.js` (email via SMTP, WhatsApp via Twilio) is wired for it but `SMTP_*` / `TWILIO_*` are not set in `.env`, so the deep-link path is the one in use.
 
-**`components/WhatsAppQueue` is the whole of bulk sending**, and it is one implementation on purpose — the popup and focus handling below is subtle enough that a second copy would drift within a term. `useWhatsAppQueue()` is the machine, `<WhatsAppQueue>` is its banner, and it is driven from three places: `MarkAttendance` twice (absence reminders on the register, the struck-off warning on the Out of Attendance tab) and `StudentsList` once (the office's own message to the enrolled roster — see below). `openWhatsAppQueue()` in `lib/whatsapp.js` is the older click-per-chat helper and is no longer used by anything.
+**`components/WhatsAppQueue` is the whole of bulk sending**, and it is one implementation on purpose — the popup and focus handling below is subtle enough that a second copy would drift within a term. `useWhatsAppQueue()` is the machine, `<WhatsAppQueue>` is its banner, and `MarkAttendance` drives it twice — absence reminders on the register, the struck-off warning on the Out of Attendance tab. `openWhatsAppQueue()` in `lib/whatsapp.js` is the older click-per-chat helper and is no longer used by anything.
 
 **The queue advances by itself**, because a class of thirty meant thirty clicks in the portal on top of thirty presses of Send. The admin answers a single `confirm` and never touches the tab again. Four things make that work, and each one is load-bearing:
 
@@ -429,21 +412,6 @@ Click-to-chat can only pre-fill — a human must press Send. Actual automated de
 - **Entries arrive already screened and already carrying their message.** Anything that could raise a modal has to be resolved before `start` — `sendAbsenceWhatsApp`'s prompt for a missing number is right for a single-row button and fatal for a queue, where one dialog half way through strands every recipient after it. Whoever cannot be messaged goes in `skipped` and is named when the run finishes.
 
 The cost of this design is that returning from *any* other window advances the queue, which the banner says out loud alongside a Stop button. Removing that ambiguity means the Business API, not more event plumbing. **A screen that hides the banner must also stop the run** — the hook lives in the screen, not the banner, so whichever screen owns a `useWhatsAppQueue` must call `wa.stop()` wherever it stops rendering the banner; without that the queue keeps opening chats with nothing on screen saying so.
-
-### The office's own message to the roster
-
-The Enrolled Students list's WhatsApp button has two modes, chosen by a radio pair above the table.
-
-**Login ID & password is the default, and that is the whole point of making it a mode rather than a setting.** That is what the button has always done, and a button whose meaning changed under an admin who did not choose it is how a girl's password ends up in a chat that was supposed to say the college is closed on Friday. The second mode — a message the office types into a box — is opt-in, per visit, and never remembered.
-
-Four things to keep:
-
-- **The typed message goes out exactly as typed.** The only substitutions are `{name}` and `{roll}`, offered because a message to two hundred girls that does not say who it is for reads as a circular. This is the admin's own words, not a template the app owns, so nothing is prepended, appended or reformatted around it.
-- **"Send to all" means whoever is listed, not whoever is enrolled.** It runs over `filteredStudents`, so the year filter and the search box are how the office narrows it — the filters were already there and are deliberately untouched. The screen says so out loud, because "all" is the word most likely to be read as more than it is. Scoping to a sub-admin's programs needs nothing extra: `fetchStudents` has no program filter of its own and RLS is what limits the roster.
-- **The bulk send is a queue and its entries are screened before it starts** — the rule from the WhatsApp section. `askWhatsAppNumber()` is shared by the two *single-row* paths so a missing number behaves the same way in both, and is deliberately not used by the bulk send, where one prompt half way through strands every recipient after it. Whoever has no usable number is named when the run finishes.
-- **Leaving the tab stops the run.** `changeTab()` calls `wa.stop()`, because the banner is rendered inside the Enrolled Students tab and a queue that keeps opening chats with nothing on screen saying so is exactly what that rule exists to prevent. The banner sits outside the custom-mode branch, so switching the radio back mid-run does not hide it.
-
-Bulk credentials are deliberately **not** offered. One girl's password read out at the counter is the office's job; two hundred passwords pushed out in one run is a different act, and nothing has asked for it.
 
 ### Notices
 
@@ -470,28 +438,6 @@ Three things about it that are easy to get wrong:
 Adding a category means editing `NOTICE_CATEGORIES` and `CATEGORY_ICON` in `lib/notices.js` (plus `CATEGORY_COLOR` for the public board's tint), and nothing else. The `id` strings land in `notices.category`, so they are not free to rename once posted.
 
 There is deliberately **no WhatsApp forward here.** It was removed: a notice already reaches every student through the portal tab and the public board the moment it is posted, and click-to-chat cannot actually send — it opened one chat per student for the admin to press Send in, thirty times, to deliver what the portal had already delivered. Bulk WhatsApp remains where the message is genuinely per-girl and time-critical (`MarkAttendance`'s absence reminders, the report and salary sends).
-
-### The weekly test alert
-
-Every portal — student, teacher and admin — raises a box on open naming the next weekly class test, its date and the papers on it, and the schedule advances by itself: once a test day passes, the box is about the one after it, until the last, after which it stops appearing.
-
-- `test_schedule` (`supabase_test_schedule.sql`) is the schedule, edited from **Notices → Test Schedule**.
-- `src/lib/testSchedule.js` is every decision made from it, and imports only `academics.js` — Node-drivable, like `payroll.js` and `accounts.js`.
-- `src/lib/testScheduleDb.js` is the only half that knows a database exists. Same split as `session.js` / `sessionRestore.js`.
-- `components/TestAlert/` is the box (`useTestAlert` decides *whether*, `TestAlert.jsx` only draws); `components/Notices/TestScheduleAdmin.jsx` is the editor.
-
-**It is a sub-tab of Notices, and reuses `admin_can_notices()` rather than taking a permission key of its own.** Publishing the schedule has always been the same act by the same person — it goes up as a notice with the spreadsheet attached. A new `PERMISSION_KEYS` entry would have meant a migration here and a matching change in `adminAuth.js` for a right nobody would ever hold separately. `Notices.jsx` is now the two-tab shell; the posting screen it used to be is `PostNotices.jsx`.
-
-Six things that are easy to get wrong:
-
-- **A failed read falls back to the built-in 2026-27 sheet; an empty table does not.** They are opposite facts. A missing table (a deploy landing before the SQL is pasted) or a refused read says nothing about what the schedule is, and a box that vanishes for that reason is the worse failure — the same reasoning as `fetchRoster` retrying on `42703`. A table that is genuinely *empty* is an office that cleared it at the end of a year, and last year's sheet reappearing would be worse than nothing. The admin screen says out loud which of the two it is showing, because they are opposite instructions.
-- **PostgREST reports a missing table as `PGRST205`, not `42P01`.** Checking only the Postgres code — the obvious guess — leaves a database with no migration run looking like an unexplained failure. `isMissingTable()` accepts both.
-- **The test number and the weekday are derived, never stored.** The number is the row's position in date order, which is exactly what the printed sheet's TNO column is: stored, an office that moves one date renumbers twenty rows by hand or ends up with two tests numbered 4. The weekday is the date. This is also why `shouldTell` keys its memory on the test's **date** — keyed on the number, moving one date would silently re-announce every test after it.
-- **A paper is a list of subjects, not one subject.** The college's sheet writes a day's first paper as "MATHS/BIO/CVS": one period, sat by every group at once, in whichever of those is hers. `resolveSlot` narrows it by **intersecting** with what she actually studies — her group, and her `subject_combination` where the group offered a choice (Humanities has three, and the group alone cannot say whether Mathematics or Civics is her paper). It never guesses: where more than one candidate survives (a 1st year sits both Islamiat and Tarjama Tul Quran) it names both, where none does it hands back the paper exactly as entered, and `narrowed` is what lets the screen keep the entered wording *beside* hers rather than silently replacing it. A teacher or an admin passes no student and sees both classes as entered — she is not in one of the two, she is invigilating both.
-- **Two announcement rules, because a schedule has two different moments.** A test that has just become the next one is announced **however far off it is** — a girl whose first paper is a fortnight away should hear that while she can still do something about it. After that it goes quiet until `NOTICE_WINDOW_DAYS` (7) before the paper, then asks **once a day**. A box dismissed a fortnight early that never came back would be the worst of both. `shouldTell(test, told, today)` is the whole of it and lives in `testSchedule.js`, not in the hook, so it can be driven from plain Node. The memory is per viewer (student id / `teachers.id` / `admin_profiles.user_id`), because a shared family phone signs two sisters in and they are not in the same class.
-- **`todayKey()`, never `toISOString()`.** Dates are sliced and rebuilt through `Date.UTC` on both sides of a comparison — the same trap `monthKeyOf` avoids in `accounts.js`. `new Date("2026-09-04")` is UTC midnight, and in Pakistan a portal opened before 5am would be told yesterday's date.
-
-`useTestAlert` decides during render and its effect only writes storage — do not turn that back into a `setState` inside an effect. Everything here is reached only from the three portals, all of which are lazy, so none of it touches the landing bundle.
 
 ### Uploads — every bucket write goes through one file
 

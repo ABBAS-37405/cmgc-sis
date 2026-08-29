@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
-import { subjectsFor } from "../../lib/academics";
+import { groupHasChoice } from "../../lib/academics";
+import { studiedSubjects } from "../../lib/studentSubjects";
 import { EXAM_TYPES } from "../../lib/exams";
 import "./EnterResults.css";
 
@@ -64,11 +65,35 @@ export default function EnterResults({ allowedPrograms = [] }) {
     localStorage.setItem(EXAM_SELECTION_KEY, JSON.stringify({ examType, examDate, examMonth }));
   }, [examType, examDate, examMonth]);
 
-  // The marks sheet for the girl on screen: what her class studies — Islamiat in 1st
-  // year, Pakistan Studies in 2nd — plus anything she already carries a mark in.
+  /*
+   * The marks sheet for the girl on screen.
+   *
+   * **Her own subjects, not her group's.** A group is not a subject list:
+   * Humanities offers three combinations and only one of them takes Mathematics,
+   * so offering the group's whole list put a Maths row in front of a girl who
+   * has never sat it. `studiedSubjects` narrows it to the combination on her
+   * record, and falls back to the group's full list when none was recorded —
+   * showing more than she takes is a harmless over-answer, showing a subject she
+   * does not sit is not.
+   *
+   * The year still narrows the compulsory half (Islamiat in 1st year, Pakistan
+   * Studies in 2nd), and anything she **already carries a mark in** is unioned
+   * back in. That last part is not a nicety: saving deletes this exam's rows and
+   * writes back the list on screen, so a subject missing from the sheet would
+   * silently discard marks entered under an older list.
+   */
   const sheetSubjects = selected
-    ? [...subjectsFor(selected.program, selected.year_of_study), ...extraSubjects]
+    ? [...studiedSubjects(selected.program, selected.year_of_study, selected.subject_combination), ...extraSubjects]
     : [];
+
+  // Said on screen only where the group actually offered a choice — everywhere
+  // else the sheet is simply the group's list and there is nothing to explain.
+  const combinationNote =
+    selected && groupHasChoice(selected.program)
+      ? selected.subject_combination
+        ? `Her combination: ${selected.subject_combination}`
+        : "No subject combination on her record, so every subject this group offers is listed. Set it from Students → Edit."
+      : "";
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -76,7 +101,9 @@ export default function EnterResults({ allowedPrograms = [] }) {
       .from("students")
       // year_of_study travels with her because the subject list depends on it:
       // Islamiat is examined in 1st year, Pakistan Studies in 2nd.
-      .select("id, name, roll_no, program, year_of_study")
+      // subject_combination too: within FA-IT and Humanities it is the only
+      // thing that says which electives are actually hers.
+      .select("id, name, roll_no, program, year_of_study, subject_combination")
       .is("deleted_at", null)
       .order("program")
       .order("name");
@@ -125,13 +152,13 @@ export default function EnterResults({ allowedPrograms = [] }) {
       // missing from the sheet is a mark quietly thrown away.
       setExtraSubjects(
         [...new Set(data.map((r) => r.subject))]
-          .filter((s) => !subjectsFor(student.program, student.year_of_study).includes(s))
+          .filter((s) => !studiedSubjects(student.program, student.year_of_study, student.subject_combination).includes(s))
       );
     } else {
       setExtraSubjects([]);
       const emptyMarks = {};
       const emptyTotal = {};
-      subjectsFor(student.program, student.year_of_study).forEach((s) => {
+      studiedSubjects(student.program, student.year_of_study, student.subject_combination).forEach((s) => {
         emptyMarks[s] = "";
         emptyTotal[s] = "100";
       });
@@ -267,6 +294,9 @@ export default function EnterResults({ allowedPrograms = [] }) {
                   </div>
                 )}
               </div>
+
+              {/* Why this sheet is shorter (or longer) than the group's list. */}
+              {combinationNote && <p className="enter-results__combination">{combinationNote}</p>}
 
               <div className="enter-results__subjects">
                 <div className="enter-results__subjects-header">

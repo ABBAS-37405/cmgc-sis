@@ -83,7 +83,7 @@ Refreshing used to drop whoever was working back onto the landing page, because 
 
 Most groups have a single combination. **FA-IT (2 options) and Humanities (3) let the applicant choose**, and `groupHasChoice()` is what drives that branch in `AdmissionPage`. The pick is stored as a readable string in `applications.subject_combination`, then copied to `students.subject_combination` on approval (`supabase_fa_it_group.sql`).
 
-Note the asymmetry this creates: marks entry (`EnterResults`, `ClassTestEntry`) offers the group's **whole** subject list, not one student's chosen three, because a teacher records a subject across the group rather than per student. `subject_combination` is currently a record of what she opted for, not a filter.
+**`subject_combination` is a filter, not just a record**, and `src/lib/studentSubjects.js` is the single definition of it. Offering a group's whole list to every girl in it was wrong wherever a group has more than one combination: a Maths class test listed every Humanities girl, including the two thirds who take Civics instead, and an Economics test did the same across FA-IT and Humanities. Four screens go through that file — `ClassTestEntry` and `AssignmentEntry` filter their roster by `splitBySubject(students, subject)`, `EnterResults` builds one girl's marks sheet from `studiedSubjects(...)`, and `buildTestReport` filters the class it ranks and prints slips for. See "Who actually sits a subject" below.
 
 **The year is the one thing that does narrow that list.** `COMPULSORY_SUBJECTS` is the union of both years, and `YEAR_ONLY_COMPULSORY` marks the two that belong to one year only — **Islamiat is examined in 1st year and Pakistan Studies in 2nd**. So `subjectsFor(group)` and `SUBJECTS[group]` (no year) are the union, for the screens with no class in hand — the teacher's subject chips, `ALL_SUBJECTS`, the public Programs note; every screen that *does* know the class passes it (`EnterResults` from `student.year_of_study`, `ClassTestEntry`/`AssignmentEntry` from their year selector, `subjectsForPrograms(programs, year)`, `teacherSubjectsFor(teacher, programs, year)`). Nothing in the database constrains `results.subject`, so this is a UI list only — which is why `EnterResults` unions in any subject the girl **already has a mark in**: saving deletes that exam's rows and writes back the list on screen, so a subject missing from the sheet would silently discard marks entered under an older list.
 
@@ -191,6 +191,22 @@ Three rules there:
 The honest cost: "last looked" is per browser, so her mother's phone has its own idea of what she has seen. The alternative needs real student accounts.
 
 Unlike the `class_tests` policies, which settle for `is_staff()`, the write policy checks entitlement to **every** group the row covers — `bool_and(teacher_can('lms', p))` for a teacher, `admin_can_lms()` (the `lms` permission plus `programs <@ allowed_programs`) for an admin. A combined item is therefore not a way to reach a group you were never assigned.
+
+### Who actually sits a subject
+
+`src/lib/studentSubjects.js` answers one question — does this girl study this subject — and everything that needs it goes through that file, so there is one definition. Her group is the floor, not the answer: Humanities offers three elective combinations and only one of them takes Mathematics, so "Humanities" cannot decide a Maths roster. `students.subject_combination` can, and does.
+
+**Three states, not two, and the third is the load-bearing one.** `subjectStatusFor()` returns `"yes"`, `"no"` or `"unknown"`. A student enrolled before that column existed, or added by hand without one, carries no combination; in a group that offers a choice there is then genuinely no way to tell. **Excluding her would hide her from marks entry entirely and nothing would ever say why** — her marks simply would not exist. So `"unknown"` counts as taking (`takesSubject`), and `splitBySubject()` carries those girls out separately so the screen can name them. The same rule as `notMarked` never printing as 0 and as the storage sweep never deleting on the strength of a failed read: show too much and say so, never quietly show too little.
+
+`components/RosterNote` is that sentence, shared by Class Tests and Assignments rather than written twice — how many the subject left off the sheet, and which girls are on it only because their combination is missing, with where to fix it. `EnterResults` says the same thing in its own words, and only for the two groups where the group name does not settle it.
+
+Three more things to keep:
+
+- **Every screen that filters must also select the column.** `subject_combination` (and `year_of_study`, for the compulsory half) has to be in the `select(...)`, or every girl comes back `"unknown"` and the filter silently does nothing. That is the failure mode to watch for: it looks exactly like the bug it was meant to fix.
+- **Compulsory subjects are nobody's choice**, and the year still narrows them — Islamiat is 1st year, Pakistan Studies 2nd. A single-combination group (Pre-Engineering, Pre-Medical, ICS, General Science) is decided by the group alone and never reports `"unknown"`.
+- **It is split from `academics.js` for bundle reasons.** That file is reached from the landing page, so anything in it ships to a first-time visitor; leaving this logic there measured **+703 bytes on a bundle held at ~431 kB**. Same split as `session.js` / `sessionRestore.js` and `notices.js` / `noticesAdmin.js`. It imports only `academics.js`, so it stays Node-drivable.
+
+**Marks already recorded are not touched.** A mark written before this — a Maths score against a Humanities girl who does not take Maths — stays in `class_test_marks`. It drops off the entry sheet and the test report, because both build their roster through this file, but nothing deletes it, and `monthlyReport.js` and `classPerformance.js` read marks directly and will still count it. Cleaning that up is a decision for the office, not something to do silently.
 
 ### Teachers & class tests
 

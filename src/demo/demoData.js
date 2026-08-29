@@ -16,7 +16,7 @@
  *   are of real girls and must never be dressed up as fake records.
  */
 
-import { PROGRAMS, SUBJECTS, YEARS, subjectsFor } from "../lib/academics";
+import { PROGRAMS, YEARS, subjectsFor, combinationsFor, formatCombination, compulsoryFor } from "../lib/academics";
 // Safe to import, unlike lib/feePlans below: payroll reaches nothing that touches
 // the Supabase client, so there is no cycle back into the client being built.
 import { computeSalary, salaryRowFor } from "../lib/payroll";
@@ -56,6 +56,35 @@ const daysAgo = (n) => {
 const longDate = (d) => d.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
 const pick = (rand, list) => list[Math.floor(rand() * list.length)];
+
+/**
+ * Does this seeded girl sit this subject.
+ *
+ * Deliberately a local string check rather than `takesSubject` from
+ * `lib/studentSubjects.js`: importing that here puts it in the **production**
+ * landing chunk — measured at **+686 bytes** — because `src/demo` is only
+ * removed after Rollup has assigned modules to chunks. It is not a second
+ * definition of the rule either; the seed writes an exact combination string on
+ * every student, so this is the seed staying consistent with itself.
+ */
+const sitsSubject = (s, subject) =>
+  compulsoryFor(s.year_of_study).includes(subject) ||
+  (s.subject_combination || "").includes(subject);
+
+/**
+ * A real elective combination for this group, spread across the ones it offers.
+ *
+ * Not `SUBJECTS[group].slice(0, 3)`, which happened to spell out combination one
+ * and gave every Humanities girl the same three subjects — so a Civics class
+ * test in the demo would find nobody, now that marks entry filters the roster by
+ * who actually sits the subject. Deterministic like everything else here.
+ */
+const comboFor = (rand, group) => {
+  const combos = combinationsFor(group);
+  if (combos.length === 0) return null;
+  return formatCombination(combos[Math.floor(rand() * combos.length)]);
+};
+
 const between = (rand, lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
 
 /**
@@ -302,7 +331,7 @@ export function buildDemoDatabase() {
           cnic: `${cnicDigits.slice(0, 5)}-${cnicDigits.slice(5, 12)}-${cnicDigits.slice(12)}`,
           program,
           year_of_study: year,
-          subject_combination: (SUBJECTS[program] || []).slice(0, 3).join(", "),
+          subject_combination: comboFor(rand, program),
           password: "cmgc123",
           phone: `030${between(rand, 10000000, 99999999)}`,
           whatsapp: `030${between(rand, 10000000, 99999999)}`,
@@ -378,11 +407,18 @@ export function buildDemoDatabase() {
 
   PROGRAMS.forEach((program) => {
     YEARS.forEach((year) => {
-      const roster = db.students.filter((s) => s.program === program && s.year_of_study === year && !s.deleted_at);
-      if (roster.length === 0) return;
+      const classList = db.students.filter((s) => s.program === program && s.year_of_study === year && !s.deleted_at);
+      if (classList.length === 0) return;
       const subjects = subjectsFor(program, year).slice(0, 3);
 
       subjects.forEach((subject) => {
+        // Only the girls who actually sit it — Humanities offers three
+        // combinations and only one takes Mathematics. Marking the whole class
+        // would leave the demo holding marks its own entry screens filter out,
+        // which is the inconsistency this seed exists to avoid.
+        const roster = classList.filter((s) => sitsSubject(s, subject));
+        if (roster.length === 0) return;
+
         const teacher =
           db.teachers.find((t) => (t.subjects || []).includes(subject) && (t.programs.length === 0 || t.programs.includes(program))) ||
           db.teachers[1];
@@ -558,7 +594,7 @@ export function buildDemoDatabase() {
       address: `${pick(rand, CITY_AREAS)}, Gujranwala`,
       program,
       group_selected: program,
-      subject_combination: (SUBJECTS[program] || []).slice(0, 3).join(", "),
+      subject_combination: comboFor(rand, program),
       year_of_study: "1st Year",
       board: pick(rand, BOARDS),
       matric_marks: marks,

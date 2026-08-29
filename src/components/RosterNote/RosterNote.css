@@ -1,0 +1,22 @@
+.roster-note {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 13px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.roster-note__line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--subtext);
+}
+.roster-note__line strong { color: var(--text); }
+
+/* A record to fix, not just a fact to read — so it is tinted differently. */
+.roster-note__line--warn { color: var(--text); }

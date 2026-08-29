@@ -594,7 +594,23 @@ export function buildDemoDatabase() {
   // `audience` is stamped on every seeded notice because the three reader screens
   // filter on it — a row without one is returned to nobody. The last entry is the
   // staff-only kind, so the demo shows a teacher something her students cannot see.
+  // Dated forward from today, like everything else in the seed, so the blinking
+  // "Next Test" box on the demo home page always has a real date to announce.
+  // Written the way the office actually types a schedule — one subject a line.
+  const testDay = (n) => {
+    const d = today();
+    d.setDate(d.getDate() + n);
+    return longDate(d);
+  };
+
   [
+    { title: "Weekly Test Schedule", category: "Exam",
+      body: [
+        `Biology — ${testDay(2)}`,
+        `Physics — ${testDay(4)}`,
+        `Chemistry — ${testDay(6)}`,
+        "Tests start at 8:30 AM. Bring your own stationery.",
+      ].join("\n") },
     { title: "Annual Prize Distribution on 25th of this month — all students must attend in uniform.", category: "Event" },
     { title: "Pre-Board result cards will be issued to parents next week.", category: "Exam" },
     { title: "Fee for the current installment is due by the 10th. Please clear dues at the office.", category: "Fee" },

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronUp } from "lucide-react";
 import PhotoRail from "../PhotoRail/PhotoRail";
+import TestAlert from "../TestAlert/TestAlert";
 import { GALLERY_PHOTOS } from "../../lib/galleryImages";
 import { preloadPortal } from "../../lib/preload";
 import "./Hero.css";
@@ -60,6 +61,10 @@ export default function Hero({ scrollTo, onPortalClick, onAdmissionClick }) {
       <PhotoRail photos={GALLERY_PHOTOS} side="right" startIndex={RIGHT_RAIL_START} interval={5300} />
 
       <div className="hero__content">
+        {/* Above the title, because the whole point of it is to be seen before
+            anything else on the page. It renders nothing at all when there is no
+            upcoming test, so the hero is unchanged the rest of the time. */}
+        <TestAlert onOpenNotices={() => scrollTo("notices")} />
         <h1 className="hero__title">Community Model<br />Girls College</h1>
         <p className="hero__typed">{display}<span className="hero__cursor">|</span></p>
         <p className="hero__location">Gulzar-e-Quaid, Rawalpindi, Punjab — Affiliated with BISE Rawalpindi</p>

@@ -97,7 +97,30 @@ const AUDIENCE_FILTER = {
   admin: null,
 };
 
+/**
+ * Requests that have gone out and not come back yet, one per reader.
+ *
+ * The landing page now reads this table twice in the same tick — `NoticeBoard`
+ * for the board itself and `TestAlert` for the next test date — and both want
+ * exactly the same rows. Sharing the in-flight promise makes that one request
+ * instead of two on the slowest connection in the college.
+ *
+ * The entry is dropped the moment it settles, so this is a dedupe and **not a
+ * cache**: nothing is ever served stale, and the admin screen still re-reads the
+ * table on every mount the way it always did.
+ */
+const inFlight = new Map();
+
 export async function fetchNotices(reader = "public") {
+  const pending = inFlight.get(reader);
+  if (pending) return pending;
+
+  const request = readNotices(reader).finally(() => inFlight.delete(reader));
+  inFlight.set(reader, request);
+  return request;
+}
+
+async function readNotices(reader) {
   const build = (withAudience) => {
     let query = supabase.from("notices").select("*").order("created_at", { ascending: false });
     const wanted = withAudience ? AUDIENCE_FILTER[reader] : null;

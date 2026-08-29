@@ -1,0 +1,73 @@
+/*
+ * The blink alternates two *complete* looks — background, border and text
+ * together — rather than fading one colour in and out, so both halves of the
+ * cycle stay readable. A blink that dims to near-transparent is unreadable for
+ * half of every second, which is the usual way this effect goes wrong.
+ *
+ * Both looks are fixed colours, never `--accent`: the hero gradient behind this
+ * box is built from whatever hue the visitor picked in AccentPicker, and a
+ * warning painted in that same hue vanishes into it. Amber on dark brown text
+ * and white on red both hold contrast against every hue that slider can produce.
+ */
+
+.testalert {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: 0 auto 22px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 2px solid #b45309;
+  background: #fde047;
+  color: #7c2d12;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  animation: testalert-blink 1.1s steps(1, end) infinite;
+}
+
+.testalert__flag {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.testalert__body { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+.testalert__when { font-size: 14px; font-weight: 700; }
+.testalert__what { font-size: 12px; font-weight: 500; opacity: 0.85; overflow-wrap: anywhere; }
+
+/*
+ * `steps(1, end)` above makes this a true blink — two states, no crossfade
+ * through a washed-out middle. The second look is deliberately the inverse of
+ * the first, so the box changes colour rather than merely brightness; that is
+ * what the eye catches out of the corner of a scrolling page.
+ */
+@keyframes testalert-blink {
+  0%, 50% {
+    background: #fde047;
+    border-color: #b45309;
+    color: #7c2d12;
+  }
+  51%, 100% {
+    background: #ffffff;
+    border-color: #dc2626;
+    color: #b91c1c;
+  }
+}
+
+/*
+ * A blink is real motion, and for some readers a genuine problem rather than a
+ * preference. Anyone who has asked for less of it gets the box standing still —
+ * still the odd colour out on the page, so it still catches the eye.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .testalert { animation: none; }
+}
+
+@media (max-width: 520px) {
+  .testalert { flex-direction: column; align-items: flex-start; gap: 4px; border-radius: 12px; }
+  .testalert__body { align-items: flex-start; }
+}

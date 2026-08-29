@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { FlaskConical, RotateCcw, X, LogIn } from "lucide-react";
-import { supabase } from "../lib/supabaseClient";
 import { resetDemoDatabase } from "./demoClient";
 import { DEMO_LOGINS, DEMO_PASSWORD } from "./demoData";
 
@@ -77,6 +76,15 @@ export function DemoLogins({ onPick }) {
     let identifier = entry.email;
 
     if (!identifier) {
+      // `import()`ed, never imported. App statically imports this file for the
+      // banner, so a static import here is a static edge from the landing chunk
+      // to the Supabase client — 206 kB that a first-time visitor to the real
+      // site would then download before first paint, to run a query that only
+      // ever runs in the demo. `__DEMO__` folds the component away but cannot
+      // fold away a module-level import the bundler must assume has side
+      // effects. Check dist/index.html after touching this: the supabase chunk
+      // must not appear in a modulepreload.
+      const { supabase } = await import("../lib/supabaseClient");
       const { data } = await supabase
         .from("students")
         .select("roll_no")

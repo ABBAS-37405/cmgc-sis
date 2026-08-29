@@ -21,7 +21,26 @@
  * split, for the same reason, as `session.js` and `sessionRestore.js`.
  */
 
-import { supabase } from "./supabaseClient";
+/**
+ * The client is `import()`ed, not imported — and that is the single biggest
+ * thing keeping the landing page quick.
+ *
+ * `createClient` drags in the whole of supabase-js: auth-js (93 kB), realtime
+ * (29 kB), phoenix (25 kB), storage (26 kB), postgrest (15 kB) — **202 kB raw,
+ * ~55 kB gzipped**, of which the notice board uses one REST select. Statically
+ * imported here it was in the landing chunk, so every first-time visitor
+ * downloaded and parsed all of it before the hero could paint, on a phone, on
+ * a Pakistani mobile connection.
+ *
+ * Fetching it inside the call moves it off the critical path entirely: the page
+ * paints, then the effect runs and the client arrives alongside the images. The
+ * `preconnect` in index.html is what keeps the query itself quick once it does.
+ *
+ * `import()` is idempotent — the module registry hands back the same promise —
+ * so the second reader costs nothing, and the portals, which import the client
+ * statically, are unaffected.
+ */
+const client = async () => (await import("./supabaseClient")).supabase;
 
 export const NOTICE_BUCKET = "notice-files";
 
@@ -121,6 +140,8 @@ export async function fetchNotices(reader = "public") {
 }
 
 async function readNotices(reader) {
+  const supabase = await client();
+
   const build = (withAudience) => {
     let query = supabase.from("notices").select("*").order("created_at", { ascending: false });
     const wanted = withAudience ? AUDIENCE_FILTER[reader] : null;

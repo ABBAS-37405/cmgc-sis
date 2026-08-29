@@ -13,3 +13,8 @@
   border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412;
 }
 .admin-portal__storage-warn:hover { border-color: #f97316; }
+
+/* Every tab but the Overview is fetched on the click (or the hover) that asks
+   for it. On a fast connection this is never seen; on a phone in the college it
+   is a second, and a blank main area for that second reads as a broken tab. */
+.admin-portal__loading { color: var(--subtext); font-size: 14px; padding: 28px 4px; }

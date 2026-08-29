@@ -4,7 +4,16 @@ import MobileTabMenu from "../MobileTabMenu/MobileTabMenu";
 import { ADMIN_NAV_ITEMS, canSeeAdminTab } from "../../lib/adminNav";
 import "./AdminSidebar.css";
 
-export default function AdminSidebar({ active, setActive, onLogout, adminProfile }) {
+/**
+ * `onItemHover` is how a tab's code starts downloading before it is asked for.
+ * Every tab but the Overview is `lazy()` in AdminPortal now, so without it the
+ * fetch cannot begin until the click has already landed. The pointer resting on
+ * a nav item is the earliest honest signal, exactly as `preload.js` treats the
+ * pointer on the Portal button; `touchstart` covers a phone, where there is no
+ * hover but there is still a moment between the finger landing and lifting.
+ */
+export default function AdminSidebar({ active, setActive, onLogout, adminProfile, onItemHover }) {
+  const warm = (id) => { if (onItemHover) onItemHover(id); };
   const visibleItems = ADMIN_NAV_ITEMS.filter((it) => canSeeAdminTab(adminProfile, it.id));
 
   const sidebarItems = [...visibleItems];
@@ -27,6 +36,7 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
         active={active}
         setActive={setActive}
         onLogout={onLogout}
+        onItemHover={onItemHover}
         title="CMGC Admin"
         userLabel={adminProfile?.name || adminProfile?.email || "Admin"}
         variant="admin"
@@ -38,6 +48,8 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
           <button
             key={it.id}
             onClick={() => (it.isLogout ? onLogout() : setActive(it.id))}
+            onMouseEnter={() => !it.isLogout && warm(it.id)}
+            onFocus={() => !it.isLogout && warm(it.id)}
             className={`admin-sidebar__item ${active === it.id ? "admin-sidebar__item--active" : ""} ${it.isLogout ? "admin-sidebar__item--logout" : ""}`}
           >
             <it.icon size={17} /> {it.label}
@@ -52,6 +64,7 @@ export default function AdminSidebar({ active, setActive, onLogout, adminProfile
           <button
             key={it.id}
             onClick={() => (it.isLogout ? onLogout() : setActive(it.id))}
+            onTouchStart={() => !it.isLogout && warm(it.id)}
             className={`admin-sidebar__mobile-item ${active === it.id ? "admin-sidebar__mobile-item--active" : ""} ${it.isLogout ? "admin-sidebar__mobile-item--logout" : ""}`}
           >
             <it.icon size={16} />{it.label}

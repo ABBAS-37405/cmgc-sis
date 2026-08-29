@@ -540,13 +540,28 @@ Adding photos means: drop them in `_original-photos/`, re-run the script, bump `
 
 ### Performance
 
-Two rules carry most of it, and both are easy to undo by accident.
+Four rules carry it, and each one is easy to undo by accident. The numbers below are what `npm run build` must keep producing.
 
-**Route-level code splitting.** `App.jsx` lazy-loads `Portal` and `AdmissionPage`; `Portal.jsx` lazy-loads `AdminPortal` and `TeacherPortal`. Before this the landing page shipped one 652 kB bundle containing every admin screen; it is now 419 kB with the rest fetched on demand, and the initial CSS dropped from 120 kB to 18 kB. A static `import` of any portal component from `App.jsx` silently folds it back into the landing bundle.
+**Nothing loads before it is needed — including the database client.** `createClient` drags in the whole of supabase-js (auth-js 93 kB, realtime 29, phoenix 25, storage 26, postgrest 15 — **201 kB raw, 51 kB gzipped**) and it used to sit in the landing chunk, so a first-time visitor parsed all of it before the hero could paint, to run one REST select for the notice board. `notices.js` now `import()`s the client instead of importing it, and `vite.config.js` names a `supabase` group so the bundler cannot hoist it back. **The test is one line: `dist/index.html` must not carry a `modulepreload` for the supabase chunk.** Two things put that edge back and both were found this way — our own `supabaseClient.js` being inside the group (it must not be; it stays a 0.6 kB chunk of its own), and `DemoUi.jsx` importing the client statically, which counts even though `__DEMO__` folds the component away.
+
+**Every screen behind a login is fetched when it is opened.** All three portals lazy-load their tabs, so signing in costs the shell and the first screen rather than the whole portal:
+
+| | before | after |
+|---|---|---|
+| landing critical path | 458 kB (132 kB gz) | **258 kB (82 kB gz)** |
+| student portal | 60 kB + 30 kB CSS | **18 kB + 7 kB CSS** |
+| teacher portal | 14 kB + 8 kB CSS | **9 kB + 4 kB CSS** |
+| admin portal | 258 kB + 89 kB CSS | **14 kB + 4 kB CSS** |
+
+Each portal keeps **one loader per screen in a `TAB_LOADERS` map**, used by both `lazy()` and the warmer, because two `import()` calls with the same specifier resolve to the same module but writing the specifier twice is how they drift. `Sidebar` and `AdminSidebar` take `onItemHover` and call it on `mouseenter`/`focus` (desktop) and `touchstart` (the bottom bar and the phone dropdown), so a tab's code is usually already there when the click lands — the same trick `preload.js` plays with the portals themselves. One `<Suspense>` wraps all the branches, not one each: only one tab is ever on screen.
 
 **No queries inside a `.map()`.** Use PostgREST embeds. `FeeVerification.fetchUnpaidFees` used to run two lookups per fee row — 135 requests against a 67-row `fees` table, growing with every student — and is now a single embedded query joining `students!inner` and `payment_transactions`. `fetchPending` and `fetchAll` follow the same shape. Sums like a fee's paid amount are derived in JS from the embedded rows.
 
-Also worth keeping: `index.html` preconnects to the Supabase origin so the first query does not pay for DNS and TLS, and images below the fold carry `loading="lazy" decoding="async"`.
+**The heavy libraries are `import()`ed inside the handler that needs them**, never at module top level: jsPDF (~400 kB) in `reportPdf.js` / `payslipPdf.js`, JSZip (96 kB) in `buildReportsZip` and `xlsx.js`, the xlsx reader in `TestAlert`. A static import of any of them folds it into a portal chunk for everyone who never downloads a file.
+
+Also worth keeping: `react` is its own chunk so a deploy of the college's own code does not invalidate 190 kB in every browser cache; `index.html` preconnects to the Supabase origin so the first query does not pay for DNS and TLS; and images below the fold carry `loading="lazy" decoding="async"`.
+
+The honest remaining cost: the supabase chunk still downloads on every landing visit, because the notice board and the test alert both read that table. It arrives after first paint, in parallel with the images, rather than before it — which is the whole of the win. Removing it entirely would mean a second, hand-written REST path for one query, and a second thing for the demo client to imitate.
 
 ### The logo
 

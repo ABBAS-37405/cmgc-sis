@@ -1,14 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { ClipboardList, Users, CalendarCheck, FileText, NotebookPen, Search, BookOpen, Lock, Wallet, TrendingUp, Megaphone } from "lucide-react";
 import Sidebar from "../Sidebar/Sidebar";
-import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
-import AssignmentEntry from "../AssignmentEntry/AssignmentEntry";
-import LmsManage from "../LmsManage/LmsManage";
-import MarkAttendance from "../MarkAttendance/MarkAttendance";
-import EnterResults from "../EnterResults/EnterResults";
-import TeacherSalary from "../TeacherSalary/TeacherSalary";
-import ClassPerformance from "../Performance/ClassPerformance";
-import StudentNotices from "../StudentNotices/StudentNotices";
+
+/*
+ * Her screens are fetched when she opens them — the same arrangement as the
+ * other two portals. Marks entry, the assignment sheet, the LMS, the register,
+ * the results screen and the charts came to 150 kB that a teacher signing in to
+ * mark a register downloaded in full before anything appeared.
+ *
+ * There is no static first tab here: which one she lands on depends on the
+ * rights she holds, so every one of them is lazy and `Sidebar` warms whatever
+ * the pointer or the finger touches.
+ */
+const TEACHER_TAB_LOADERS = {
+  class_tests: () => import("../ClassTestEntry/ClassTestEntry"),
+  assignments: () => import("../AssignmentEntry/AssignmentEntry"),
+  lms: () => import("../LmsManage/LmsManage"),
+  attendance: () => import("../MarkAttendance/MarkAttendance"),
+  results: () => import("../EnterResults/EnterResults"),
+  performance: () => import("../Performance/ClassPerformance"),
+  notices: () => import("../StudentNotices/StudentNotices"),
+  salary: () => import("../TeacherSalary/TeacherSalary"),
+};
+
+const warmTeacherTab = (id) => { TEACHER_TAB_LOADERS[id]?.().catch(() => {}); };
+
+const ClassTestEntry = lazy(TEACHER_TAB_LOADERS.class_tests);
+const AssignmentEntry = lazy(TEACHER_TAB_LOADERS.assignments);
+const LmsManage = lazy(TEACHER_TAB_LOADERS.lms);
+const MarkAttendance = lazy(TEACHER_TAB_LOADERS.attendance);
+const EnterResults = lazy(TEACHER_TAB_LOADERS.results);
+const ClassPerformance = lazy(TEACHER_TAB_LOADERS.performance);
+const StudentNotices = lazy(TEACHER_TAB_LOADERS.notices);
+const TeacherSalary = lazy(TEACHER_TAB_LOADERS.salary);
 import PortalMessage from "../PortalMessage/PortalMessage";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
@@ -103,6 +127,7 @@ export default function TeacherPortal({ teacher, onLogout }) {
         setActive={goToTab}
         onLogout={onLogout}
         userLabel={`${teacher?.name || "Teacher"} (teacher)`}
+        onItemHover={warmTeacherTab}
       />
       <main className="portal__main">
         <div className="teacher-portal__header">
@@ -135,6 +160,7 @@ export default function TeacherPortal({ teacher, onLogout }) {
         {/* Salary and Notices are checked first: both are available to every
             teacher, so one with no duties assigned yet still lands on a working
             portal rather than a dead end. */}
+        <Suspense fallback={<div className="teacher-portal__loading">Loading…</div>}>
         {active === "salary" ? (
           <TeacherSalary teacher={teacher} />
         ) : active === "notices" ? (
@@ -157,6 +183,7 @@ export default function TeacherPortal({ teacher, onLogout }) {
             {active === "results" && <EnterResults allowedPrograms={allowedPrograms} />}
           </>
         )}
+        </Suspense>
       </main>
 
       {/* Outside every tab branch, and outside the "no duties assigned" one too:

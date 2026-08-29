@@ -1,17 +1,49 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, lazy, Suspense } from "react";
 import AdminSidebar from "../AdminSidebar/AdminSidebar";
 import AdminOverview from "../AdminOverview/AdminOverview";
-import StudentsList from "../StudentsList/StudentsList";
-import StudentProgress from "../StudentProgress/StudentProgress";
-import MarkAttendance from "../MarkAttendance/MarkAttendance";
-import EnterResults from "../EnterResults/EnterResults";
-import FeeVerification from "../FeeVerification/FeeVerification";
-import Notices from "../Notices/Notices";
-import LmsManage from "../LmsManage/LmsManage";
-import Teachers from "../Teachers/Teachers";
-import MonthlyReports from "../MonthlyReports/MonthlyReports";
-import ManageAdmins from "../ManageAdmins/ManageAdmins";
-import StorageCleanup from "../StorageCleanup/StorageCleanup";
+/*
+ * Every tab but the first is fetched when it is opened.
+ *
+ * Statically imported, all twelve of them were one 258 kB chunk with 89 kB of
+ * CSS behind it, and an admin signing in to record a fee waited for the payroll
+ * screens, the report generator, the storage sweeper and the charts before her
+ * first screen appeared. Now the portal opens with the Overview and each tab
+ * arrives on the click that asks for it — or a moment earlier, on the hover:
+ * `ADMIN_TAB_LOADERS` is what the sidebar warms, the same trick `preload.js`
+ * plays with the portals themselves.
+ *
+ * `lazy()` and the preloader must share one loader per screen. Two `import()`
+ * calls with the same specifier resolve to the same module, but writing the
+ * specifier twice is how they drift.
+ */
+const ADMIN_TAB_LOADERS = {
+  students: () => import("../StudentsList/StudentsList"),
+  progress: () => import("../StudentProgress/StudentProgress"),
+  attendance: () => import("../MarkAttendance/MarkAttendance"),
+  results: () => import("../EnterResults/EnterResults"),
+  fee: () => import("../FeeVerification/FeeVerification"),
+  notices: () => import("../Notices/Notices"),
+  lms: () => import("../LmsManage/LmsManage"),
+  teachers: () => import("../Teachers/Teachers"),
+  reports: () => import("../MonthlyReports/MonthlyReports"),
+  storage: () => import("../StorageCleanup/StorageCleanup"),
+  admins: () => import("../ManageAdmins/ManageAdmins"),
+};
+
+/** Warms one tab's code. Failures are swallowed: this is only a head start. */
+const preloadAdminTab = (id) => { ADMIN_TAB_LOADERS[id]?.().catch(() => {}); };
+
+const StudentsList = lazy(ADMIN_TAB_LOADERS.students);
+const StudentProgress = lazy(ADMIN_TAB_LOADERS.progress);
+const MarkAttendance = lazy(ADMIN_TAB_LOADERS.attendance);
+const EnterResults = lazy(ADMIN_TAB_LOADERS.results);
+const FeeVerification = lazy(ADMIN_TAB_LOADERS.fee);
+const Notices = lazy(ADMIN_TAB_LOADERS.notices);
+const LmsManage = lazy(ADMIN_TAB_LOADERS.lms);
+const Teachers = lazy(ADMIN_TAB_LOADERS.teachers);
+const MonthlyReports = lazy(ADMIN_TAB_LOADERS.reports);
+const ManageAdmins = lazy(ADMIN_TAB_LOADERS.admins);
+const StorageCleanup = lazy(ADMIN_TAB_LOADERS.storage);
 import { fetchUsage, runSafeSweep } from "../../lib/storageSweep";
 import { needsSweep, percentFull } from "../../lib/storageCleanup";
 import { hasPermission, allowedProgramsFor } from "../../lib/adminAuth";
@@ -80,7 +112,13 @@ export default function AdminPortal({ adminProfile, onExit }) {
 
   return (
     <div className="admin-portal">
-      <AdminSidebar active={active} setActive={goToTab} onLogout={onExit} adminProfile={adminProfile} />
+      <AdminSidebar
+        active={active}
+        setActive={goToTab}
+        onLogout={onExit}
+        adminProfile={adminProfile}
+        onItemHover={preloadAdminTab}
+      />
       <main className="admin-portal__main">
         {/* Inside main, not beside it: .admin-portal is a flex row, so a sibling
             here would sit next to the sidebar as a third column. */}
@@ -90,6 +128,11 @@ export default function AdminPortal({ adminProfile, onExit }) {
             Open <strong>Storage</strong> to free more.
           </button>
         )}
+        {/* One boundary around every tab rather than one each: only ever one is
+            on screen, and a fallback per branch would be eleven copies of the
+            same sentence. Overview is inside it too but is not lazy, so it
+            never shows the fallback. */}
+        <Suspense fallback={<div className="admin-portal__loading">Loading…</div>}>
         {active === "overview" && <AdminOverview />}
         {active === "students" && hasPermission(adminProfile, "students") && <StudentsList allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {/* Read-only: one student's attendance, tests, exams, assignments and fee
@@ -114,6 +157,7 @@ export default function AdminPortal({ adminProfile, onExit }) {
         {active === "reports" && hasPermission(adminProfile, "reports") && <MonthlyReports allowedPrograms={allowedPrograms} adminProfile={adminProfile} />}
         {active === "storage" && adminProfile?.is_super_admin && <StorageCleanup />}
         {active === "admins" && adminProfile?.is_super_admin && <ManageAdmins adminProfile={adminProfile} />}
+        </Suspense>
       </main>
     </div>
   );

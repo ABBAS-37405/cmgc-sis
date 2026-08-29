@@ -9,8 +9,13 @@ import "./Sidebar.css";
 // `badges` is `{ tabId: count }` — currently only the LMS tab, for material a
 // teacher has put up since she last looked. Null when there is nothing to say,
 // so a portal that never passes it renders exactly as it did before.
-export default function Sidebar({ active, setActive, onLogout, userLabel, items = STUDENT_TABS, badges = null }) {
+// `onItemHover` warms a tab's code before it is asked for. Both portals lazy-load
+// their tabs now, so without it the fetch cannot start until the click has landed;
+// with it, the pointer resting on a nav item (or a finger landing on the bottom
+// bar) is the head start. Same idea as preload.js and the admin sidebar.
+export default function Sidebar({ active, setActive, onLogout, userLabel, items = STUDENT_TABS, badges = null, onItemHover = null }) {
   const badgeFor = (id) => (badges && badges[id] > 0 ? badges[id] : null);
+  const warm = (id) => { if (onItemHover) onItemHover(id); };
 
   return (
     <>
@@ -24,12 +29,13 @@ export default function Sidebar({ active, setActive, onLogout, userLabel, items 
         title="CMGC Portal"
         userLabel={userLabel}
         badges={badges}
+        onItemHover={onItemHover}
       />
 
       <aside className="sidebar">
         <div className="sidebar__brand"><Logo size={26} /><span>CMGC Portal</span></div>
         {items.map((it) => (
-          <button key={it.id} onClick={() => setActive(it.id)} className={`sidebar__item ${active === it.id ? "sidebar__item--active" : ""}`}>
+          <button key={it.id} onClick={() => setActive(it.id)} onMouseEnter={() => warm(it.id)} onFocus={() => warm(it.id)} className={`sidebar__item ${active === it.id ? "sidebar__item--active" : ""}`}>
             <it.icon size={17} /> {it.label}
             {badgeFor(it.id) && <span className="sidebar__badge">{badgeFor(it.id)}</span>}
           </button>
@@ -49,7 +55,7 @@ export default function Sidebar({ active, setActive, onLogout, userLabel, items 
 
       <nav className="sidebar__mobile">
         {items.map((it) => (
-          <button key={it.id} onClick={() => setActive(it.id)} className={`sidebar__mobile-item ${active === it.id ? "sidebar__mobile-item--active" : ""}`}>
+          <button key={it.id} onClick={() => setActive(it.id)} onTouchStart={() => warm(it.id)} className={`sidebar__mobile-item ${active === it.id ? "sidebar__mobile-item--active" : ""}`}>
             <it.icon size={18} />
             {it.label}
             {badgeFor(it.id) && <span className="sidebar__badge sidebar__badge--dot">{badgeFor(it.id)}</span>}

@@ -18,7 +18,7 @@ import "./MobileTabMenu.css";
  *
  * Hidden above 1024px, where the real sidebar takes over.
  */
-export default function MobileTabMenu({ items, active, setActive, onLogout, title, userLabel, variant = "student", badges = null }) {
+export default function MobileTabMenu({ items, active, setActive, onLogout, title, userLabel, variant = "student", badges = null, onItemHover = null }) {
   const [open, setOpen] = useState(false);
 
   const current = items.find((it) => it.id === active);
@@ -102,6 +102,10 @@ export default function MobileTabMenu({ items, active, setActive, onLogout, titl
                   type="button"
                   role="menuitem"
                   onClick={() => choose(it.id)}
+                  // The admin tabs are lazy, so a finger landing on a row is a
+                  // few hundred milliseconds of head start on that tab's code.
+                  onTouchStart={() => onItemHover && onItemHover(it.id)}
+                  onMouseEnter={() => onItemHover && onItemHover(it.id)}
                   className={`mtm__item ${active === it.id ? "mtm__item--active" : ""}`}
                 >
                   <it.icon size={17} /> {it.label}

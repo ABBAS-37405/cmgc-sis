@@ -2,17 +2,48 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import LoginPage from "../Login/LoginPage";
 import Sidebar from "../Sidebar/Sidebar";
 import Overview from "../Overview/Overview";
-import StudentNotices from "../StudentNotices/StudentNotices";
-import Attendance from "../Attendance/Attendance";
-import Results from "../Results/Results";
-import Fee from "../Fee/Fee";
-import ClassTests from "../ClassTests/ClassTests";
-import Assignments from "../Assignments/Assignments";
-import MyForm from "../MyForm/MyForm";
-import Lms from "../Lms/Lms";
-import MyPerformance from "../Performance/MyPerformance";
-import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
+
+/*
+ * Her tabs are fetched when she opens them.
+ *
+ * Statically imported, all ten travelled with the portal itself: a girl signing
+ * in to check whether her fee was received waited for the marks screens, the
+ * LMS, her admission form and the report generator before her first screen
+ * appeared — on a phone, on a mobile connection. Overview stays static because
+ * it is what she lands on; everything else arrives on the tap, or a moment
+ * earlier on the hover, since `Sidebar` warms whatever the pointer or the finger
+ * touches.
+ *
+ * One loader per screen, shared by `lazy()` and the warmer: two `import()` calls
+ * with the same specifier resolve to the same module, but writing the specifier
+ * twice is how they drift.
+ */
+const TAB_LOADERS = {
+  notices: () => import("../StudentNotices/StudentNotices"),
+  attendance: () => import("../Attendance/Attendance"),
+  classtests: () => import("../ClassTests/ClassTests"),
+  assignments: () => import("../Assignments/Assignments"),
+  lms: () => import("../Lms/Lms"),
+  results: () => import("../Results/Results"),
+  fee: () => import("../Fee/Fee"),
+  performance: () => import("../Performance/MyPerformance"),
+  reports: () => import("../Reports/Reports"),
+  myform: () => import("../MyForm/MyForm"),
+};
+
+const warmTab = (id) => { TAB_LOADERS[id]?.().catch(() => {}); };
+
+const StudentNotices = lazy(TAB_LOADERS.notices);
+const Attendance = lazy(TAB_LOADERS.attendance);
+const ClassTests = lazy(TAB_LOADERS.classtests);
+const Assignments = lazy(TAB_LOADERS.assignments);
+const Lms = lazy(TAB_LOADERS.lms);
+const Results = lazy(TAB_LOADERS.results);
+const Fee = lazy(TAB_LOADERS.fee);
+const MyPerformance = lazy(TAB_LOADERS.performance);
+const Reports = lazy(TAB_LOADERS.reports);
+const MyForm = lazy(TAB_LOADERS.myform);
 import PortalMessage from "../PortalMessage/PortalMessage";
 import { useLmsAlerts } from "../LmsAlert/useLmsAlerts";
 // A student signing in should not be made to wait for the admin and teacher
@@ -239,8 +270,12 @@ export default function Portal({ onExit }) {
         onLogout={handleLogout}
         userLabel={`${studentData?.name || "Student"} (${role})`}
         badges={lmsAlerts.count > 0 ? { lms: lmsAlerts.count } : null}
+        onItemHover={warmTab}
       />
       <main className="portal__main">
+        {/* One boundary around every tab: only one is ever on screen, so a
+            fallback per branch would be ten copies of the same sentence. */}
+        <Suspense fallback={<div className="portal__loading">Loading…</div>}>
         {activeTab === "overview" && (
           <Overview
             student={studentData}
@@ -266,6 +301,7 @@ export default function Portal({ onExit }) {
             chain from one place. Overview is skipped because its Attendance
             card already carries her to the next screen. */}
         {activeTab !== "overview" && <TabNav current={activeTab} setActive={goToTab} />}
+        </Suspense>
       </main>
 
       {/* Outside the tab branches, because the office's message is not something

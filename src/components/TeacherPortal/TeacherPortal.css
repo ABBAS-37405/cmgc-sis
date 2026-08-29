@@ -33,3 +33,7 @@
 .teacher-students__year-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
 .teacher-students__year-btn--active:hover { color: white; }
 .teacher-students__count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--subtext); }
+
+/* Her tabs are fetched on the tap that asks for them; on a phone in the college
+   that is a moment, and a blank main area for it reads as a broken tab. */
+.teacher-portal__loading { color: var(--subtext); font-size: 14px; padding: 28px 4px; }

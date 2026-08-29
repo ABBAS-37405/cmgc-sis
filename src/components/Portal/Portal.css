@@ -4,3 +4,6 @@
 .portal__main { flex: 1; padding: 20px; padding-top: 72px; padding-bottom: 90px; }
 
 @media (min-width: 1024px) { .portal__main { padding: 32px; padding-bottom: 32px; } }
+
+/* Her tabs are fetched on the tap that asks for them. */
+.portal__loading { color: var(--subtext); font-size: 14px; padding: 28px 4px; }

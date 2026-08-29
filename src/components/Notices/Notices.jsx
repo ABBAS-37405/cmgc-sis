@@ -8,7 +8,52 @@ import {
 // landing bundle — never reaches uploads.js. See noticesAdmin.js.
 import { postNotice, removeNotice } from "../../lib/noticesAdmin";
 import { selectionError, describeSize } from "../../lib/uploads";
+import DirectMessage from "./DirectMessage";
 import "./Notices.css";
+
+/**
+ * The Notices tab: two ways of reaching the college, and the difference between
+ * them is the whole reason they are separate screens.
+ *
+ *   Notice Board     posted, and waits to be read — the public board, every
+ *                    student's Notices tab and every teacher's. Categories,
+ *                    attachments, a body of any length.
+ *   Portal Message   opens as a dialog in front of students, teachers or both
+ *                    the next time they open their portal. One paragraph, one
+ *                    audience, finished once it has been read.
+ *
+ * Sub-tabs rather than two panels on one screen, so neither is crowded and the
+ * office cannot post to the wrong one by reaching for the nearer box. Same
+ * arrangement as the Reports tab's four screens.
+ */
+const TABS = [
+  { id: "board", label: "Notice Board" },
+  { id: "message", label: "Portal Message" },
+];
+
+export default function Notices() {
+  const [tab, setTab] = useState("board");
+
+  return (
+    <div className="notices-tab">
+      <div className="notices-tab__tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`notices-tab__tab ${tab === t.id ? "notices-tab__tab--active" : ""}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "board" ? <NoticeBoardAdmin /> : <DirectMessage />}
+    </div>
+  );
+}
 
 /**
  * Posting notices.
@@ -22,7 +67,7 @@ import "./Notices.css";
  * sheet, a fee schedule, a syllabus) and address a notice to the teaching staff
  * instead of to the college.
  */
-export default function Notices() {
+function NoticeBoardAdmin() {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

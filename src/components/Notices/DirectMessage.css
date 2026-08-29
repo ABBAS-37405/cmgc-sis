@@ -1,0 +1,74 @@
+/* Same two-column shape as the notice board beside it, so switching between the
+   sub-tabs does not move the furniture. */
+.dmsg { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.dmsg__form, .dmsg__list { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.dmsg h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.dmsg__intro { font-size: 12px; color: var(--subtext); line-height: 1.55; margin-bottom: 14px; }
+
+.dmsg__audience { border: none; padding: 0; margin: 0 0 6px; display: flex; flex-direction: column; gap: 7px; }
+.dmsg__legend { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 7px; padding: 0; }
+
+/* The whole row is the target, not the 14px circle inside it — this is filled in
+   on a phone as often as at the office desk. */
+.dmsg__radio {
+  display: flex; align-items: center; gap: 9px; cursor: pointer;
+  font-size: 13.5px; color: var(--text);
+  border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; background: var(--bg);
+}
+.dmsg__radio input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.dmsg__radio--on { border-color: var(--accent); }
+.dmsg__radio:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dmsg__hint { font-size: 11.5px; color: var(--subtext); line-height: 1.5; margin-bottom: 12px; }
+
+.dmsg__title-input, .dmsg__body-input {
+  width: 100%; font-size: 14px; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 12px; background: var(--bg); color: var(--text);
+  font-family: inherit; line-height: 1.5;
+}
+.dmsg__body-input { resize: vertical; min-height: 96px; }
+
+.dmsg__form button {
+  width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--accent); color: white; font-weight: 600; font-size: 14px;
+  padding: 10px; border-radius: 8px;
+}
+.dmsg__form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.dmsg__note { font-size: 11.5px; color: var(--subtext); line-height: 1.55; margin-top: 10px; }
+
+.dmsg__error {
+  font-size: 12.5px; line-height: 1.5; color: #b91c1c; background: #fef2f2;
+  border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; margin-top: 10px;
+}
+[data-theme="dark"] .dmsg__error { color: #fca5a5; background: #2a1416; border-color: #7f1d1d; }
+
+/* Not an error: the table simply has not been created yet, and the fix is a file
+   to run. Same wording rule as the teacher password vault's strip. */
+.dmsg__setup {
+  font-size: 12.5px; line-height: 1.55; color: var(--text); background: var(--bg);
+  border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+}
+.dmsg__setup code { font-size: 12px; }
+
+.dmsg__empty { color: var(--subtext); font-size: 14px; text-align: center; padding: 20px 0; }
+
+.dmsg__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.dmsg__row:last-child { border-bottom: none; }
+.dmsg__row-left { flex: 1; min-width: 0; }
+.dmsg__row-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.dmsg__row-body { font-size: 13px; color: var(--subtext); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+.dmsg__row-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: 11px; color: var(--subtext); margin-top: 6px; }
+
+.dmsg__tag {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px;
+}
+/* Grey rather than red: it has run its course, nothing has gone wrong. */
+.dmsg__tag--done { color: var(--subtext); border-color: var(--border); text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+.dmsg__delete { color: #ef4444; padding: 4px; flex-shrink: 0; }
+
+@media (min-width: 1024px) {
+  .dmsg { grid-template-columns: 1fr 1fr; }
+}

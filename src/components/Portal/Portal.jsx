@@ -13,6 +13,7 @@ import Lms from "../Lms/Lms";
 import MyPerformance from "../Performance/MyPerformance";
 import Reports from "../Reports/Reports";
 import TabNav from "../TabNav/TabNav";
+import PortalMessage from "../PortalMessage/PortalMessage";
 import { useLmsAlerts } from "../LmsAlert/useLmsAlerts";
 // A student signing in should not be made to wait for the admin and teacher
 // portals, which are far bigger than everything she can actually see.
@@ -266,6 +267,11 @@ export default function Portal({ onExit }) {
             card already carries her to the next screen. */}
         {activeTab !== "overview" && <TabNav current={activeTab} setActive={goToTab} />}
       </main>
+
+      {/* Outside the tab branches, because the office's message is not something
+          she has to be on the right screen to receive. It renders nothing unless
+          there is one she has not read. */}
+      <PortalMessage viewer={studentData} reader="student" />
     </div>
   );
 }

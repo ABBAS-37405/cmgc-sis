@@ -28,6 +28,7 @@ export const TABLES = [
   "fees",
   "payment_transactions",
   "notices",
+  "portal_messages",
   "lms_materials",
   "profile_edit_requests",
   "fee_plans",
@@ -115,6 +116,9 @@ export const TIMESTAMP_DEFAULTS = {
   fees: ["created_at"],
   payment_transactions: ["created_at"],
   notices: ["created_at"],
+  // Without this a message sent in the demo has no date, and a message with no
+  // date never opens — isStillShowing reads it as older than the window.
+  portal_messages: ["created_at"],
   lms_materials: ["created_at"],
   profile_edit_requests: ["created_at"],
   report_log: ["created_at"],

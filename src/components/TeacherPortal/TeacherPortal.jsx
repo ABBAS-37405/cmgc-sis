@@ -9,6 +9,7 @@ import EnterResults from "../EnterResults/EnterResults";
 import TeacherSalary from "../TeacherSalary/TeacherSalary";
 import ClassPerformance from "../Performance/ClassPerformance";
 import StudentNotices from "../StudentNotices/StudentNotices";
+import PortalMessage from "../PortalMessage/PortalMessage";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/adminAuth";
 import { hasTeacherRight, teacherPrograms, teacherSubjects } from "../../lib/teacherAuth";
@@ -157,6 +158,11 @@ export default function TeacherPortal({ teacher, onLogout }) {
           </>
         )}
       </main>
+
+      {/* Outside every tab branch, and outside the "no duties assigned" one too:
+          an instruction from the office reaches her whatever she has been given
+          rights to. Renders nothing unless there is one she has not read. */}
+      <PortalMessage viewer={teacher} reader="teacher" />
     </div>
   );
 }

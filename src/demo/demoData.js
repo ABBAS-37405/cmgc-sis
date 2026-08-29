@@ -122,7 +122,7 @@ export function buildDemoDatabase() {
     students: [], teachers: [], admin_profiles: [], applications: [],
     attendance: [], results: [], class_tests: [], class_test_marks: [],
     assignments: [], assignment_submissions: [], fees: [], payment_transactions: [],
-    notices: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
+    notices: [], portal_messages: [], lms_materials: [], profile_edit_requests: [], fee_plans: [],
     report_log: [], staff: [], staff_attendance: [], college_holidays: [], staff_salaries: [],
     expenses: [], teacher_login_passwords: [],
   };
@@ -622,6 +622,17 @@ export function buildDemoDatabase() {
   ].forEach((n, i) => db.notices.push({
     id: uid(10), audience: "all", body: null, file_url: null, file_name: null,
     ...n, created_at: at(daysAgo(i * 4 + 1)),
+  }));
+
+  // One of each audience, so the demo shows the dialog to a student and a
+  // different one to a teacher. Dated inside SHOW_FOR_DAYS or they would never
+  // open — the seed is relative to today like everything else here.
+  [
+    { audience: "all", title: "Parent–teacher meeting", body: "The parent–teacher meeting is this Saturday at 10:00 AM in the college hall. Please make sure your parents attend." },
+    { audience: "students", title: null, body: "Fee collection closes at 1:00 PM today. Bring the challan with you." },
+    { audience: "teachers", title: "Marks deadline", body: "Class test marks for this month must be entered before Thursday. The office prints the reports on Friday morning." },
+  ].forEach((m, i) => db.portal_messages.push({
+    id: uid(11), created_by: null, ...m, created_at: at(daysAgo(i + 1)),
   }));
 
   const lmsSeed = [

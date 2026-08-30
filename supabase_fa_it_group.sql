@@ -36,3 +36,46 @@ comment on column students.subject_combination is
 --   update students
 --      set subject_combination = 'Economics, Education, Civics'
 --    where roll_no = 'CMGC-2026-XXXXX';
+
+
+-- ============================================================
+-- Correction, Aug 2026 — Humanities combination 1
+-- ============================================================
+-- The first Humanities combination was recorded here as
+--   'Economics, Education, Mathematics'
+-- and the college's actual combination is
+--   'Sociology, Education, Mathematics'.
+-- GROUP_COMBINATIONS in src/lib/academics.js is fixed, so the admission form,
+-- the admin dropdowns and the public Programs section all offer the right one
+-- from now on. Rows already written with the old line are NOT touched by that:
+-- the string is what her marks screens read, so it has to be corrected here.
+--
+-- Read the rows first, and only then run the update — a girl who genuinely
+-- studies Economics rather than Sociology would be one of these too, and only
+-- the office can tell:
+--
+--   select id, roll_no, name, year_of_study from students
+--    where program = 'Humanities'
+--      and subject_combination = 'Economics, Education, Mathematics';
+--
+--   select id, name, status from applications
+--    where program = 'Humanities'
+--      and subject_combination = 'Economics, Education, Mathematics';
+--
+-- Then, for the ones that really are the combination that was mislabelled:
+--
+--   update students
+--      set subject_combination = 'Sociology, Education, Mathematics'
+--    where program = 'Humanities'
+--      and subject_combination = 'Economics, Education, Mathematics';
+--
+--   update applications
+--      set subject_combination = 'Sociology, Education, Mathematics'
+--    where program = 'Humanities'
+--      and subject_combination = 'Economics, Education, Mathematics';
+--
+-- Nothing breaks while these rows are still uncorrected: the old line parses to
+-- three subjects Humanities does offer, so she keeps appearing on exactly the
+-- sheets she has been appearing on. What changes is that Students -> Edit now
+-- shows it as "not one of Humanities's combinations", which is where the office
+-- can correct one girl at a time instead of running the update above.

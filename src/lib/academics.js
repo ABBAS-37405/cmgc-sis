@@ -44,7 +44,7 @@ export const GROUP_COMBINATIONS = {
     ["Sociology", "Computer Science", "Civics"],
   ],
   "Humanities": [
-    ["Economics", "Education", "Mathematics"],
+    ["Sociology", "Education", "Mathematics"],
     ["Sociology", "Education", "Civics"],
     ["Economics", "Education", "Civics"],
   ],

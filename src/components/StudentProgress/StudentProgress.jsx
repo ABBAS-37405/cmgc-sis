@@ -322,6 +322,21 @@ export default function StudentProgress({ allowedPrograms = [], adminProfile }) 
         <p className="sprog__empty">Loading her record…</p>
       ) : !progress ? null : (
         <>
+          {/* Marks and assignments in subjects her combination says she does not
+              sit — almost always a mark entered against the wrong girl before the
+              entry sheets were filtered, or a combination recorded wrong. They are
+              off her portal and off her report, so the office would otherwise have
+              no way of noticing they exist. */}
+          {progress.outside?.length > 0 && (
+            <p className="sprog__outside">
+              Not shown below: <strong>{progress.outside.join(", ")}</strong> —{" "}
+              {progress.outside.length === 1 ? "that subject is" : "those subjects are"} not in her
+              combination ({selected.subject_combination || "none on record"}), so{" "}
+              {progress.outside.length === 1 ? "it is" : "they are"} left out of her portal and her
+              reports as well. If she does study {progress.outside.length === 1 ? "it" : "them"},
+              fix the combination under <strong>Profile</strong> above.
+            </p>
+          )}
           <Summary progress={progress} />
           {/* The charts sit above the sections rather than replacing them: the
               shape of a term is easier to see drawn, and the exact figure is

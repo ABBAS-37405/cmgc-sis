@@ -19,6 +19,9 @@
 
 .sprog__count { font-size: 13px; color: var(--subtext); }
 .sprog__empty { text-align: center; color: var(--subtext); font-size: 14px; padding: 32px 0; }
+/* A record to fix, not an error — the same tone as RosterNote's warn line. */
+.sprog__outside { font-size: 12.5px; line-height: 1.55; color: var(--subtext); background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 10px 13px; }
+.sprog__outside strong { color: var(--text); }
 .sprog__error { display: flex; align-items: center; gap: 6px; color: #dc2626; font-size: 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 9px 12px; }
 
 /* ------------------------------------------------------------ the roster */

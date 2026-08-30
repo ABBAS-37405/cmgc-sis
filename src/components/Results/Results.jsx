@@ -1,8 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { ownSubjectsOnly } from "../../lib/studentSubjects";
 import "./Results.css";
 
-export default function Results({ studentId }) {
+/**
+ * Her exam marks sheet, one sitting at a time.
+ *
+ * Takes the whole student row, not her id: `results` carries a subject, and a
+ * mark recorded under a subject her combination says she does not sit is left
+ * out — the same rule as her Class Tests tab and her report.
+ */
+export default function Results({ student }) {
+  const studentId = student?.id;
   const [results, setResults] = useState([]);
   const [exams, setExams] = useState([]);
   const [selectedExam, setSelectedExam] = useState("");
@@ -17,12 +26,17 @@ export default function Results({ studentId }) {
       .order("created_at", { ascending: false });
 
     if (data) {
-      setResults(data);
-      const uniqueExams = [...new Set(data.map((r) => r.exam_name))];
+      const mine = ownSubjectsOnly(student, data);
+      setResults(mine);
+      // Built after the filter, so a sitting that was only ever marks in a
+      // subject she does not study does not appear in the dropdown as an exam
+      // with nothing under it.
+      const uniqueExams = [...new Set(mine.map((r) => r.exam_name))];
       setExams(uniqueExams);
       if (uniqueExams.length > 0) setSelectedExam(uniqueExams[0]);
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
   useEffect(() => {

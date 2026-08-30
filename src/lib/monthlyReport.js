@@ -15,6 +15,7 @@
 
 import { supabase } from "./supabaseClient";
 import { examTypeOf } from "./exams";
+import { ownSubjectsOnly } from "./studentSubjects";
 
 /** "2026-08" -> { from: "2026-08-01", to: "2026-08-31", label: "August 2026" } */
 export function monthRange(month) {
@@ -230,15 +231,22 @@ function examResultsQuery(ids, examName) {
 }
 
 function assembleReport({ student, range, month, attendance, testMarks, assignments, submissions, results, fees }) {
+  // Her own subjects only. The queries above are per class, and a class holds
+  // more than one elective combination — but a mark can also carry a subject she
+  // does not sit, written before the entry sheets were filtered by combination.
+  // A report is what a parent reads, so it must not list Economics for a girl
+  // who dropped it. `unknown` (no combination recorded) is kept, as everywhere.
+  const mine = (rows, subjectOf) => ownSubjectsOnly(student, rows, subjectOf);
+
   return {
     student,
     month,
     monthLabel: range.label,
     range,
     attendance: summariseAttendance(attendance),
-    tests: summariseTests(testMarks),
-    assignments: summariseAssignments(student, assignments, submissions),
-    result: summariseResult(results),
+    tests: summariseTests(mine(testMarks, (r) => r.class_tests?.subject)),
+    assignments: summariseAssignments(student, mine(assignments), submissions),
+    result: summariseResult(mine(results)),
     fee: summariseFee(fees),
   };
 }

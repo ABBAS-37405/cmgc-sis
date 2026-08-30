@@ -135,3 +135,49 @@ export function combinationIndexFor(group, combination) {
   const want = key(picked);
   return combos.findIndex((combo) => key(combo) === want);
 }
+
+/**
+ * Rows of anything that carries a subject, narrowed to the ones that are hers.
+ *
+ * The student portal used to show whatever had her id on it, so a mark entered
+ * against her by mistake — an Economics test set for a girl whose combination
+ * was recorded wrong, back before entry sheets were filtered at all — kept
+ * showing Economics on her Class Tests tab, her charts and her report long
+ * after the roster screens had stopped listing her for it. Recording the marks
+ * is what went wrong; this is what stops her reading a subject she does not sit
+ * as though it were part of her course.
+ *
+ * `dropped` is carried out separately for the same reason `splitBySubject`
+ * carries `unknown`: an admin screen can say what is being left out, so the
+ * office can fix the record rather than wonder where a mark went. Her own
+ * portal never shows it — she cannot act on it, and it is not her subject.
+ *
+ * Only a definite `"no"` is dropped. `"unknown"` — no combination on record —
+ * stays, exactly as it stays on the entry sheets: the safe direction is to show
+ * too much, never to quietly show too little.
+ *
+ * **Her year is deliberately not applied here, and that is the difference
+ * between this and the entry sheets.** Islamiat is examined in 1st year and
+ * Pakistan Studies in 2nd, so `subjectStatusFor` answers `"no"` to Islamiat for
+ * a 2nd year — which is right for *this term's* test sheet and quite wrong for
+ * her record, where those 1st year Islamiat marks are marks she actually sat.
+ * Only her elective combination decides here; a compulsory subject is hers in
+ * either year.
+ */
+export function splitOwnSubjects(student, rows, subjectOf = (row) => row.subject) {
+  const anyYear = { ...student, year_of_study: undefined };
+  const kept = [];
+  const dropped = new Set();
+
+  (rows || []).forEach((row) => {
+    const subject = subjectOf(row);
+    if (subjectStatusFor(anyYear, subject) === "no") dropped.add(subject);
+    else kept.push(row);
+  });
+
+  return { kept, dropped: [...dropped].sort() };
+}
+
+/** The rows alone, for the screens with nothing to say about what was left out. */
+export const ownSubjectsOnly = (student, rows, subjectOf) =>
+  splitOwnSubjects(student, rows, subjectOf).kept;

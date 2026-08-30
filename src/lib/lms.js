@@ -7,6 +7,7 @@
 
 import { supabase } from "./supabaseClient";
 import { pathFromPublicUrl } from "./storageCleanup";
+import { ownSubjectsOnly } from "./studentSubjects";
 
 export const LMS_BUCKET = "lms-materials";
 
@@ -113,7 +114,12 @@ export async function fetchMaterialsForStudent(student) {
 
   if (error) return [];
   const year = student.year_of_study || "1st Year";
-  return (data || []).filter((row) => !row.year_of_study || row.year_of_study === year);
+  const forHerClass = (data || []).filter((row) => !row.year_of_study || row.year_of_study === year);
+  // Her group is not her subject list: FA-IT and Humanities each hold several
+  // elective combinations, so material published for the group reaches girls who
+  // do not sit that subject. Filtering here also keeps the "new material" alert
+  // honest — lmsAlerts.js reads exactly this list.
+  return ownSubjectsOnly(student, forHerClass);
 }
 
 /** The teacher's own view: everything she is allowed to see, newest first. */

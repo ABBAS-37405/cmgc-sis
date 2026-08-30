@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { ClipboardList } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { ownSubjectsOnly } from "../../lib/studentSubjects";
 import "./ClassTests.css";
 
 const fmtDate = (d) =>
@@ -13,7 +14,16 @@ const pctClass = (pct) => {
   return "class-tests__score--low";
 };
 
-export default function ClassTests({ studentId }) {
+/**
+ * Her class tests, subject by subject.
+ *
+ * It takes the whole student row rather than her id because a mark row is not
+ * automatically hers to read: a test entered against her in a subject her
+ * combination says she does not sit — the entry sheets were unfiltered once —
+ * would otherwise show Economics on the portal of a girl who dropped it.
+ */
+export default function ClassTests({ student }) {
+  const studentId = student?.id;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(Boolean(studentId));
   const [activeSubject, setActiveSubject] = useState("All");
@@ -25,8 +35,10 @@ export default function ClassTests({ studentId }) {
       .select("id, marks_obtained, is_absent, remarks, class_tests(id, subject, title, test_date, total_marks)")
       .eq("student_id", studentId);
 
-    // A mark row whose parent test was deleted is not useful to show.
-    setRows((data || []).filter((r) => r.class_tests));
+    // A mark row whose parent test was deleted is not useful to show, and one in
+    // a subject she does not study is not hers to see at all.
+    const live = (data || []).filter((r) => r.class_tests);
+    setRows(ownSubjectsOnly(student, live, (r) => r.class_tests.subject));
     setLoading(false);
   };
 

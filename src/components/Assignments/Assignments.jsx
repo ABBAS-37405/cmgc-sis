@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FileText, Upload, Paperclip, CheckCircle, Clock, AlertTriangle, Hand } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { prepareUpload } from "../../lib/uploads";
+import { ownSubjectsOnly } from "../../lib/studentSubjects";
 import "./Assignments.css";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -51,7 +52,10 @@ export default function Assignments({ student }) {
     const byAssignment = {};
     (mine || []).forEach((s) => { byAssignment[s.assignment_id] = s; });
 
-    setRows(list || []);
+    // The query is per group and class; a group holds more than one elective
+    // combination, so Economics homework set for FA-IT reaches a girl in it who
+    // takes Sociology instead. Her own subjects only — `unknown` still passes.
+    setRows(ownSubjectsOnly(student, list || []));
     setSubs(byAssignment);
     setLoading(false);
   };

@@ -18,6 +18,7 @@
 
 import { supabase } from "./supabaseClient";
 import { examTypeOf } from "./exams";
+import { splitOwnSubjects } from "./studentSubjects";
 import {
   summariseAttendance,
   summariseTests,
@@ -115,17 +116,29 @@ export async function buildStudentProgress(student, can = () => true) {
   const attendanceRows = attendanceRes.data || [];
   const feeRows = feeRes.data || [];
 
+  // Her own subjects only, in all three places a subject appears. A mark can
+  // carry a subject she does not sit — one entered against her before the entry
+  // sheets were filtered by combination — and the assignments query is per group,
+  // which is not per combination. `dropped` is collected so the *admin's* Student
+  // Report can name what is being left out; her own Performance tab shows only
+  // the record, because a subject she does not study is not hers to correct.
+  const testRows = splitOwnSubjects(student, testRes.data || [], (r) => r.class_tests?.subject);
+  const examRows = splitOwnSubjects(student, resultRes.data || []);
+  const assignmentRows = splitOwnSubjects(student, assignments);
+  const outside = [...new Set([...testRows.dropped, ...examRows.dropped, ...assignmentRows.dropped])].sort();
+
   return {
     student,
     attendance: mayReadAttendance
       ? { ...summariseAttendance(attendanceRows), byMonth: attendanceByMonth(attendanceRows) }
       : UNAVAILABLE("Attendance"),
-    tests: summariseTests(testRes.data || []),
+    tests: summariseTests(testRows.kept),
     exams: mayReadResults
-      ? { list: summariseExams(resultRes.data || []) }
+      ? { list: summariseExams(examRows.kept) }
       : UNAVAILABLE("Results"),
-    assignments: summariseAssignments(student, assignments, submissions),
+    assignments: summariseAssignments(student, assignmentRows.kept, submissions),
     fee: { ...summariseFee(feeRows), payments: paymentsOf(feeRows) },
+    outside,
   };
 }
 

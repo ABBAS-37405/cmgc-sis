@@ -115,7 +115,11 @@ export default function ReportsPane({ allowedPrograms = [], adminProfile, mode =
 
     let query = supabase
       .from("students")
-      .select("id, name, roll_no, program, year_of_study, father_name, phone, whatsapp")
+      // subject_combination is not decoration here: buildMonthlyReports drops the
+      // marks of a subject a girl does not sit, and without this column every girl
+      // reads as "unknown" and the filter silently does nothing — which looks
+      // exactly like the bug it exists to fix.
+      .select("id, name, roll_no, program, year_of_study, subject_combination, father_name, phone, whatsapp")
       .is("deleted_at", null)
       .order("program")
       .order("name");

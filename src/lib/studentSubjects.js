@@ -111,3 +111,27 @@ export function splitBySubject(students, subject) {
 
   return { taking, notTaking, unknown };
 }
+
+/**
+ * Which of the group's combinations the stored string actually is — an index
+ * into `combinationsFor(group)`, or -1 when nothing on record matches one.
+ *
+ * The string is a readable line typed by whoever enrolled her, so it is matched
+ * as a *set* of that group's electives rather than compared character by
+ * character: "Civics, Education, Sociology" is the same combination as
+ * "Sociology, Education, Civics" and must not read as a fourth option.
+ *
+ * -1 covers both "nothing was recorded" and "what was recorded is not one of
+ * this group's combinations" — the admin's Edit screen keeps such a value on
+ * screen rather than silently replacing it, because it is what her marks
+ * screens are reading today.
+ */
+export function combinationIndexFor(group, combination) {
+  const combos = GROUP_COMBINATIONS[group] || [];
+  const picked = pickedElectives(group, combination);
+  if (picked.length === 0) return -1;
+
+  const key = (list) => [...new Set(list)].sort().join("|");
+  const want = key(picked);
+  return combos.findIndex((combo) => key(combo) === want);
+}

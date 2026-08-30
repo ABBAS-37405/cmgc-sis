@@ -200,6 +200,8 @@ Unlike the `class_tests` policies, which settle for `is_staff()`, the write poli
 
 `components/RosterNote` is that sentence, shared by Class Tests and Assignments rather than written twice — how many the subject left off the sheet, and which girls are on it only because their combination is missing, with where to fix it. `EnterResults` says the same thing in its own words, and only for the two groups where the group name does not settle it.
 
+**Where that note sends her is `StudentDetail`'s Subject Combination field, and it is a select over `combinationsFor(group)`, never a text box.** A typed line is how the fix fails: one misspelling or an extra subject and `pickedElectives` drops it, so she reads as unrecorded again and nothing on screen says why. `combinationIndexFor(group, combination)` matches what is stored as a *set* of that group's electives, so "Civics, Education, Sociology" is recognised as the combination it is rather than as a fourth option. Three things it will not do: replace a stored line that matches nothing (it stays as an option, labelled, because that is what her marks screens are reading today); offer a choice to a single-combination group (the group settles it, and the field says so); or carry a combination across a group change (`changeProgram` clears one the new group does not offer — a Humanities combination under Pre-Medical is not a record, it is a wrong answer).
+
 Three more things to keep:
 
 - **Every screen that filters must also select the column.** `subject_combination` (and `year_of_study`, for the compulsory half) has to be in the `select(...)`, or every girl comes back `"unknown"` and the filter silently does nothing. That is the failure mode to watch for: it looks exactly like the bug it was meant to fix.

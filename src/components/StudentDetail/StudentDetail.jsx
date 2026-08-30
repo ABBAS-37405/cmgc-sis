@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { X, Save, Pencil, Upload, Eye, FileText } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { PROGRAMS, subjectsFor } from "../../lib/academics";
+import {
+  PROGRAMS, combinationsFor, compulsoryFor, formatCombination, groupHasChoice,
+} from "../../lib/academics";
+import { combinationIndexFor } from "../../lib/studentSubjects";
 import {
   DETAIL_GROUPS, DOCUMENT_FIELDS, detailsFrom, detailsToRow, matricPercentage,
 } from "../../lib/studentFields";
@@ -155,7 +158,35 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
     if (onSaved) onSaved();
   };
 
-  const subjectOptions = subjectsFor(core.program, core.year_of_study);
+  // What this girl's group actually offers, and which of those she is on record as
+  // taking. -1 means nothing usable is recorded — see combinationIndexFor.
+  const comboOptions = combinationsFor(core.program);
+  const comboIndex = combinationIndexFor(core.program, core.subject_combination);
+  const recordedCombo = (core.subject_combination || "").trim();
+  const compulsory = compulsoryFor(core.year_of_study).join(", ");
+
+  // Changing the group invalidates a combination that belonged to the old one:
+  // "Economics, Education, Civics" means nothing under Pre-Medical, and leaving
+  // it behind would have her marks screens reading a combination her group does
+  // not offer. A combination the new group does offer is kept.
+  const changeProgram = (program) => {
+    setCore((prev) => ({
+      ...prev,
+      program,
+      subject_combination:
+        combinationIndexFor(program, prev.subject_combination) >= 0 ? prev.subject_combination : "",
+    }));
+  };
+
+  const pickCombo = (value) => {
+    // "keep" is the on-record line that matches no combination; leaving it
+    // selected must not rewrite it.
+    if (value === "keep") return;
+    setCore({
+      ...core,
+      subject_combination: value === "" ? "" : formatCombination(comboOptions[Number(value)]),
+    });
+  };
 
   return (
     <div className="sd-overlay" onClick={onClose}>
@@ -192,7 +223,7 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
               <Field label="B-Form No." editing={editing} value={core.cnic}
                 onChange={(v) => setCore({ ...core, cnic: v })} />
               <Field label="Program" editing={editing} value={core.program} type="select" options={visiblePrograms}
-                onChange={(v) => setCore({ ...core, program: v })} />
+                onChange={changeProgram} />
               <Field label="Class" editing={editing} value={core.year_of_study} type="select" options={YEARS}
                 onChange={(v) => setCore({ ...core, year_of_study: v })} />
               <Field label="Phone" editing={editing} value={core.phone}
@@ -200,12 +231,59 @@ export default function StudentDetail({ student, allowedPrograms = [], onClose, 
               <Field label="Login Password" editing={editing} value={core.password}
                 hint="Stored as typed — this is what she enters on the portal."
                 onChange={(v) => setCore({ ...core, password: v })} />
-              <Field
-                label="Subject Combination" wide
-                editing={editing} value={core.subject_combination}
-                hint={subjectOptions.length ? `Group offers: ${subjectOptions.join(", ")}` : undefined}
-                onChange={(v) => setCore({ ...core, subject_combination: v })}
-              />
+              {/*
+                * Her electives, picked from what the group actually offers rather
+                * than typed. FA-IT has two combinations and Humanities three, so a
+                * wrong or missing one here is what puts a girl on a Maths sheet she
+                * never sits — or, when it is missing, on every sheet in the group.
+                * A free-text box could not be corrected reliably: one misspelling
+                * and studentSubjects.js reads her as unrecorded again.
+                */}
+              <div className="sd-field sd-field--wide">
+                <label>Subject Combination</label>
+
+                {!editing ? (
+                  <p className="sd-value">{show(core.subject_combination)}</p>
+                ) : groupHasChoice(core.program) ? (
+                  <select
+                    value={comboIndex >= 0 ? String(comboIndex) : recordedCombo ? "keep" : ""}
+                    onChange={(e) => pickCombo(e.target.value)}
+                  >
+                    <option value="">— Not recorded —</option>
+                    {comboOptions.map((combo, index) => (
+                      <option key={index} value={String(index)}>{formatCombination(combo)}</option>
+                    ))}
+                    {/* Whatever is on record but matches nothing, kept visible rather
+                        than silently replaced — her marks screens are reading it today. */}
+                    {comboIndex < 0 && recordedCombo && (
+                      <option value="keep">{recordedCombo} — not one of {core.program}'s combinations</option>
+                    )}
+                  </select>
+                ) : (
+                  <p className="sd-value">{formatCombination(comboOptions[0]) || show(core.subject_combination)}</p>
+                )}
+
+                {groupHasChoice(core.program) ? (
+                  <span className="sd-field-hint">
+                    {core.program} offers {comboOptions.length} combinations — pick the one she studies.
+                    {compulsory && ` ${compulsory} are added automatically.`}
+                  </span>
+                ) : (
+                  <span className="sd-field-hint">
+                    {core.program} has one combination, so there is nothing to choose.
+                  </span>
+                )}
+
+                {editing && groupHasChoice(core.program) && comboIndex < 0 && (
+                  <span className="sd-field-hint sd-field-hint--warn">
+                    {recordedCombo
+                      ? "What is on record is not one of the combinations above, so she is treated as unrecorded."
+                      : "Nothing is on record."}{" "}
+                    Until this is set she is listed on every subject's class test and assignment sheet in
+                    {" "}{core.program}, to be safe.
+                  </span>
+                )}
+              </div>
             </div>
           </section>
 

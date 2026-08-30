@@ -588,6 +588,23 @@ On top of that, `AccentPicker` (the rainbow slider in the navbar) lets a visitor
 
 ### The demo build
 
+**Paused since August 2026 — do not mirror new work into it.** A feature is
+finished when it works in the real app; it is no longer part of the job to teach
+`demoClient.js` the queries it makes or to seed `demoData.js` with rows for it.
+That mirroring is why almost every feature commit shows up twice in
+`git log -- src/demo`, and it was costing more than the demo returned. The
+deployed demo stays up and stays as it is; its Netlify site has its builds
+stopped, because a demo that kept rebuilding from a frozen `src/demo` would
+eventually deploy a broken screen instead of an old one. `DEMO.md` carries the
+switch and how to restart it.
+
+**What is still binding:** the folder stays in the repository and the fold-away
+checks below are still the rule. `__DEMO__` folding to a literal `false` is what
+keeps every byte of `src/demo` out of the real bundle, and that is a property of
+the *production* build — it has nothing to do with whether the demo is being
+maintained, and it breaks in exactly the same silent way if `supabaseClient.js`
+or `vite.config.js` is touched carelessly. Run them after any such change.
+
 `src/demo/` is a second database, not a second app. `vite.config.js` defines the
 build-time constant `__DEMO__` (true only under `--mode demo`), `supabaseClient.js`
 branches on it, and the app above that line does not know the difference. User-facing

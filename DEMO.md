@@ -1,5 +1,39 @@
 # The demo build
 
+> ## Paused — August 2026
+>
+> **The demo is frozen at what is already deployed, and nothing new goes into
+> it.** It kept costing twice: a second Netlify site rebuilding on every push to
+> `main`, and — the larger half — every new feature having to be taught to
+> `src/demo/demoClient.js` and seeded into `demoData.js` before it could be
+> called finished. Look at `git log -- src/demo`: almost every feature commit is
+> in there twice.
+>
+> **What paused means, in three parts:**
+>
+> 1. **The deployed demo stays up and stays exactly as it is.** Pausing is not
+>    deleting. Whoever has the link still sees the same working college.
+> 2. **The Netlify demo site must have its builds stopped**, and that switch is
+>    not in this repo — both sites are configured in Netlify's dashboard. On the
+>    demo site: **Site configuration → Build & deploy → Continuous deployment →
+>    Stop builds.** Until that is done, pushes keep rebuilding it, and a demo
+>    built from a frozen `src/demo` will eventually break (see 3).
+> 3. **New features are no longer mirrored into `src/demo`.** A screen that
+>    queries a table `demoSchema.js` does not have, or a PostgREST feature
+>    `demoClient.js` does not implement, will simply fail in the demo. That is
+>    accepted, and it is why the builds have to be stopped rather than left to
+>    redeploy a slowly rotting copy.
+>
+> **What has not changed, and must not:** `src/demo` stays in the repository and
+> `__DEMO__` still has to fold away to nothing in a real build. The folder is
+> paused, not abandoned — the production checks at the bottom of this file are
+> still run after any change that touches `vite.config.js`,
+> `supabaseClient.js` or the demo folder.
+>
+> **To restart it:** turn the Netlify site's builds back on, run
+> `npm run dev:demo`, and work through whatever has been added since — the
+> tables in `demoSchema.js` first, then the seed in `demoData.js`.
+
 A complete, working copy of the portal filled with invented students, for
 showing people what the system does. No login, no database, no keys.
 

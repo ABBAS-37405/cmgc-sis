@@ -67,11 +67,14 @@ export default function ClassTestEntry({ teacher = null, allowedPrograms = [], t
   // appeared — and because the list below filters on `.overlaps("programs", selected)`,
   // a test she had made for another group vanished from her own screen too.
   //
-  // Nothing is widened by this: `eligiblePrograms` still drops any group that does not
-  // study the chosen subject, and an unrestricted admin (six groups, none of them
-  // particularly hers) keeps the pick-one default.
+  // A teacher with no groups assigned at all is unrestricted, not unassigned — empty
+  // means every group, the same convention as `allowed_programs` — so she is ticked into
+  // all of them too, which is what `teacher ||` covers. Nothing is widened by any of
+  // this: `eligiblePrograms` still drops any group that does not study the chosen
+  // subject, and an unrestricted admin (six groups, none of them particularly hers)
+  // keeps the pick-one default.
   const [picked, setPicked] = useState(() =>
-    isRestricted ? visiblePrograms : visiblePrograms.slice(0, 1));
+    teacher || isRestricted ? visiblePrograms : visiblePrograms.slice(0, 1));
 
   // Being assigned to a group does not mean that group studies the subject: a Mathematics
   // teacher may be assigned Pre-Medical, whose curriculum is Biology and has no

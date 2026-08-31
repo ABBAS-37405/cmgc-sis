@@ -41,7 +41,14 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
   const allowed = teacher ? teacherPrograms(teacher) : allowedPrograms;
   const visiblePrograms = allowed.length > 0 ? PROGRAMS.filter((p) => allowed.includes(p)) : PROGRAMS;
 
-  const [selectedPrograms, setSelectedPrograms] = useState(() => visiblePrograms.slice(0, 1));
+  // Every group she is entitled to starts ticked, exactly as in `ClassTestEntry` and
+  // `AssignmentEntry`: a teacher's groups are the ones she teaches, so "all of mine" is
+  // the honest default, and material published to one group out of three is how a class
+  // never sees a paper scheme. An empty `programs[]` means unrestricted rather than
+  // unassigned, so she is ticked into all of them too. An admin, whose visible groups are
+  // nobody's in particular, keeps the pick-one default.
+  const [selectedPrograms, setSelectedPrograms] = useState(() =>
+    teacher ? visiblePrograms : visiblePrograms.slice(0, 1));
   const [subject, setSubject] = useState("");
   const [form, setForm] = useState(blankForm);
   const [file, setFile] = useState(null);

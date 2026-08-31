@@ -191,6 +191,29 @@ create table if not exists staff_salaries (
 alter table staff_salaries add column if not exists staff_id uuid references staff(id) on delete cascade;
 alter table staff_salaries alter column teacher_id drop not null;
 
+-- The office's correction to the present days for this month. NULL — the default
+-- for everybody — means the daily register decides, which is the behaviour this
+-- table had before the column existed.
+--
+-- It is here because the register is filled in every morning and is sometimes
+-- simply wrong: a week nobody marked, a teacher who came in during the holidays,
+-- days agreed at the office that were never entered. Repairing a whole month of
+-- the register to correct one figure is not something anybody does, so the figure
+-- itself can be stated instead.
+--
+-- Only a super admin is offered the box (`StaffPayroll.jsx` checks
+-- `adminProfile.is_super_admin`). That gate is the UI's, not the database's: any
+-- admin who can reach this table can already set `bonus` and `other_deduction`,
+-- which move the same total by the same amount, so a column-level restriction
+-- here would protect nothing. `can_manage_teachers()` remains the real boundary.
+--
+-- A stated present count accounts for the whole month: for a Regular employee the
+-- working days it does not claim become absence, and where the register is
+-- complete that is the absence it already held, so a correction agreeing with the
+-- register changes nothing. See section 8 of SUPABASE_STAFF_PAYROLL.md and
+-- `computeSalary` in src/lib/payroll.js.
+alter table staff_salaries add column if not exists present_days_override numeric;
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'staff_salaries_owner_check') then

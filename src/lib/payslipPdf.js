@@ -151,12 +151,20 @@ export async function buildPayslipPdf(person, calc, {
 
   /* ----------------------------------------------------- attendance */
 
+  const corrected = calc.presentDaysOverride !== null && calc.presentDaysOverride !== undefined;
+
   const attendanceBody = [
     ["Working days in month", days(calc.workingDays)],
-    ["Present", days(calc.presentDays)],
+    [corrected ? "Present  (corrected by the office)" : "Present", days(calc.presentDays)],
     ["Leave", days(calc.leaveDays)],
     ["Absent", days(calc.absentDays)],
   ];
+  // Said on the slip, not just on the office's screen. Otherwise the Present row
+  // and the deduction below it are computed from two different numbers and the
+  // slip cannot be checked against anybody's own record of the month.
+  if (corrected) {
+    attendanceBody.push(["Register had recorded", days(calc.registerPresentDays)]);
+  }
   if (calc.halfDays > 0) attendanceBody.push(["Half days", days(calc.halfDays)]);
   attendanceBody.push(["Holidays / weekly off", days(calc.holidayDays)]);
   // Shown rather than hidden: it is the admin's cue that the register is

@@ -162,10 +162,16 @@ Same `teacher_id` / `staff_id` pair and the same exactly-one check, keyed
 
 **Almost every column here is recomputed, not read.** The Salary screen calculates the
 whole month from `staff_attendance` each time it opens, so a corrected attendance mark
-immediately changes the figure. The row exists for the three things that cannot be
-recomputed — `bonus`, `other_deduction`, `notes` — and for the record of payment. The
-computed columns are stored as a snapshot of what was actually shown and sent, the same way
-`report_log` snapshots the percentages it messaged.
+immediately changes the figure. The row exists for the four things that cannot be
+recomputed — `bonus`, `other_deduction`, `notes` and `present_days_override` — and for the
+record of payment. The computed columns are stored as a snapshot of what was actually shown
+and sent, the same way `report_log` snapshots the percentages it messaged.
+
+**`present_days_override`** is the office's correction to the present days: `NULL`, the
+default for everybody, means the register decides and the month prices exactly as it did
+before this column existed. It is offered only to a **super admin**, under *Edit
+Adjustments* on the salary card, for both rosters and both employment types. See section 8
+for what a correction does and — more importantly — what it refuses to do.
 
 `status` is **derived and written back** from `paid_amount` against `net_payable`, exactly
 like a fee's status: `salaryStatusFor()` in `src/lib/payroll.js` is the single definition,
@@ -221,7 +227,23 @@ paid days      = present + (half days × 0.5)
 net payable    = (paid days × per_day_salary) + bonus − other deduction
 ```
 
-Three rules that are easy to get wrong:
+**A corrected present-day count** (`present_days_override`, super admin only)
+
+```
+Visiting   paid days    = override + (half days × 0.5)              -- priced straight off it
+Regular    absence days = clamp(working days − override − (half days × 0.5), 0, working days)
+```
+
+Where the register is complete the Regular line is arithmetically the absence it already
+held — `working days = present + absent + leave + half` — so **a correction that agrees with
+the register changes nothing at all.**
+
+Both shapes are recomputed live like everything else, so the sheet, the payslip PDF, the
+WhatsApp slip and the teacher's own **My Salary** tab all price off the same number and
+cannot disagree. The corrected figure is never printed bare: every one of those says what
+the register itself had recorded beside it.
+
+Four rules that are easy to get wrong:
 
 - **An unmarked day is not an absence.** Days with no register entry are counted and shown
   separately (`unmarkedDays`) but never deducted. Reading "nobody filled the register" as
@@ -231,6 +253,14 @@ Three rules that are easy to get wrong:
 - **The divisor is that month's working days, not 30.** A February deduction is therefore
   slightly larger per day than a March one, and a month with many holidays does not make an
   absence cheaper than it should be relative to the days actually worked.
+- **A stated present count accounts for the whole month, and that is not the first rule
+  undone.** Nobody may read an empty register as "she didn't come" — but a super admin
+  saying "present 20" in a month of 26 working days is not silence, and the six days she did
+  not claim are days not attended. The difference-based alternative was considered and
+  rejected: it returns a full salary however few days are typed, on exactly the incomplete
+  register that is the main reason the box exists. Once a count is stated `computeSalary`
+  reports `unmarkedDays: 0` (the register's own figure survives as `registerUnmarkedDays`),
+  so no screen goes on promising that days the correction deducted cost nothing.
 
 ---
 
@@ -263,6 +293,7 @@ project, and bulk sending is a **queue, not a loop** — one chat per click.
 | `staff_attendance` | New (or renamed from `teacher_attendance`) — one row per person per day | Required |
 | `college_holidays` | New — non-working days, college-wide | Required |
 | `staff_salaries` | New (or renamed from `teacher_salaries`) — one row per person per month | Required |
+| `staff_salaries.present_days_override` | The office's correction to the present days; `NULL` = the register decides | Required for the editable present days |
 | `is_this_teacher()` | New helper | Required |
 | Exactly-one-owner check constraints | Section 4 | Required |
 | RLS on all four tables | Section 7 | Required |

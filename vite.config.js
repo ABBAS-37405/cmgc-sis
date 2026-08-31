@@ -94,6 +94,24 @@ export default defineConfig(({ mode }) => {
                 priority: 10,
               },
               /*
+               * `payroll.js` is imported by the admin chunk (Teachers & Staff)
+               * and by the teacher chunk (My Salary), and a module shared by two
+               * lazy chunks is hoisted into their common parent — which is the
+               * entry, so the whole salary calculation was being downloaded and
+               * parsed by every first-time visitor to the college's home page.
+               * Nothing on the landing page has ever read it. Named here it
+               * becomes its own chunk, pulled in by the two portals that
+               * actually want it. Unlike `academics.js` above there is no
+               * landing-page edge to preserve, so check `dist/index.html` the
+               * same way: neither this chunk nor supabase may appear in a
+               * `modulepreload`.
+               */
+              {
+                name: "payroll",
+                test: /src[\\/]lib[\\/]payroll\.js$/,
+                priority: 10,
+              },
+              /*
                * Vite's own `__vitePreload` helper. Every chunk that lazy-loads
                * anything calls it, so it is shared — and being a few lines long
                * it was absorbed into the supabase group as well, which put the

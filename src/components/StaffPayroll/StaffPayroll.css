@@ -17,6 +17,7 @@
 .payroll__field { display: flex; flex-direction: column; gap: 4px; min-width: 170px; }
 .payroll__field label { font-size: 12px; color: var(--subtext); font-weight: 500; }
 .payroll__field input, .payroll__field select { font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%; }
+.payroll__field-hint { font-size: 11px; color: var(--subtext); line-height: 1.4; }
 
 .payroll__banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
 .payroll__banner--holiday { border-color: var(--accent); }
@@ -85,14 +86,17 @@
 .payroll__chip--l { color: #b45309; }
 .payroll__chip--h { color: #6d28d9; }
 .payroll__chip--warn { color: #92400e; border-color: #fcd34d; }
+/* Present days set by hand rather than counted — the dashed edge is the tell. */
+.payroll__chip--fixed { border-style: dashed; border-color: var(--accent); }
 
 .payroll__working { font-size: 12px; color: var(--subtext); line-height: 1.6; }
 .payroll__working strong { color: var(--text); }
 .payroll__working-due { color: #b45309; }
+.payroll__working-fix { color: #6d28d9; }
 .payroll__note { font-size: 12px; color: var(--subtext); }
 
 .payroll__edit { border-top: 1px dashed var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-.payroll__edit-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.payroll__edit-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 
 .payroll__card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .payroll__primary-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 8px; background: var(--accent); color: #fff; }

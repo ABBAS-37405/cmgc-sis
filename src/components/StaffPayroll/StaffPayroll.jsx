@@ -18,6 +18,8 @@ import {
   employmentTypeOf,
   formatMoney,
   formatDays,
+  normalisePresentDays,
+  isCorrected,
 } from "../../lib/payroll";
 import "./StaffPayroll.css";
 
@@ -69,6 +71,22 @@ const GROUPS = [
 ];
 
 /**
+ * The `present_days_override` column is what the Edit Adjustments box writes, and
+ * a frontend deploy can land before the SQL has been pasted into the dashboard.
+ * PostgREST answers a write naming a column it has never heard of with PGRST204
+ * (or 42703), which reads to the office as an unexplained failure — so it is
+ * turned into the one instruction that fixes it.
+ */
+const MISSING_DAYS_COLUMN =
+  "Present days cannot be saved yet: run supabase_staff_payroll.sql in the Supabase dashboard " +
+  "(it adds staff_salaries.present_days_override). Everything else on this card saves normally.";
+
+const isMissingColumn = (err) =>
+  err?.code === "PGRST204" ||
+  err?.code === "42703" ||
+  /present_days_override/i.test(err?.message || "");
+
+/**
  * Attendance and salary for everyone the college pays.
  *
  * The two rosters are separate tables — a guard has no subjects and no login, so
@@ -77,7 +95,11 @@ const GROUPS = [
  * thing that differs downstream: it decides whether a row is written against
  * `teacher_id` or `staff_id`.
  */
-export default function StaffPayroll({ teachers = [], staff = [] }) {
+export default function StaffPayroll({ teachers = [], staff = [], adminProfile = null }) {
+  // Only a super admin may correct the present days. The gate is this line and
+  // the database does not repeat it — any admin who reaches this screen can
+  // already set a bonus, which moves the same total by the same amount.
+  const canEditDays = Boolean(adminProfile?.is_super_admin);
   const [view, setView] = useState("attendance");
   const [group, setGroup] = useState("all");
 
@@ -132,7 +154,7 @@ export default function StaffPayroll({ teachers = [], staff = [] }) {
       {view === "attendance" ? (
         <DailyRegister roster={roster} />
       ) : (
-        <MonthlySalary roster={roster} />
+        <MonthlySalary roster={roster} canEditDays={canEditDays} />
       )}
     </div>
   );
@@ -393,7 +415,7 @@ function DailyRegister({ roster }) {
 /* Monthly salary                                                       */
 /* ==================================================================== */
 
-function MonthlySalary({ roster }) {
+function MonthlySalary({ roster, canEditDays = false }) {
   const [month, setMonth] = useState(() => monthKeyOf(new Date()));
   const [attendance, setAttendance] = useState([]);
   const [holidays, setHolidays] = useState([]);
@@ -401,7 +423,9 @@ function MonthlySalary({ roster }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null);
-  const [draft, setDraft] = useState({ bonus: "", other_deduction: "", notes: "" });
+  // `present_days` empty means "the register decides" — the same thing a null
+  // column means, and the state the office starts and returns to.
+  const [draft, setDraft] = useState({ bonus: "", other_deduction: "", notes: "", present_days: "" });
   const [busyKey, setBusyKey] = useState(null);
   const [waQueue, setWaQueue] = useState(null); // { list, index }
 
@@ -447,8 +471,8 @@ function MonthlySalary({ roster }) {
   /**
    * Every figure is recomputed here rather than read from `staff_salaries`, so a
    * corrected attendance mark changes the payslip immediately. Only bonus, other
-   * deduction and notes come from the stored row — they are the parts that cannot
-   * be derived from anything.
+   * deduction, notes and the present-days correction come from the stored row —
+   * they are the parts that cannot be derived from anything.
    */
   const rows = useMemo(() => {
     const byPerson = new Map();
@@ -468,6 +492,7 @@ function MonthlySalary({ roster }) {
         holidays,
         bonus: stored?.bonus || 0,
         otherDeduction: stored?.other_deduction || 0,
+        presentDaysOverride: stored?.present_days_override ?? null,
       });
       const paidAmount = Number(stored?.paid_amount) || 0;
       return { key, person, calc, stored, paidAmount, status: salaryStatusFor(calc.netPayable, paidAmount) };
@@ -489,6 +514,10 @@ function MonthlySalary({ roster }) {
       ...salaryRowFor(row.person, row.calc, {
         bonus: row.calc.bonus,
         other_deduction: row.calc.otherDeduction,
+        // Carried on every write, not only the one that set it: Mark Paid and
+        // Record Amount upsert the whole row, so leaving it out would quietly
+        // drop the correction and re-price the month off the register.
+        present_days_override: row.calc.presentDaysOverride,
         notes: row.stored?.notes || null,
         paid_amount: row.paidAmount,
         status: row.status,
@@ -504,7 +533,7 @@ function MonthlySalary({ roster }) {
       .upsert(payload, { onConflict: conflictFor(row.person, "month") })
       .select("*");
 
-    if (dbError) throw new Error(dbError.message);
+    if (dbError) throw new Error(isMissingColumn(dbError) ? MISSING_DAYS_COLUMN : dbError.message);
     if (!data || data.length === 0) throw new Error(WRITE_BLOCKED_HINT);
     return data[0];
   };
@@ -530,12 +559,20 @@ function MonthlySalary({ roster }) {
       bonus: row.calc.bonus ? String(row.calc.bonus) : "",
       other_deduction: row.calc.otherDeduction ? String(row.calc.otherDeduction) : "",
       notes: row.stored?.notes || "",
+      // Left blank when nothing has been corrected, so the box reads as "the
+      // register decides" rather than pre-loading a figure nobody typed and
+      // turning every visit to this panel into a correction.
+      present_days: row.calc.presentDaysOverride === null ? "" : String(row.calc.presentDaysOverride),
     });
   };
 
   const saveEdit = async (row) => {
     const bonus = Number(draft.bonus) || 0;
     const otherDeduction = Number(draft.other_deduction) || 0;
+    // A sub-admin never sees the box, so hers can never take her stored value away.
+    const presentDaysOverride = canEditDays
+      ? normalisePresentDays(draft.present_days, monthRange(month).days)
+      : row.calc.presentDaysOverride;
     // Recompute with the new adjustments so the stored snapshot and the derived
     // status agree with what the screen is about to show.
     const calc = computeSalary({
@@ -545,12 +582,14 @@ function MonthlySalary({ roster }) {
       holidays,
       bonus,
       otherDeduction,
+      presentDaysOverride,
     });
     const ok = await runWrite(
       { ...row, calc },
       {
         bonus,
         other_deduction: otherDeduction,
+        present_days_override: presentDaysOverride,
         notes: draft.notes.trim() || null,
         status: salaryStatusFor(calc.netPayable, row.paidAmount),
       }
@@ -661,7 +700,7 @@ function MonthlySalary({ roster }) {
       [cell(`Generated: ${fmtDate(today())}`)],
       [],
       [
-        "Name", "Role", "Department", "Type", "Rate", "Working Days", "Present", "Absent",
+        "Name", "Role", "Department", "Type", "Rate", "Working Days", "Present", "Register Present", "Absent",
         "Leave", "Half Day", "Holidays", "Not Marked", "Deducted Days", "Base", "Deduction",
         "Bonus", "Other Deduction", "Net Payable", "Paid", "Status", "Paid On", "Notes",
       ].map(cell),
@@ -669,13 +708,15 @@ function MonthlySalary({ roster }) {
         r.person.name, roleLabelFor(r.person),
         r.person.kind === "staff" ? (r.person.department || "") : "Teaching",
         r.calc.employmentType, r.calc.perDayRate, r.calc.workingDays,
-        r.calc.presentDays, r.calc.absentDays, r.calc.leaveDays, r.calc.halfDays,
+        // Both numbers, always: a sheet that printed only the corrected figure
+        // would give the office no way to see that anything had been corrected.
+        r.calc.presentDays, r.calc.registerPresentDays, r.calc.absentDays, r.calc.leaveDays, r.calc.halfDays,
         r.calc.holidayDays, r.calc.unmarkedDays, r.calc.chargeableDays, r.calc.baseAmount,
         r.calc.absenceDeduction, r.calc.bonus, r.calc.otherDeduction, r.calc.netPayable,
         r.paidAmount, r.status, r.stored?.paid_on || "", r.stored?.notes || "",
       ].map(cell)),
       [],
-      [cell("TOTAL"), ...Array(16).fill(cell("")), cell(Math.round(totals.net)), cell(Math.round(totals.paid))],
+      [cell("TOTAL"), ...Array(17).fill(cell("")), cell(Math.round(totals.net)), cell(Math.round(totals.paid))],
     ];
     const blob = new Blob([lines.map((l) => l.join(",")).join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
@@ -758,6 +799,7 @@ function MonthlySalary({ roster }) {
                 row={row}
                 month={month}
                 busy={busyKey === row.key}
+                canEditDays={canEditDays}
                 expanded={expanded === row.key}
                 draft={draft}
                 setDraft={setDraft}
@@ -779,11 +821,13 @@ function MonthlySalary({ roster }) {
 }
 
 function SalaryCard({
-  row, month, busy, expanded, draft, setDraft,
+  row, month, busy, canEditDays, expanded, draft, setDraft,
   onEdit, onCancelEdit, onSaveEdit, onMarkPaid, onPartial, onUnpaid, onWhatsApp, onPayslip,
 }) {
   const { person, calc, stored, paidAmount, status } = row;
   const isVisiting = calc.employmentType === "Visiting";
+  const corrected = isCorrected(calc);
+  const monthDaysCount = monthRange(month).days;
 
   return (
     <div className="payroll__card">
@@ -813,7 +857,12 @@ function SalaryCard({
 
       <div className="payroll__chips">
         <span className="payroll__chip">Working {formatDays(calc.workingDays)}</span>
-        <span className="payroll__chip payroll__chip--p">Present {formatDays(calc.presentDays)}</span>
+        <span
+          className={"payroll__chip payroll__chip--p" + (corrected ? " payroll__chip--fixed" : "")}
+          title={corrected ? `Set by the office — the register recorded ${formatDays(calc.registerPresentDays)}` : undefined}
+        >
+          Present {formatDays(calc.presentDays)}{corrected ? " ✎" : ""}
+        </span>
         <span className="payroll__chip payroll__chip--l">Leave {formatDays(calc.leaveDays)}</span>
         <span className="payroll__chip payroll__chip--a">Absent {formatDays(calc.absentDays)}</span>
         {calc.halfDays > 0 && <span className="payroll__chip payroll__chip--h">Half {formatDays(calc.halfDays)}</span>}
@@ -839,6 +888,12 @@ function SalaryCard({
           <span>
             {formatMoney(calc.baseAmount)} — {formatDays(calc.absenceDays)} absent/leave day
             {calc.absenceDays === 1 ? "" : "s"}, within the free allowance, <strong>no deduction</strong>.
+          </span>
+        )}
+        {corrected && (
+          <span className="payroll__working-fix">
+            {" "}· present days set to {formatDays(calc.presentDays)} by the office
+            {" "}(register: {formatDays(calc.registerPresentDays)})
           </span>
         )}
         {calc.bonus > 0 && <span> + {formatMoney(calc.bonus)} allowance</span>}
@@ -869,6 +924,22 @@ function SalaryCard({
                 placeholder="0"
               />
             </div>
+            {canEditDays && (
+              <div className="payroll__field">
+                <label>Present Days</label>
+                <input
+                  type="number" min="0" max={monthDaysCount} step="0.5"
+                  value={draft.present_days}
+                  onChange={(e) => setDraft((d) => ({ ...d, present_days: e.target.value }))}
+                  placeholder={`${formatDays(calc.registerPresentDays)} (register)`}
+                />
+                <span className="payroll__field-hint">
+                  {isVisiting
+                    ? `Leave blank to pay off the register. Pay is this figure × the daily rate, plus any half days. ${formatDays(calc.workingDays)} working days this month.`
+                    : `Leave blank to use the register. Whatever you do not claim out of ${formatDays(calc.workingDays)} working days counts as absent.`}
+                </span>
+              </div>
+            )}
             <div className="payroll__field">
               <label>Note (shown on the slip)</label>
               <input

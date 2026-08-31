@@ -3,6 +3,7 @@ import { Download, Wallet } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import {
   computeSalary,
+  isCorrected,
   salaryStatusFor,
   monthKeyOf,
   monthLabel,
@@ -98,6 +99,11 @@ export default function TeacherSalary({ teacher }) {
         holidays,
         bonus: stored?.bonus || 0,
         otherDeduction: stored?.other_deduction || 0,
+        // The office's correction to her present days, if it made one. Read here
+        // for the same reason the bonus is: this tab recomputes rather than reads,
+        // so anything it leaves out is a way for her slip and the office's sheet
+        // to state two different figures.
+        presentDaysOverride: stored?.present_days_override ?? null,
       }),
     [teacher, attendance, month, holidays, stored]
   );
@@ -199,6 +205,14 @@ export default function TeacherSalary({ teacher }) {
               {calc.halfDays > 0 && <Stat label="Half days" value={formatDays(calc.halfDays)} tone="h" />}
               <Stat label="Holidays / Sundays" value={formatDays(calc.holidayDays)} />
             </div>
+            {isCorrected(calc) && (
+              <p className="tsalary__note">
+                Your present days for this month were set to <strong>{formatDays(calc.presentDays)}</strong> by
+                the office; the daily register itself had recorded {formatDays(calc.registerPresentDays)}. Your
+                salary below is worked out from the corrected figure. If it does not match your own record of
+                the month, please contact the office.
+              </p>
+            )}
             {calc.unmarkedDays > 0 && (
               <p className="tsalary__note">
                 {formatDays(calc.unmarkedDays)} day{calc.unmarkedDays === 1 ? " has" : "s have"} no entry in the

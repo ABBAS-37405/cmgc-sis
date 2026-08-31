@@ -825,7 +825,7 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
         <AdminStaff staff={staff} loading={staffLoading} onChanged={fetchStaff} />
       )}
 
-      {activeTab === "payroll" && <StaffPayroll teachers={teachers} staff={staff} />}
+      {activeTab === "payroll" && <StaffPayroll teachers={teachers} staff={staff} adminProfile={adminProfile} />}
 
       {activeTab === "tests" && (
         <ClassTestEntry teacher={null} allowedPrograms={allowedPrograms} teacherOptions={teachers} />

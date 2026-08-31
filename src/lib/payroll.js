@@ -35,6 +35,39 @@
  * the admin can see the register is incomplete, but it never deducts from a
  * Regular salary. Silently reading "nobody filled the register" as "they didn't
  * come" would take money off someone who was at work.
+ *
+ * PRESENT DAYS MAY BE OVERRIDDEN, and only a super admin is offered the box.
+ * The register is filled in every morning and is sometimes simply wrong — a
+ * week nobody marked, a teacher who came in during the holidays, days agreed at
+ * the office that were never entered. Rather than ask the office to go back and
+ * repair a month of the register to fix one figure, `presentDaysOverride` says
+ * what the present days actually were, and the salary is priced off that.
+ *
+ * It is a correction, not a second pay rule, so it changes exactly one input:
+ *
+ *   Visiting   — the paid days are the days stated. `20 × per day`, whatever the
+ *                register happens to hold.
+ *
+ *   Regular    — the working days the correction does not account for become
+ *                absence: `working days − present − half days ÷ 2`. Where the
+ *                register is complete that is arithmetically the same absence it
+ *                already held, so a correction that agrees with the register
+ *                changes nothing at all.
+ *
+ * That last point is what makes the override safe to state as an absolute rather
+ * than as a nudge, and it is worth being clear about how it sits beside the rule
+ * above it. An unmarked day is not an absence — nobody may read silence as "she
+ * didn't come". A stated present count is not silence: a super admin saying "she
+ * was present 20 days" in a month of 26 working days has accounted for the whole
+ * month, and the six days she did not claim are days not attended. So the rule
+ * is not weakened; it is that there is no longer anything unaccounted for. This
+ * is also why the box is a super admin's and why every screen prints what the
+ * register itself held beside it.
+ *
+ * Null means the register decides, and that is the default for everybody. What
+ * the register itself counted is always carried back as `registerPresentDays`,
+ * so no screen has to choose between showing the correction and showing what it
+ * corrected.
  */
 
 export const EMPLOYMENT_TYPES = ["Regular", "Visiting"];
@@ -114,6 +147,27 @@ const num = (v) => {
 
 const round = (n) => Math.round(n * 100) / 100;
 
+const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
+
+/**
+ * The stored override as a number, or null for "the register decides".
+ *
+ * An empty box, a blank column and a value that is not a number all mean the
+ * same thing and must all mean the register — a correction nobody made may
+ * never price a salary.
+ */
+export function normalisePresentDays(value, maxDays = 31) {
+  if (value === null || value === undefined) return null;
+  // Trimmed before the Number(), because `Number("   ")` is 0, not NaN — a box
+  // holding a stray space would otherwise read as "present zero days" and take
+  // a whole month's salary off somebody.
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return clamp(Math.round(n * 2) / 2, 0, maxDays);
+}
+
 export const employmentTypeOf = (person) =>
   person?.employment_type === "Visiting" ? "Visiting" : "Regular";
 
@@ -142,6 +196,8 @@ export function perDayRateFor(person, workingDays) {
  * @param holidays       college holiday dates falling in that month
  * @param bonus          admin-added allowance/arrears for this month
  * @param otherDeduction admin-added deduction (advance recovered, fine, ...)
+ * @param presentDaysOverride  super-admin correction to the present days; null
+ *                             (the default) leaves the register in charge
  */
 export function computeSalary({
   person,
@@ -150,6 +206,7 @@ export function computeSalary({
   holidays = [],
   bonus = 0,
   otherDeduction = 0,
+  presentDaysOverride = null,
 }) {
   const type = employmentTypeOf(person);
   const holidaySet = new Set(holidays);
@@ -170,16 +227,29 @@ export function computeSalary({
     else unmarkedDays += 1;
   });
 
-  const presentDays = count.Present;
+  const registerPresentDays = count.Present;
   const absentDays = count.Absent;
   const leaveDays = count.Leave;
   const halfDays = count["Half Day"];
+
+  // A month has no more days than it has, whichever way the office corrects it.
+  const override = normalisePresentDays(presentDaysOverride, monthRange(monthKey).days);
+  const presentDays = override === null ? registerPresentDays : override;
 
   const perDayRate = perDayRateFor(person, workingDays);
 
   // A half day is half a day of absence on a Regular contract, and half a day
   // of pay on a Visiting one — the same 0.5, read from the two directions.
-  const absenceDays = absentDays + leaveDays + halfDays * 0.5;
+  //
+  // A stated present count accounts for the whole month, so whatever it leaves
+  // over is absence. With a complete register the two lines below agree exactly
+  // — working days = P + A + L + H, so `wd − P − H/2` is `A + L + H/2` — which
+  // is what lets a correction that matches the register change nothing.
+  const registerAbsenceDays = absentDays + leaveDays + halfDays * 0.5;
+  const absenceDays =
+    override === null
+      ? registerAbsenceDays
+      : clamp(workingDays - presentDays - halfDays * 0.5, 0, workingDays);
 
   let baseAmount;
   let absenceDeduction;
@@ -210,11 +280,19 @@ export function computeSalary({
     workingDays,
     holidayDays,
     presentDays,
+    registerPresentDays,
+    presentDaysOverride: override,
     absentDays,
     leaveDays,
     halfDays,
-    unmarkedDays,
+    // Once a present count is stated there is nothing unaccounted for, so there
+    // is no incomplete register left to warn about — and a screen that kept
+    // printing "never deducted" beside days the correction did deduct would be
+    // telling the employee the opposite of what her slip does.
+    unmarkedDays: override === null ? unmarkedDays : 0,
+    registerUnmarkedDays: unmarkedDays,
     absenceDays,
+    registerAbsenceDays,
     freeDays: type === "Regular" ? Math.min(FREE_ABSENCE_DAYS, absenceDays) : 0,
     chargeableDays,
     paidDays,
@@ -226,6 +304,10 @@ export function computeSalary({
     netPayable,
   };
 }
+
+/** Was this month's present-day count set by hand rather than counted? */
+export const isCorrected = (calc) =>
+  calc?.presentDaysOverride !== null && calc?.presentDaysOverride !== undefined;
 
 /** Derived exactly like a fee's status: from what has actually been paid. */
 export function salaryStatusFor(netPayable, paidAmount) {
@@ -246,6 +328,7 @@ export function salaryRowFor(person, calc, extra = {}) {
     working_days: calc.workingDays,
     holiday_days: calc.holidayDays,
     present_days: calc.presentDays,
+    present_days_override: calc.presentDaysOverride,
     absent_days: calc.absentDays,
     leave_days: calc.leaveDays,
     half_days: calc.halfDays,
@@ -297,6 +380,17 @@ export function buildSalaryMessage(
     `Absent: ${formatDays(calc.absentDays)}`,
   ];
 
+  // The correction is said where it is read, not in a footnote. Without this the
+  // slip prints "Absent: 2" above a deduction taken for four days, and the
+  // employee is left to work out which of the two numbers is wrong.
+  if (isCorrected(calc)) {
+    lines.push(
+      `(Present days corrected by the office — the register had recorded ${formatDays(calc.registerPresentDays)}.)`
+    );
+    if (calc.employmentType === "Regular" && calc.absenceDays !== calc.registerAbsenceDays) {
+      lines.push(`Absence counted after the correction: ${formatDays(calc.absenceDays)}`);
+    }
+  }
   if (calc.halfDays > 0) lines.push(`Half days: ${formatDays(calc.halfDays)}`);
   if (calc.holidayDays > 0) lines.push(`Holidays / weekly off: ${formatDays(calc.holidayDays)}`);
   if (calc.unmarkedDays > 0) lines.push(`Not marked: ${formatDays(calc.unmarkedDays)}`);

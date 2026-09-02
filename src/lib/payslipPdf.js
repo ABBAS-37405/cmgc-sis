@@ -17,6 +17,8 @@
  * a figure is the one that gets argued about.
  */
 
+import { isPerDayType } from "./payroll";
+
 const ACCENT = [29, 78, 216];
 const INK = [17, 24, 39];
 const MUTED = [107, 114, 128];
@@ -182,7 +184,10 @@ export async function buildPayslipPdf(person, calc, {
   /* -------------------------------------------------- the arithmetic */
 
   const salaryBody = [];
-  if (calc.employmentType === "Visiting") {
+  // Regular and Fix Pay are both the monthly shape and print the identical
+  // working; only Visiting is per day. `isPerDayType` is the one definition of
+  // that, and payroll.js imports nothing, so this file stays Node-drivable.
+  if (isPerDayType(calc.employmentType)) {
     salaryBody.push(
       ["Rate per day", money(calc.perDayRate)],
       ["Paid days", days(calc.paidDays)],

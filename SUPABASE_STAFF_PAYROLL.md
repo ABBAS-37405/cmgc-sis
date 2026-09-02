@@ -1,9 +1,16 @@
 # Supabase Schema Changes — Staff Payroll (Teachers + Admin Staff)
 
-Adds payroll for **everyone the college pays**. Each employee is either **Regular**
-(fixed monthly salary) or **Visiting** (paid per day worked); there is a daily attendance
-register, and a monthly salary screen that calculates what each person is owed, records
-payment, and sends the working over WhatsApp.
+Adds payroll for **everyone the college pays**. There is a daily attendance register, and a
+monthly salary screen that calculates what each person is owed, records payment, and sends
+the working over WhatsApp.
+
+**Three employment types on two pay shapes.** **Regular** and **Fix Pay** are both a fixed
+monthly salary and are priced by exactly the same code off the same `monthly_salary` column
+— Fix Pay records the terms someone is engaged on, not a different salary rule — while
+**Visiting** is paid per day worked. `src/lib/payroll.js` therefore branches on
+`isPerDayType()` and never on the type name. Fix Pay was added later; on a database that
+already ran this file, `supabase_fix_pay_employment.sql` is the one-constraint migration
+that allows it.
 
 Two rosters share one payroll:
 
@@ -76,7 +83,7 @@ create table if not exists staff (
   department text,                    -- must match STAFF_DEPARTMENTS in src/lib/staff.js
   phone text, whatsapp text, address text, emergency_contact text,
   employment_type text not null default 'Regular'
-    check (employment_type in ('Regular', 'Visiting')),
+    check (employment_type in ('Regular', 'Visiting', 'Fix Pay')),
   monthly_salary numeric, per_day_salary numeric,
   joining_date date,
   is_active boolean not null default true,
@@ -148,7 +155,7 @@ the table holds only real holidays: Eid, 14 August, a declared closure.
 A holiday behaves differently for the two pay shapes, and this is the asymmetry the college
 asked for:
 
-- **Regular** — excluded from working days, so it can neither deduct from the salary nor
+- **Regular / Fix Pay** — excluded from working days, so it can neither deduct from the salary nor
   inflate the per-day rate. Paid in full through the winter break.
 - **Visiting** — not present, so unpaid. There is no separate rule for this; it falls
   straight out of "present days × per-day rate".
@@ -210,7 +217,7 @@ be driven from plain Node, the same reason `reportPdf.js` is arranged that way.
 
 **Working days** = every day of the month, minus Sundays, minus `college_holidays` rows.
 
-**Regular**
+**Regular and Fix Pay** — the same calculation, twice over; only the label differs.
 
 ```
 per-day rate   = monthly_salary ÷ working days
@@ -231,10 +238,10 @@ net payable    = (paid days × per_day_salary) + bonus − other deduction
 
 ```
 Visiting   paid days    = override + (half days × 0.5)              -- priced straight off it
-Regular    absence days = clamp(working days − override − (half days × 0.5), 0, working days)
+Monthly    absence days = clamp(working days − override − (half days × 0.5), 0, working days)
 ```
 
-Where the register is complete the Regular line is arithmetically the absence it already
+Where the register is complete the monthly line is arithmetically the absence it already
 held — `working days = present + absent + leave + half` — so **a correction that agrees with
 the register changes nothing at all.**
 

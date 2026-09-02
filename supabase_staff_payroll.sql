@@ -43,14 +43,18 @@ alter table teachers add column if not exists per_day_salary  numeric;
 alter table teachers add column if not exists joining_date    date;
 alter table teachers add column if not exists whatsapp        text;
 
--- Only the two shapes the payroll code knows how to price.
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'teachers_employment_type_check') then
-    alter table teachers add constraint teachers_employment_type_check
-      check (employment_type in ('Regular', 'Visiting'));
-  end if;
-end $$;
+-- Only the types the payroll code knows how to price. Three of them, on two pay
+-- shapes: 'Regular' and 'Fix Pay' are both a fixed monthly salary and are priced
+-- identically (Fix Pay records the contract, not a different salary rule), while
+-- 'Visiting' is per day. Must match EMPLOYMENT_TYPES in src/lib/payroll.js.
+--
+-- Dropped and re-added rather than guarded on existence, because a database that
+-- already ran the two-value version of this file would otherwise keep it and
+-- reject every Fix Pay row. See also supabase_fix_pay_employment.sql, which is
+-- the same change on its own for a database that has already run this file.
+alter table teachers drop constraint if exists teachers_employment_type_check;
+alter table teachers add constraint teachers_employment_type_check
+  check (employment_type in ('Regular', 'Visiting', 'Fix Pay'));
 
 -- A teacher already on the register with no type set is Regular.
 update teachers set employment_type = 'Regular'
@@ -80,7 +84,7 @@ create table if not exists staff (
   address            text,
   emergency_contact  text,
   employment_type    text not null default 'Regular'
-                     check (employment_type in ('Regular', 'Visiting')),
+                     check (employment_type in ('Regular', 'Visiting', 'Fix Pay')),
   monthly_salary     numeric,
   per_day_salary     numeric,
   joining_date       date,
@@ -88,6 +92,13 @@ create table if not exists staff (
   notes              text,
   created_at         timestamptz not null default now()
 );
+
+-- The inline check above only applies to a table this file creates. On a database
+-- that already ran the two-value version, `create table if not exists` is a no-op
+-- and the old constraint survives, so it is replaced explicitly as well.
+alter table staff drop constraint if exists staff_employment_type_check;
+alter table staff add constraint staff_employment_type_check
+  check (employment_type in ('Regular', 'Visiting', 'Fix Pay'));
 
 create index if not exists staff_department_idx on staff (department);
 create index if not exists staff_active_idx     on staff (is_active);

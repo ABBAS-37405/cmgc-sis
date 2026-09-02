@@ -395,9 +395,13 @@ app.post('/api/teacher/create', async (req, res) => {
     rights: Array.isArray(rights) ? rights : [],
     // Keep the legacy single-subject column populated for anything still reading it.
     subject: Array.isArray(subjects) && subjects.length > 0 ? subjects[0] : null,
-    // Payroll. `employment_type` is constrained to these two values in the database,
-    // so anything else is coerced rather than allowed to fail the insert.
-    employment_type: employment_type === 'Visiting' ? 'Visiting' : 'Regular',
+    // Payroll. `employment_type` is constrained to these three values in the
+    // database (see supabase_fix_pay_employment.sql), so anything else is coerced
+    // rather than allowed to fail the insert. Kept in step with EMPLOYMENT_TYPES
+    // in src/lib/payroll.js by hand — the server shares no module with the app.
+    employment_type: ['Regular', 'Visiting', 'Fix Pay'].includes(employment_type)
+      ? employment_type
+      : 'Regular',
     monthly_salary: monthly_salary == null || monthly_salary === '' ? null : Number(monthly_salary),
     per_day_salary: per_day_salary == null || per_day_salary === '' ? null : Number(per_day_salary),
     joining_date: joining_date || null,

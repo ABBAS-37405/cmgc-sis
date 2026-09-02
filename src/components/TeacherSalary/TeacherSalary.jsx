@@ -9,6 +9,7 @@ import {
   monthLabel,
   monthRange,
   recentMonths,
+  isPerDayType,
   formatMoney,
   formatDays,
 } from "../../lib/payroll";
@@ -110,7 +111,8 @@ export default function TeacherSalary({ teacher }) {
 
   const paidAmount = Number(stored?.paid_amount) || 0;
   const status = salaryStatusFor(calc.netPayable, paidAmount);
-  const isVisiting = calc.employmentType === "Visiting";
+  // Regular and Fix Pay are both monthly; only Visiting is paid by the day.
+  const isVisiting = isPerDayType(calc.employmentType);
   const hasRate = Number(teacher?.monthly_salary) > 0 || Number(teacher?.per_day_salary) > 0;
 
   const downloadSlip = async () => {
@@ -184,8 +186,8 @@ export default function TeacherSalary({ teacher }) {
             </div>
             <p className="tsalary__terms">
               {isVisiting
-                ? `Visiting — ${formatMoney(teacher.per_day_salary)} per day worked`
-                : `Regular — ${formatMoney(teacher.monthly_salary)} per month`}
+                ? `${calc.employmentType} — ${formatMoney(teacher.per_day_salary)} per day worked`
+                : `${calc.employmentType} — ${formatMoney(teacher.monthly_salary)} per month`}
               {stored?.paid_on ? ` · paid ${fmtDate(stored.paid_on)}` : ""}
             </p>
             {paidAmount > 0 && status !== "Paid" && (

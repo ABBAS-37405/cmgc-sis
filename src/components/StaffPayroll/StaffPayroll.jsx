@@ -16,6 +16,8 @@ import {
   monthRange,
   recentMonths,
   employmentTypeOf,
+  employmentTypeSlug,
+  isPerDayType,
   formatMoney,
   formatDays,
   normalisePresentDays,
@@ -329,7 +331,7 @@ function DailyRegister({ roster }) {
       {holiday && (
         <div className="payroll__banner payroll__banner--holiday">
           🏝️ <strong>{holiday.title || "Holiday"}</strong> — the college is closed on {fmtDate(date)}.
-          Regular staff lose nothing for it; Visiting and daily-wage staff are not paid for it.
+          Monthly staff (Regular and Fix Pay) lose nothing for it; Visiting and daily-wage staff are not paid for it.
         </div>
       )}
 
@@ -368,12 +370,12 @@ function DailyRegister({ roster }) {
                   <p className="payroll__row-name">
                     {p.name}
                     <span className="payroll__role">{roleLabelFor(p)}</span>
-                    <span className={`payroll__type payroll__type--${employmentTypeOf(p).toLowerCase()}`}>
+                    <span className={`payroll__type payroll__type--${employmentTypeSlug(employmentTypeOf(p))}`}>
                       {employmentTypeOf(p)}
                     </span>
                   </p>
                   <p className="payroll__row-meta">
-                    {employmentTypeOf(p) === "Visiting"
+                    {isPerDayType(employmentTypeOf(p))
                       ? `${formatMoney(p.per_day_salary)} / day`
                       : `${formatMoney(p.monthly_salary)} / month`}
                     {p.kind === "staff" && p.department ? ` · ${p.department}` : ""}
@@ -825,7 +827,9 @@ function SalaryCard({
   onEdit, onCancelEdit, onSaveEdit, onMarkPaid, onPartial, onUnpaid, onWhatsApp, onPayslip,
 }) {
   const { person, calc, stored, paidAmount, status } = row;
-  const isVisiting = calc.employmentType === "Visiting";
+  // Regular and Fix Pay are both monthly and print the same working; only
+  // Visiting is per day.
+  const isVisiting = isPerDayType(calc.employmentType);
   const corrected = isCorrected(calc);
   const monthDaysCount = monthRange(month).days;
 
@@ -836,7 +840,7 @@ function SalaryCard({
           <p className="payroll__row-name">
             {person.name}
             <span className="payroll__role">{roleLabelFor(person)}</span>
-            <span className={`payroll__type payroll__type--${calc.employmentType.toLowerCase()}`}>
+            <span className={`payroll__type payroll__type--${employmentTypeSlug(calc.employmentType)}`}>
               {calc.employmentType}
             </span>
             <span className={`payroll__badge payroll__badge--${status.replace(/ /g, "-").toLowerCase()}`}>

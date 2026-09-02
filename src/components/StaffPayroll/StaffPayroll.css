@@ -58,6 +58,7 @@
 .payroll__type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; border-radius: 999px; padding: 3px 8px; border: 1px solid var(--border); color: var(--subtext); }
 .payroll__type--regular { color: var(--accent); border-color: var(--accent); }
 .payroll__type--visiting { color: #7c3aed; border-color: #c4b5fd; }
+.payroll__type--fix-pay { color: #0f766e; border-color: #99f6e4; }
 
 .payroll__save { align-self: flex-start; background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; padding: 10px 20px; border-radius: 8px; }
 .payroll__save:disabled { opacity: 0.6; cursor: not-allowed; }

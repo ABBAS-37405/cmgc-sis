@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
 import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher, fetchTeacherPasswords } from "../../lib/teacherAuth";
-import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
+import { EMPLOYMENT_TYPES, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
@@ -234,13 +234,15 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
 
     // A pay rate is required, not optional: the salary screen has no way to guess
     // one, and a teacher silently sitting at Rs 0 is worse than a blocked save.
-    const isVisiting = form.employment_type === "Visiting";
+    // Regular and Fix Pay are both monthly and are asked for the same rate; only
+    // Visiting is per day. Ask `isPerDayType`, never the type itself.
+    const isVisiting = isPerDayType(form.employment_type);
     const rate = Number(isVisiting ? form.per_day_salary : form.monthly_salary);
     if (!Number.isFinite(rate) || rate <= 0) {
       return setError(
         isVisiting
           ? "Enter the per-day salary for a Visiting teacher."
-          : "Enter the monthly salary for a Regular teacher."
+          : `Enter the monthly salary for a ${form.employment_type} teacher.`
       );
     }
 
@@ -493,10 +495,11 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                 </div>
               </div>
 
-              {/* Only the rate that applies is shown — a Regular teacher has no per-day
-                  rate to enter, and a Visiting one has no monthly salary. */}
+              {/* Only the rate that applies is shown — a monthly teacher (Regular or
+                  Fix Pay) has no per-day rate to enter, and a Visiting one has no
+                  monthly salary. */}
               <div className="teachers__form-row">
-                {form.employment_type === "Visiting" ? (
+                {isPerDayType(form.employment_type) ? (
                   <div className="teachers__field">
                     <label>Per Day Salary (Rs) *</label>
                     <input
@@ -520,9 +523,9 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                 <div className="teachers__field teachers__pay-note">
                   <label>&nbsp;</label>
                   <p className="teachers__hint">
-                    {form.employment_type === "Visiting"
+                    {isPerDayType(form.employment_type)
                       ? "Paid for the days she actually taught — holidays and absences are simply unpaid, so nothing is deducted."
-                      : `Full monthly salary. The first leave or absence each month is free; after that one day's pay (salary ÷ that month's working days) is deducted per day. Holidays never deduct.`}
+                      : `Full monthly salary. The first leave or absence each month is free; after that one day's pay (salary ÷ that month's working days) is deducted per day. Holidays never deduct. Fix Pay is priced exactly like Regular — it records the contract, not a different salary rule.`}
                   </p>
                 </div>
               </div>
@@ -660,11 +663,11 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                     <div className="teachers__card-info">
                       <p className="teachers__name">
                         {t.name}
-                        <span className={`teachers__tag teachers__tag--${employmentTypeOf(t).toLowerCase()}`}>
+                        <span className={`teachers__tag teachers__tag--${employmentTypeSlug(employmentTypeOf(t))}`}>
                           {employmentTypeOf(t)}
                         </span>
                         <span className="teachers__tag teachers__tag--pay">
-                          {employmentTypeOf(t) === "Visiting"
+                          {isPerDayType(employmentTypeOf(t))
                             ? `${formatMoney(t.per_day_salary)} / day`
                             : `${formatMoney(t.monthly_salary)} / month`}
                         </span>

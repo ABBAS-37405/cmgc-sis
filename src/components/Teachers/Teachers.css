@@ -56,6 +56,7 @@
 .teachers__tag--off { color: #b91c1c; border-color: #f87171; background: #fef2f2; }
 .teachers__tag--regular { color: var(--accent); border-color: var(--accent); }
 .teachers__tag--visiting { color: #6d28d9; border-color: #c4b5fd; }
+.teachers__tag--fix-pay { color: #0f766e; border-color: #99f6e4; }
 .teachers__tag--pay { color: var(--subtext); }
 .teachers__pay-note { grid-column: span 2; justify-content: flex-end; }
 /* Four buttons now (Edit, Reset Password, Send Login, Remove), so they wrap rather

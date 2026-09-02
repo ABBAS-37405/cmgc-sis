@@ -15,21 +15,30 @@
  *
  * Two pay shapes, and they are not variations of each other:
  *
- *   Regular   — a fixed monthly salary. Absence is a *deduction* from it. The
+ *   Monthly   — a fixed monthly salary. Absence is a *deduction* from it. The
  *               first absent/leave day each month is free; every day after that
  *               costs one day's pay, where a day is `monthly_salary / working
  *               days in that month`. Because holidays are never working days,
  *               a holiday can neither shrink the salary nor inflate the rate.
  *
- *   Visiting   — paid for days actually worked: `present days × per_day_salary`.
+ *   Per day   — paid for days actually worked: `present days × per_day_salary`.
  *               There is no deduction to compute, because nothing was owed for
  *               a day not worked. A holiday is simply a day not present, so it
  *               is unpaid — which is the asymmetry the college asked for and the
  *               reason these are two branches, not one.
  *
- * "Visiting" is the label the college uses for a visiting lecturer, and it is
- * the same arrangement as a daily-wage guard or sweeper: the word is theirs, the
+ * THREE EMPLOYMENT TYPES SIT ON TOP OF THOSE TWO SHAPES, and the count differs
+ * on purpose. `Regular` and `Fix Pay` are both the monthly shape and price
+ * *identically* — Fix Pay is the college's word for a teacher engaged on fixed
+ * pay rather than on the regular establishment, and it is a contract status, not
+ * a second salary rule. `Visiting` is the per-day shape, and is the same
+ * arrangement as a daily-wage guard or sweeper: the word is theirs, the
  * arithmetic is per-day either way.
+ *
+ * So nothing below may branch on the *type* where it means the *shape*. That is
+ * what `isPerDayType()` is for, and it is the only place the mapping lives — a
+ * screen testing `=== "Visiting"` reads correctly today and starts pricing a
+ * fourth type wrongly the moment one is added.
  *
  * An unmarked day is not an absence. It is counted and reported separately so
  * the admin can see the register is incomplete, but it never deducts from a
@@ -45,10 +54,10 @@
  *
  * It is a correction, not a second pay rule, so it changes exactly one input:
  *
- *   Visiting   — the paid days are the days stated. `20 × per day`, whatever the
+ *   Per day    — the paid days are the days stated. `20 × per day`, whatever the
  *                register happens to hold.
  *
- *   Regular    — the working days the correction does not account for become
+ *   Monthly    — the working days the correction does not account for become
  *                absence: `working days − present − half days ÷ 2`. Where the
  *                register is complete that is arithmetically the same absence it
  *                already held, so a correction that agrees with the register
@@ -70,7 +79,20 @@
  * corrected.
  */
 
-export const EMPLOYMENT_TYPES = ["Regular", "Visiting"];
+export const EMPLOYMENT_TYPES = ["Regular", "Visiting", "Fix Pay"];
+
+/**
+ * Which of the two pay shapes a type is priced by.
+ *
+ * `Regular` and `Fix Pay` are both monthly and share every line of the
+ * calculation; only `Visiting` is paid by the day. Ask this rather than
+ * comparing against "Visiting" by hand.
+ */
+export const isPerDayType = (type) => type === "Visiting";
+
+/** The type as a class-name fragment: "Fix Pay" -> "fix-pay". */
+export const employmentTypeSlug = (type) =>
+  String(type || "").trim().toLowerCase().replace(/\s+/g, "-");
 
 export const ATTENDANCE_STATUSES = [
   { id: "Present", label: "Present", short: "P" },
@@ -168,8 +190,16 @@ export function normalisePresentDays(value, maxDays = 31) {
   return clamp(Math.round(n * 2) / 2, 0, maxDays);
 }
 
+/**
+ * The employment type on a row, defaulted rather than trusted.
+ *
+ * Anything unrecognised — a null on a row written before the column existed, a
+ * value some future migration leaves behind — reads as Regular, because a
+ * monthly salary the office can see and correct is a safer wrong answer than a
+ * per-day rate that is null and quietly pays nothing.
+ */
 export const employmentTypeOf = (person) =>
-  person?.employment_type === "Visiting" ? "Visiting" : "Regular";
+  EMPLOYMENT_TYPES.includes(person?.employment_type) ? person.employment_type : "Regular";
 
 /**
  * Which column on the attendance/salary tables points back at this person.
@@ -182,7 +212,7 @@ export const ownerColumnFor = (person) =>
 
 /** What one day is worth for this person in this month. */
 export function perDayRateFor(person, workingDays) {
-  if (employmentTypeOf(person) === "Visiting") return num(person?.per_day_salary);
+  if (isPerDayType(employmentTypeOf(person))) return num(person?.per_day_salary);
   if (!workingDays) return 0;
   return num(person?.monthly_salary) / workingDays;
 }
@@ -256,7 +286,7 @@ export function computeSalary({
   let chargeableDays;
   let paidDays;
 
-  if (type === "Visiting") {
+  if (isPerDayType(type)) {
     // Nothing is owed for a day not worked, so there is no deduction to make.
     chargeableDays = 0;
     absenceDeduction = 0;
@@ -293,7 +323,7 @@ export function computeSalary({
     registerUnmarkedDays: unmarkedDays,
     absenceDays,
     registerAbsenceDays,
-    freeDays: type === "Regular" ? Math.min(FREE_ABSENCE_DAYS, absenceDays) : 0,
+    freeDays: isPerDayType(type) ? 0 : Math.min(FREE_ABSENCE_DAYS, absenceDays),
     chargeableDays,
     paidDays,
     perDayRate: round(perDayRate),
@@ -387,7 +417,7 @@ export function buildSalaryMessage(
     lines.push(
       `(Present days corrected by the office — the register had recorded ${formatDays(calc.registerPresentDays)}.)`
     );
-    if (calc.employmentType === "Regular" && calc.absenceDays !== calc.registerAbsenceDays) {
+    if (!isPerDayType(calc.employmentType) && calc.absenceDays !== calc.registerAbsenceDays) {
       lines.push(`Absence counted after the correction: ${formatDays(calc.absenceDays)}`);
     }
   }
@@ -397,15 +427,15 @@ export function buildSalaryMessage(
 
   lines.push("", "*Salary*");
 
-  if (calc.employmentType === "Visiting") {
+  if (isPerDayType(calc.employmentType)) {
     lines.push(
-      `Type: Visiting (per day ${formatMoney(calc.perDayRate)})`,
+      `Type: ${calc.employmentType} (per day ${formatMoney(calc.perDayRate)})`,
       `Paid days: ${formatDays(calc.paidDays)}`,
       `${formatDays(calc.paidDays)} × ${formatMoney(calc.perDayRate)} = ${formatMoney(calc.baseAmount)}`
     );
   } else {
     lines.push(
-      `Type: Regular (monthly ${formatMoney(calc.baseAmount)})`,
+      `Type: ${calc.employmentType} (monthly ${formatMoney(calc.baseAmount)})`,
       `One day's pay: ${formatMoney(calc.perDayRate)} (${formatMoney(calc.baseAmount)} ÷ ${formatDays(calc.workingDays)} working days)`
     );
     if (calc.chargeableDays > 0) {

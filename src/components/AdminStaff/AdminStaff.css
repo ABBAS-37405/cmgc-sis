@@ -35,6 +35,9 @@
 .staff__tag--role { color: var(--accent); border-color: var(--accent); }
 .staff__tag--regular { color: var(--accent); }
 .staff__tag--visiting { color: #6d28d9; border-color: #c4b5fd; }
+/* Fix Pay is priced exactly like Regular, so it is tinted as its own contract
+   status rather than borrowing either of the other two colours. */
+.staff__tag--fix-pay { color: #0f766e; border-color: #99f6e4; }
 .staff__tag--off { color: #b91c1c; border-color: #f87171; background: #fef2f2; }
 
 .staff__card-actions { display: flex; gap: 8px; flex-shrink: 0; }

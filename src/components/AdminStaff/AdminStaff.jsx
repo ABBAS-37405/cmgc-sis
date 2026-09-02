@@ -3,7 +3,7 @@ import { Plus, Trash2, Save, X, Phone, Briefcase, UserMinus, Undo2 } from "lucid
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { STAFF_DEPARTMENTS, STAFF_DESIGNATIONS, departmentFor } from "../../lib/staff";
-import { EMPLOYMENT_TYPES, employmentTypeOf, formatMoney } from "../../lib/payroll";
+import { EMPLOYMENT_TYPES, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
 import "./AdminStaff.css";
 
 const emptyForm = {
@@ -45,7 +45,8 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
   const [error, setError] = useState("");
   const [department, setDepartment] = useState("All");
 
-  const isVisiting = form.employment_type === "Visiting";
+  // Regular and Fix Pay are both the monthly shape; only Visiting is per day.
+  const isVisiting = isPerDayType(form.employment_type);
 
   // Null `left_date` is the active register; a date is those who have gone.
   const activeStaff = useMemo(() => staff.filter((s) => !s.left_date), [staff]);
@@ -109,7 +110,9 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
     const rate = Number(isVisiting ? form.per_day_salary : form.monthly_salary);
     if (!Number.isFinite(rate) || rate <= 0) {
       return setError(
-        isVisiting ? "Enter the per-day salary for a Visiting employee." : "Enter the monthly salary."
+        isVisiting
+          ? "Enter the per-day salary for a Visiting employee."
+          : `Enter the monthly salary for a ${form.employment_type} employee.`
       );
     }
 
@@ -312,7 +315,7 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
           <p className="staff__hint">
             {isVisiting
               ? "Visiting / daily wage: paid for the days actually worked. Holidays and absences are simply unpaid, so nothing is deducted."
-              : "Regular: full monthly salary. The first leave or absence each month is free; after that one day's pay (salary ÷ that month's working days) is deducted per day. Holidays never deduct."}
+              : "Regular / Fix Pay: full monthly salary. The first leave or absence each month is free; after that one day's pay (salary ÷ that month's working days) is deducted per day. Holidays never deduct. Fix Pay is priced exactly like Regular — it records the contract, not a different salary rule."}
           </p>
 
           <label className="staff__toggle">
@@ -373,11 +376,11 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
                     <span className="staff__tag staff__tag--role">
                       <Briefcase size={11} /> {s.designation}
                     </span>
-                    <span className={`staff__tag staff__tag--${employmentTypeOf(s).toLowerCase()}`}>
+                    <span className={`staff__tag staff__tag--${employmentTypeSlug(employmentTypeOf(s))}`}>
                       {employmentTypeOf(s)}
                     </span>
                     <span className="staff__tag">
-                      {employmentTypeOf(s) === "Visiting"
+                      {isPerDayType(employmentTypeOf(s))
                         ? `${formatMoney(s.per_day_salary)} / day`
                         : `${formatMoney(s.monthly_salary)} / month`}
                     </span>

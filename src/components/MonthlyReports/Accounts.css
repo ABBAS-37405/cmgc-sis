@@ -54,6 +54,19 @@
 .acct__cats-total { border-bottom: none !important; font-weight: 700; }
 .acct__cats-total span { color: var(--text) !important; }
 
+/* Download panel — pick months, the overall total, and which lines to break out. */
+.acct__dl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.acct__dl-group { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.acct__dl-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 700; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.3px; }
+.acct__dl-quick { display: inline-flex; gap: 6px; }
+.acct__dl-quick button { font-size: 11.5px; font-weight: 600; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
+.acct__dl-quick button:hover { border-color: var(--accent); }
+.acct__dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; }
+.acct__dl-check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); cursor: pointer; }
+.acct__dl-check input { width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0; }
+.acct__dl-solo { padding-top: 10px; border-top: 1px solid var(--border); }
+.acct__dl-go { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+
 .acct__rowbtns { display: inline-flex; align-items: center; gap: 6px; }
 
 .acct__del, .acct__edit-btn, .acct__save, .acct__cancel { display: inline-flex; align-items: center; justify-content: center; padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }

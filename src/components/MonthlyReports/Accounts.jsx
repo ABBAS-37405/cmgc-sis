@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Plus, Trash2, Pencil, Check, X, AlertCircle, Wallet } from "lucide-react";
+import { RefreshCw, Plus, Trash2, Pencil, Check, X, AlertCircle, Wallet, Download } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import {
@@ -7,6 +7,7 @@ import {
   PAYMENT_METHODS,
   PERIOD_MODES,
   buildLedger,
+  buildAccountsCsv,
   monthsOfPeriod,
   periodRangeOf,
   periodLabelOf,
@@ -62,8 +63,65 @@ export default function Accounts({ adminProfile }) {
   // The row being corrected, as a draft. Null when nothing is being edited.
   const [editing, setEditing] = useState(null);
 
+  // The download panel. Which months, whether to add the period total, and which
+  // income/expense lines to break out month by month. Everything starts ticked;
+  // the admin unticks what she does not want in the file.
+  const [showDownload, setShowDownload] = useState(false);
+  const [dlMonths, setDlMonths] = useState(() => new Set());
+  const [dlOverall, setDlOverall] = useState(true);
+  const [dlLines, setDlLines] = useState(() => new Set());
+
   const months = monthsOfPeriod(year, mode);
   const ledger = buildLedger({ months, payments, salaries, expenses });
+  const thisMonthKey = monthKeyOf(new Date());
+
+  // Every line the breakdown could carry for this period: fee income and
+  // salaries when there is any, then each expense category with money in it.
+  const dlLineOptions = [
+    ...(ledger.totals.income > 0 ? ["Fee income"] : []),
+    ...(ledger.totals.salaryPaid > 0 ? ["Salaries"] : []),
+    ...EXPENSE_CATEGORIES.filter((c) =>
+      ledger.categories.some((x) => x.category === c && x.amount > 0)
+    ),
+  ];
+
+  const openDownload = () => {
+    setDlMonths(new Set(months));
+    setDlLines(new Set(dlLineOptions));
+    setDlOverall(true);
+    setShowDownload(true);
+  };
+
+  const toggleFrom = (setFn, value) =>
+    setFn((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+
+  const downloadCsv = () => {
+    const chosen = months.filter((m) => dlMonths.has(m));
+    if (chosen.length === 0) {
+      alert("Tick at least one month to download.");
+      return;
+    }
+    const csv = buildAccountsCsv({
+      ledger,
+      year,
+      mode,
+      months: chosen,
+      includeOverall: dlOverall,
+      lines: dlLineOptions.filter((l) => dlLines.has(l)),
+    });
+    // A BOM so Excel opens the Rs figures as UTF-8 rather than mangling them.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Accounts_${periodLabelOf(year, mode).replace(/[^\w]+/g, "-")}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +176,9 @@ export default function Accounts({ adminProfile }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+    // The panel's ticks belong to the period they were opened for — reopening
+    // rebuilds them for the new one.
+    setShowDownload(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, mode]);
 
@@ -288,12 +349,105 @@ export default function Accounts({ adminProfile }) {
             <RefreshCw size={14} className={loading ? "mrep__spin" : ""} /> Refresh
           </button>
         </label>
+
+        <label className="mrep__field">
+          <span>&nbsp;</span>
+          <button
+            type="button"
+            className="mrep__refresh"
+            onClick={showDownload ? () => setShowDownload(false) : openDownload}
+            disabled={loading}
+          >
+            <Download size={14} /> Download
+          </button>
+        </label>
       </div>
 
       {error && (
         <div className="mrep__error">
           <AlertCircle size={15} /> {error}
         </div>
+      )}
+
+      {showDownload && (
+        <section className="acct__panel acct__dl">
+          <div className="acct__dl-head">
+            <h3 className="acct__panel-title"><Download size={15} /> Download accounts</h3>
+            <button
+              type="button"
+              className="acct__cancel"
+              onClick={() => setShowDownload(false)}
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <p className="acct__panel-sub">
+            Tick what to include, then download a CSV for {periodLabelOf(year, mode)}. It opens in
+            Excel or Google Sheets.
+          </p>
+
+          <div className="acct__dl-group">
+            <div className="acct__dl-group-head">
+              <span>Months</span>
+              <div className="acct__dl-quick">
+                <button type="button" onClick={() => setDlMonths(new Set(months))}>All</button>
+                <button type="button" onClick={() => setDlMonths(new Set())}>None</button>
+              </div>
+            </div>
+            <div className="acct__dl-grid">
+              {months.map((m) => (
+                <label key={m} className="acct__dl-check">
+                  <input
+                    type="checkbox"
+                    checked={dlMonths.has(m)}
+                    onChange={() => toggleFrom(setDlMonths, m)}
+                  />
+                  <span>{monthLabelOf(m)}{m === thisMonthKey ? " · current" : ""}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label className="acct__dl-check acct__dl-solo">
+            <input
+              type="checkbox"
+              checked={dlOverall}
+              onChange={(e) => setDlOverall(e.target.checked)}
+            />
+            <span>Overall — add the {periodLabelOf(year, mode)} total row</span>
+          </label>
+
+          <div className="acct__dl-group">
+            <div className="acct__dl-group-head">
+              <span>Break down by line, month by month</span>
+              <div className="acct__dl-quick">
+                <button type="button" onClick={() => setDlLines(new Set(dlLineOptions))}>All</button>
+                <button type="button" onClick={() => setDlLines(new Set())}>None</button>
+              </div>
+            </div>
+            {dlLineOptions.length === 0 ? (
+              <p className="acct__panel-sub">Nothing recorded in this period yet.</p>
+            ) : (
+              <div className="acct__dl-grid">
+                {dlLineOptions.map((l) => (
+                  <label key={l} className="acct__dl-check">
+                    <input
+                      type="checkbox"
+                      checked={dlLines.has(l)}
+                      onChange={() => toggleFrom(setDlLines, l)}
+                    />
+                    <span>{l}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button type="button" className="acct__submit acct__dl-go" onClick={downloadCsv}>
+            <Download size={14} /> Download CSV
+          </button>
+        </section>
       )}
 
       <div className="acct__cards">

@@ -388,6 +388,8 @@ Salaries are charged to the **month worked** (`staff_salaries.month`), not the d
 
 `accounts.js` **imports nothing that reaches `supabaseClient`** — same discipline as `payroll.js`, `reportPdf.js` and `xlsx.js`, and for the same reason: the arithmetic is the part that quietly goes wrong, so it has to be drivable from plain Node against fixtures in a repo with no test runner.
 
+**The Download panel builds a CSV, not a second view of the numbers.** `buildAccountsCsv({ ledger, year, mode, months, includeOverall, lines })` in `accounts.js` takes the same `ledger` the screen already rendered and emits a string — the admin ticks which months, whether to append the period-total row, and which income/expense lines to break out month by month (fee income, salaries, and every `EXPENSE_CATEGORIES` value with money in it). It reruns no query and re-adds nothing: everything comes from `buildLedger`'s output, so the file cannot disagree with the table above it. Closed on any period change, because its ticks belong to the period they were opened for.
+
 ### Attendance — "classes held?" is per class, not per college
 
 `MarkAttendance` is shared by the admin portal and the teacher portal, and its **"Classes held?"** toggle answers for **the roster on screen** — the current program and year filter — never for the college.

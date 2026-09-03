@@ -256,6 +256,85 @@ export function buildLedger({ months = [], payments = [], salaries = [], expense
   };
 }
 
+/**
+ * The accounts as a downloadable CSV, built to exactly what the admin ticked.
+ *
+ * Imports nothing and touches no database — like everything else here it is
+ * handed the finished `ledger` from `buildLedger` and a few flags, and returns a
+ * string. The component only turns that string into a file.
+ *
+ * @param ledger          the object `buildLedger` returned
+ * @param year, mode      for the labels
+ * @param months          the month keys to include, a subset of the period —
+ *                        drives both the summary rows and the breakdown columns
+ * @param includeOverall  add the period-total line under the summary
+ * @param lines           income/expense lines to break down month by month:
+ *                        "Fee income", "Salaries", or any EXPENSE_CATEGORIES
+ *                        value. Empty skips the breakdown section entirely.
+ */
+export function buildAccountsCsv({
+  ledger,
+  year,
+  mode = "calendar",
+  months = [],
+  includeOverall = true,
+  lines = [],
+} = {}) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const r0 = (v) => Math.round(num(v));
+  const byMonth = new Map((ledger?.rows || []).map((row) => [row.month, row]));
+  const picked = months.filter((m) => byMonth.has(m));
+
+  const out = [
+    [q("Community Model Girls College")],
+    [q(`Accounts — ${periodLabelOf(year, mode)}`)],
+    [q(`Generated ${new Date().toISOString().split("T")[0]}`)],
+    [q(`Months included: ${picked.map(monthLabelOf).join(", ") || "none"}`)],
+    [],
+    [q("MONTHLY SUMMARY")],
+    ["Month", "Fee income", "Salaries", "Other expenses", "Total expenses", "Net", "Result"].map(q),
+  ];
+
+  const sum = { income: 0, salaryPaid: 0, misc: 0, expenses: 0, net: 0 };
+  picked.forEach((m) => {
+    const row = byMonth.get(m);
+    sum.income += row.income;
+    sum.salaryPaid += row.salaryPaid;
+    sum.misc += row.misc;
+    sum.expenses += row.expenses;
+    sum.net += row.net;
+    out.push([
+      monthLabelOf(m),
+      r0(row.income), r0(row.salaryPaid), r0(row.misc), r0(row.expenses), r0(row.net),
+      row.empty ? "No activity" : resultOf(row.net),
+    ].map(q));
+  });
+
+  if (includeOverall) {
+    out.push([
+      `${periodLabelOf(year, mode)} — total`,
+      r0(sum.income), r0(sum.salaryPaid), r0(sum.misc), r0(sum.expenses), r0(sum.net),
+      resultOf(sum.net),
+    ].map(q));
+  }
+
+  if (lines.length > 0 && picked.length > 0) {
+    out.push([], [q("BREAKDOWN BY LINE")]);
+    out.push(["Line", ...picked.map(monthLabelOf), "Total"].map(q));
+    lines.forEach((line) => {
+      const cells = picked.map((m) => {
+        const row = byMonth.get(m);
+        if (line === "Fee income") return row.income;
+        if (line === "Salaries") return row.salaryPaid;
+        return row.byCategory?.[line] || 0;
+      });
+      out.push([line, ...cells.map(r0), r0(cells.reduce((a, b) => a + b, 0))].map(q));
+    });
+  }
+
+  return out.map((row) => row.join(",")).join("\r\n");
+}
+
 /** 'Profit' / 'Loss' / 'Break-even' — one definition, never re-derived in a component. */
 export function resultOf(net) {
   if (net > 0) return "Profit";

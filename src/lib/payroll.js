@@ -82,6 +82,32 @@
 export const EMPLOYMENT_TYPES = ["Regular", "Visiting", "Fix Pay"];
 
 /**
+ * How the college sends someone their pay. Free text beyond this list — offered
+ * as a datalist in the forms, the same way `staff.designation` is, because a new
+ * wallet will turn up the day after any fixed list ships. Nothing in the
+ * arithmetic below reads it; it is a note for the office to check an account
+ * against before an online transfer.
+ */
+export const PAYMENT_METHODS = ["Bank Transfer", "EasyPaisa", "JazzCash", "Cash", "Other"];
+
+/**
+ * One line describing where this person's salary goes, or "" when nothing is on
+ * file. Built from `payment_method` / `bank_name` / `account_title` /
+ * `account_number` on a `teachers` or `staff` row.
+ */
+export function payoutAccountLine(person) {
+  if (!person) return "";
+  const method = String(person.payment_method || "").trim();
+  const bank = String(person.bank_name || "").trim();
+  const title = String(person.account_title || "").trim();
+  const number = String(person.account_number || "").trim();
+  if (!method && !bank && !title && !number) return "";
+  const head = [method, bank].filter(Boolean).join(" · ");
+  const tail = [number, title ? `(${title})` : ""].filter(Boolean).join(" ");
+  return [head, tail].filter(Boolean).join(" — ");
+}
+
+/**
  * Which of the two pay shapes a type is priced by.
  *
  * `Regular` and `Fix Pay` are both monthly and share every line of the

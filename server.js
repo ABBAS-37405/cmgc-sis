@@ -361,6 +361,7 @@ app.post('/api/teacher/create', async (req, res) => {
   const {
     accessToken, teacherId, email, password, name, qualification, phone, subjects, programs, rights,
     employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+    payment_method, bank_name, account_title, account_number,
   } = req.body || {};
 
   const auth = await authorizeAdmin(accessToken, 'teachers');
@@ -406,6 +407,13 @@ app.post('/api/teacher/create', async (req, res) => {
     per_day_salary: per_day_salary == null || per_day_salary === '' ? null : Number(per_day_salary),
     joining_date: joining_date || null,
     whatsapp: whatsapp || null,
+    // Where her salary is sent — see supabase_payout_accounts.sql. Plain text,
+    // no constraint; the browser writes these directly when editing a teacher
+    // who already has a login, and this route writes them on login creation.
+    payment_method: payment_method || null,
+    bank_name: bank_name || null,
+    account_title: account_title || null,
+    account_number: account_number || null,
   };
 
   const { data: teacherRow, error: rowError } = teacherId

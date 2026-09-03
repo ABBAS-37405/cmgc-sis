@@ -62,6 +62,11 @@ alter table teachers add column if not exists joining_date    date;
 alter table teachers add column if not exists whatsapp        text;
 ```
 
+`supabase_payout_accounts.sql` adds four more later — `payment_method`, `bank_name`,
+`account_title`, `account_number`, the same four on `staff` — so the office can check where
+a salary is sent before an online transfer. Plain text, no constraint, no policy; see
+section 10.
+
 `whatsapp` is read first by `whatsappNumberFor()`, with `phone` as the fallback — the same
 convention `students` already uses, and the reason a landline on file no longer breaks the
 salary slip.
@@ -291,11 +296,43 @@ project, and bulk sending is a **queue, not a loop** — one chat per click.
 
 ---
 
+## 10. Where the salary is sent — `supabase_payout_accounts.sql`
+
+A later, optional migration. Four text columns on **both** `teachers` and `staff`:
+
+```sql
+alter table teachers add column if not exists payment_method text;  -- 'Bank Transfer' | 'EasyPaisa' | 'JazzCash' | 'Cash' | 'Other'
+alter table teachers add column if not exists bank_name      text;
+alter table teachers add column if not exists account_title  text;
+alter table teachers add column if not exists account_number text;  -- account no, IBAN, or wallet mobile number
+-- ...and the same four on staff
+```
+
+The college pays some salaries online now, and the office wanted the account visible on
+the salary card instead of on a slip of paper. `PAYMENT_METHODS` in `src/lib/payroll.js` is
+the datalist of suggestions — free text beyond it, exactly like `staff.designation`, and
+**nothing in the arithmetic reads any of it**, so there is no constraint. `payoutAccountLine(person)`
+in the same file is the one-line rendering, shared by the Teachers form card, the Admin
+Staff card, and the salary card in `StaffPayroll` (with a copy button for the number).
+
+**No RLS change.** Both tables already expose every column through their select policies and
+already allow an admin (`can_manage_teachers()`) to update. A teacher who has a login is
+edited by a direct browser `update`; a teacher who does not is written by
+`POST /api/teacher/create` in `server.js`, so the four fields travel through
+`createTeacherLogin()` and the route's allow-list too.
+
+**Deliberately not in the WhatsApp slip.** That message gets forwarded. The account is shown
+only inside the `teachers`-gated screens and printed on the payslip PDF (which the employee
+downloads for herself), never in click-to-chat text.
+
+---
+
 ## Summary
 
 | Component | Change | Status |
 |-----------|--------|--------|
 | `teachers` | `employment_type`, `monthly_salary`, `per_day_salary`, `joining_date`, `whatsapp` | Required |
+| `teachers` + `staff` | `payment_method`, `bank_name`, `account_title`, `account_number` (`supabase_payout_accounts.sql`) | Optional — for online salary transfers |
 | `staff` | New — the non-teaching register | Required |
 | `staff_attendance` | New (or renamed from `teacher_attendance`) — one row per person per day | Required |
 | `college_holidays` | New — non-working days, college-wide | Required |

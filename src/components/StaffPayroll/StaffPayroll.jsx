@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { CalendarDays, Wallet, Check, Save, CalendarOff, Download } from "lucide-react";
+import { CalendarDays, Wallet, Check, Save, CalendarOff, Download, Copy } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
@@ -22,6 +22,7 @@ import {
   formatDays,
   normalisePresentDays,
   isCorrected,
+  payoutAccountLine,
 } from "../../lib/payroll";
 import "./StaffPayroll.css";
 
@@ -705,6 +706,7 @@ function MonthlySalary({ roster, canEditDays = false }) {
         "Name", "Role", "Department", "Type", "Rate", "Working Days", "Present", "Register Present", "Absent",
         "Leave", "Half Day", "Holidays", "Not Marked", "Deducted Days", "Base", "Deduction",
         "Bonus", "Other Deduction", "Net Payable", "Paid", "Status", "Paid On", "Notes",
+        "Paid Via", "Account Number", "Account Title", "Bank",
       ].map(cell),
       ...rows.map((r) => [
         r.person.name, roleLabelFor(r.person),
@@ -716,6 +718,8 @@ function MonthlySalary({ roster, canEditDays = false }) {
         r.calc.holidayDays, r.calc.unmarkedDays, r.calc.chargeableDays, r.calc.baseAmount,
         r.calc.absenceDeduction, r.calc.bonus, r.calc.otherDeduction, r.calc.netPayable,
         r.paidAmount, r.status, r.stored?.paid_on || "", r.stored?.notes || "",
+        r.person.payment_method || "", r.person.account_number || "",
+        r.person.account_title || "", r.person.bank_name || "",
       ].map(cell)),
       [],
       [cell("TOTAL"), ...Array(17).fill(cell("")), cell(Math.round(totals.net)), cell(Math.round(totals.paid))],
@@ -833,6 +837,22 @@ function SalaryCard({
   const corrected = isCorrected(calc);
   const monthDaysCount = monthRange(month).days;
 
+  // Where this salary is sent, for an online transfer. Shown here so the office
+  // does not have to leave the sheet to look it up.
+  const payoutLine = payoutAccountLine(person);
+  const accountNumber = String(person.account_number || "").trim();
+  const [copied, setCopied] = useState(false);
+  const copyAccount = async () => {
+    if (!accountNumber) return;
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      window.prompt(`Copy ${person.name}'s account number:`, accountNumber);
+    }
+  };
+
   return (
     <div className="payroll__card">
       <div className="payroll__card-head">
@@ -858,6 +878,17 @@ function SalaryCard({
         </div>
         <p className="payroll__net">{formatMoney(calc.netPayable)}</p>
       </div>
+
+      {payoutLine && (
+        <p className="payroll__payout">
+          <Wallet size={12} /> {payoutLine}
+          {accountNumber && (
+            <button type="button" onClick={copyAccount} className="payroll__payout-copy" title="Copy account number">
+              <Copy size={12} /> {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+        </p>
+      )}
 
       <div className="payroll__chips">
         <span className="payroll__chip">Working {formatDays(calc.workingDays)}</span>

@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS, WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { ALL_SUBJECTS } from "../../lib/academics";
 import { TEACHER_RIGHTS, createTeacherLogin, resetTeacherPassword, deleteTeacher, fetchTeacherPasswords } from "../../lib/teacherAuth";
-import { EMPLOYMENT_TYPES, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
+import { EMPLOYMENT_TYPES, PAYMENT_METHODS, payoutAccountLine, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
 import WhatsappIcon from "../WhatsappIcon/WhatsappIcon";
 import ClassTestEntry from "../ClassTestEntry/ClassTestEntry";
@@ -25,6 +25,10 @@ const emptyForm = {
   monthly_salary: "",
   per_day_salary: "",
   joining_date: "",
+  payment_method: "",
+  bank_name: "",
+  account_title: "",
+  account_number: "",
   subjects: [],
   programs: [],
   rights: ["class_tests"],
@@ -216,6 +220,10 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
       monthly_salary: t.monthly_salary != null ? String(t.monthly_salary) : "",
       per_day_salary: t.per_day_salary != null ? String(t.per_day_salary) : "",
       joining_date: t.joining_date || "",
+      payment_method: t.payment_method || "",
+      bank_name: t.bank_name || "",
+      account_title: t.account_title || "",
+      account_number: t.account_number || "",
       subjects: Array.isArray(t.subjects) ? t.subjects : [],
       programs: Array.isArray(t.programs) ? t.programs : [],
       rights: Array.isArray(t.rights) ? t.rights : [],
@@ -261,6 +269,12 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
       per_day_salary: isVisiting ? rate : null,
       joining_date: form.joining_date || null,
       whatsapp: form.whatsapp.trim() || null,
+      // Where her salary is sent, so the office can check the account before an
+      // online transfer. None of it is required.
+      payment_method: form.payment_method.trim() || null,
+      bank_name: form.bank_name.trim() || null,
+      account_title: form.account_title.trim() || null,
+      account_number: form.account_number.trim() || null,
     };
 
     setSaving(true);
@@ -530,6 +544,50 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                 </div>
               </div>
 
+              {/* Where her salary is sent. Optional — the office fills it in so an
+                  online transfer can be checked against the salary card. */}
+              <div className="teachers__form-row">
+                <div className="teachers__field">
+                  <label>Salary Paid Via</label>
+                  <input
+                    list="teacher-payment-methods"
+                    value={form.payment_method}
+                    onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                    placeholder="Bank Transfer / EasyPaisa / JazzCash"
+                  />
+                  <datalist id="teacher-payment-methods">
+                    {PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}
+                  </datalist>
+                </div>
+                <div className="teachers__field">
+                  <label>Account / Wallet Number</label>
+                  <input
+                    value={form.account_number}
+                    onChange={(e) => setForm({ ...form, account_number: e.target.value })}
+                    placeholder="Account number, IBAN, or 03XX-XXXXXXX"
+                  />
+                </div>
+              </div>
+
+              <div className="teachers__form-row">
+                <div className="teachers__field">
+                  <label>Account Title</label>
+                  <input
+                    value={form.account_title}
+                    onChange={(e) => setForm({ ...form, account_title: e.target.value })}
+                    placeholder="Name the account is held in"
+                  />
+                </div>
+                <div className="teachers__field">
+                  <label>Bank Name</label>
+                  <input
+                    value={form.bank_name}
+                    onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                    placeholder="For a bank transfer — leave blank for a wallet"
+                  />
+                </div>
+              </div>
+
               <div className="teachers__form-row">
                 <div className="teachers__field">
                   <label>Login Email {hasLogin ? "" : "*"}</label>
@@ -680,6 +738,12 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                         {t.phone ? ` · ${t.phone}` : ""}
                         {t.joining_date ? ` · joined ${fmtDate(t.joining_date)}` : ""}
                       </p>
+
+                      {payoutAccountLine(t) && (
+                        <p className="teachers__meta teachers__meta--pay">
+                          <Wallet size={12} className="teachers__tags-icon" /> {payoutAccountLine(t)}
+                        </p>
+                      )}
 
                       {/* Her portal password, super admin only. Hidden until asked for,
                           because these cards are read in an office with a counter in

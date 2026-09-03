@@ -146,6 +146,17 @@ export async function buildPayslipPdf(person, calc, {
       person?.joining_date ? ["Joining date", longDate(person.joining_date)] : null,
       person?.cnic ? ["CNIC", person.cnic] : null,
       person?.phone ? ["Contact", person.phone] : null,
+      // The account the salary is sent to, so the employee can check the office
+      // has it right. Only shown when something is on file.
+      person?.payment_method ? ["Salary paid via", person.payment_method] : null,
+      person?.account_number
+        ? [
+            "Account / wallet",
+            [person.account_number, person.bank_name, person.account_title]
+              .filter(Boolean)
+              .join("  ·  "),
+          ]
+        : null,
     ].filter(Boolean),
     columnStyles: { 0: { cellWidth: 55, fontStyle: "bold" } },
   });

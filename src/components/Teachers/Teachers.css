@@ -33,6 +33,7 @@
 .teachers__card-info { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
 .teachers__name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .teachers__meta { font-size: 12px; color: var(--subtext); }
+.teachers__meta--pay { color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
 /* The vault is not set up. A strip, not a modal: nothing is broken, and the reset
    button next to it still does its job. */
 .teachers__vault-warning { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 12px; }

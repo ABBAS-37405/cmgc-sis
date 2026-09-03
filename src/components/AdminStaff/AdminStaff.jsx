@@ -3,7 +3,7 @@ import { Plus, Trash2, Save, X, Phone, Briefcase, UserMinus, Undo2 } from "lucid
 import { supabase } from "../../lib/supabaseClient";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import { STAFF_DEPARTMENTS, STAFF_DESIGNATIONS, departmentFor } from "../../lib/staff";
-import { EMPLOYMENT_TYPES, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
+import { EMPLOYMENT_TYPES, PAYMENT_METHODS, payoutAccountLine, employmentTypeOf, employmentTypeSlug, isPerDayType, formatMoney } from "../../lib/payroll";
 import "./AdminStaff.css";
 
 const emptyForm = {
@@ -20,6 +20,10 @@ const emptyForm = {
   monthly_salary: "",
   per_day_salary: "",
   joining_date: "",
+  payment_method: "",
+  bank_name: "",
+  account_title: "",
+  account_number: "",
   is_active: true,
   notes: "",
 };
@@ -85,6 +89,10 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
       monthly_salary: s.monthly_salary != null ? String(s.monthly_salary) : "",
       per_day_salary: s.per_day_salary != null ? String(s.per_day_salary) : "",
       joining_date: s.joining_date || "",
+      payment_method: s.payment_method || "",
+      bank_name: s.bank_name || "",
+      account_title: s.account_title || "",
+      account_number: s.account_number || "",
       is_active: s.is_active !== false,
       notes: s.notes || "",
     });
@@ -132,6 +140,12 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
       monthly_salary: isVisiting ? null : rate,
       per_day_salary: isVisiting ? rate : null,
       joining_date: form.joining_date || null,
+      // Where the salary is sent, so an online transfer can be checked against
+      // the salary card. All optional.
+      payment_method: form.payment_method.trim() || null,
+      bank_name: form.bank_name.trim() || null,
+      account_title: form.account_title.trim() || null,
+      account_number: form.account_number.trim() || null,
       is_active: form.is_active,
       notes: form.notes.trim() || null,
     };
@@ -307,6 +321,50 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
             </div>
           </div>
 
+          {/* Where the salary is sent. Optional — filled in so an online transfer
+              can be checked against the salary card. */}
+          <div className="staff__form-row">
+            <div className="staff__field">
+              <label>Salary Paid Via</label>
+              <input
+                list="staff-payment-methods"
+                value={form.payment_method}
+                onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                placeholder="Bank Transfer / EasyPaisa / JazzCash"
+              />
+              <datalist id="staff-payment-methods">
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}
+              </datalist>
+            </div>
+            <div className="staff__field">
+              <label>Account / Wallet Number</label>
+              <input
+                value={form.account_number}
+                onChange={(e) => setForm({ ...form, account_number: e.target.value })}
+                placeholder="Account number, IBAN, or 03XX-XXXXXXX"
+              />
+            </div>
+          </div>
+
+          <div className="staff__form-row">
+            <div className="staff__field">
+              <label>Account Title</label>
+              <input
+                value={form.account_title}
+                onChange={(e) => setForm({ ...form, account_title: e.target.value })}
+                placeholder="Name the account is held in"
+              />
+            </div>
+            <div className="staff__field">
+              <label>Bank Name</label>
+              <input
+                value={form.bank_name}
+                onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                placeholder="For a bank transfer — leave blank for a wallet"
+              />
+            </div>
+          </div>
+
           <div className="staff__field">
             <label>Notes</label>
             <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Anything worth recording — duty timings, shift, agreement" />
@@ -399,6 +457,9 @@ export default function AdminStaff({ staff = [], loading = false, onChanged }) {
                       {s.whatsapp && s.whatsapp !== s.phone ? ` · WhatsApp ${s.whatsapp}` : ""}
                       {s.emergency_contact ? ` · emergency: ${s.emergency_contact}` : ""}
                     </p>
+                  )}
+                  {payoutAccountLine(s) && (
+                    <p className="staff__meta staff__meta--pay">💳 {payoutAccountLine(s)}</p>
                   )}
                   {s.notes && <p className="staff__meta staff__meta--note">📝 {s.notes}</p>}
                 </div>

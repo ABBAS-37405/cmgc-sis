@@ -63,10 +63,12 @@ const callTeacherApi = callServiceApi;
 export function createTeacherLogin({
   teacherId, email, password, name, qualification, phone, subjects, programs, rights,
   employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+  payment_method, bank_name, account_title, account_number,
 }) {
   return callTeacherApi("/api/teacher/create", {
     teacherId, email, password, name, qualification, phone, subjects, programs, rights,
     employment_type, monthly_salary, per_day_salary, joining_date, whatsapp,
+    payment_method, bank_name, account_title, account_number,
   });
 }
 

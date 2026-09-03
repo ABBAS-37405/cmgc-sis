@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck, Wallet, Calendar } from "lucide-react";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck, Wallet, Calendar, Download } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { prepareUpload } from "../../lib/uploads";
+import { downloadXlsx, S } from "../../lib/xlsx";
 import "./Fee.css";
 
 const buildProofPath = (fileName) => `payment-proofs/${new Date().getTime()}-${fileName}`;
@@ -43,9 +44,10 @@ const COLLEGE_ACCOUNTS = [
   },
 ];
 
-export default function Fee({ studentId }) {
+export default function Fee({ studentId, student }) {
   const [fees, setFees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
   const [showMethods, setShowMethods] = useState(null);
   const [showProofForm, setShowProofForm] = useState(null);
   const [proofFile, setProofFile] = useState(null);
@@ -202,6 +204,72 @@ export default function Fee({ studentId }) {
     return <span className="fee__badge fee__badge--unpaid"><XCircle size={12} /> Unpaid</span>;
   };
 
+  // Her own paid/unpaid record as one file — the same figures the cards on
+  // screen show, so it can never disagree with what she is looking at.
+  const downloadFeeStatement = async () => {
+    if (fees.length === 0) return;
+    setDownloadingStatement(true);
+
+    const sortedFees = [...fees].sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
+    const allTxns = fees
+      .flatMap((f) => (f.transactions || []).map((t) => ({ ...t, feeLabel: f.label || f.program })))
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+
+    const totalDue = fees.reduce((sum, f) => sum + Number(f.amount_due || 0), 0);
+    const totalPaid = fees.reduce((sum, f) => sum + Number(f.amount_paid || 0), 0);
+    const totalPendingAmt = fees.reduce((sum, f) => sum + Number(f.remaining_amount || 0), 0);
+    const fmt = (d) => (d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "—");
+
+    const rows = [
+      [{ v: "Community Model Girls College, Rawalpindi", s: S.TITLE }],
+      [{ v: `Fee Statement — ${student?.name || ""} (${student?.roll_no || ""})`, s: S.LABEL }],
+      [{ v: `${student?.program || ""}${student?.year_of_study ? " — " + student.year_of_study : ""}`, s: S.LABEL }],
+      [],
+      ["Fee", "Due Date", "Amount Due (Rs)", "Paid (Rs)", "Pending (Rs)", "Status"].map((h) => ({ v: h, s: S.HEAD })),
+      ...sortedFees.map((f) => [
+        { v: f.label || f.program || "Fee", s: S.TEXT },
+        { v: fmt(f.due_date), s: S.CENTER },
+        { v: Number(f.amount_due || 0), s: S.CENTER },
+        { v: Number(f.amount_paid || 0), s: S.CENTER },
+        { v: Number(f.remaining_amount || 0), s: S.CENTER },
+        { v: Number(f.remaining_amount || 0) === 0 ? "Paid" : f.status, s: S.CENTER },
+      ]),
+      [
+        { s: S.BAND },
+        { v: "Total", s: S.BAND },
+        { v: totalDue, s: S.BAND },
+        { v: totalPaid, s: S.BAND },
+        { v: totalPendingAmt, s: S.BAND },
+        { s: S.BAND },
+      ],
+      [],
+      [{ v: "Payment History", s: S.LABEL }],
+      ["Date", "Fee", "Amount (Rs)", "Method", "Reference", "Recorded By"].map((h) => ({ v: h, s: S.HEAD })),
+      ...(allTxns.length
+        ? allTxns.map((t) => [
+            { v: fmt(t.created_at), s: S.CENTER },
+            { v: t.feeLabel || "", s: S.TEXT },
+            { v: Number(t.amount || 0), s: S.CENTER },
+            { v: t.payment_method || "", s: S.TEXT },
+            { v: t.reference_number || "—", s: S.TEXT },
+            { v: t.recorded_by === "admin" ? "Admin (Office)" : "Student", s: S.CENTER },
+          ])
+        : [[{ v: "No payments recorded yet", s: S.TEXT }]]),
+    ];
+
+    const columns = [
+      { width: 22 }, { width: 14 }, { width: 16 }, { width: 14 }, { width: 16 }, { width: 16 },
+    ];
+
+    await downloadXlsx(`Fee-Statement-${student?.roll_no || studentId}`, {
+      sheetName: "Fee Statement",
+      rows,
+      columns,
+      freeze: { row: 5 },
+    });
+    setDownloadingStatement(false);
+  };
+
   const isCashMethod = selectedMethod === "Cash in College Office";
   const paymentReferenceLabel = isCashMethod ? "Receipt Number *" : "Transaction Reference Number *";
   const paymentReferencePlaceholder = isCashMethod ? "e.g. RCPT-1001" : "e.g. TXN-123456";
@@ -226,6 +294,16 @@ export default function Fee({ studentId }) {
         </div>
       ) : (
         <>
+          <div className="fee__toolbar">
+            <button
+              onClick={downloadFeeStatement}
+              disabled={downloadingStatement}
+              className="fee__download-btn"
+            >
+              <Download size={14} /> {downloadingStatement ? "Preparing..." : "Download Fee Statement (.xlsx)"}
+            </button>
+          </div>
+
           {fees.length > 1 && pendingCount > 0 && (
             <div className="fee__summary">
               <div className="fee__summary-icon"><Wallet size={20} /></div>

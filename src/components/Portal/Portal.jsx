@@ -292,7 +292,7 @@ export default function Portal({ onExit }) {
         {activeTab === "assignments" && <Assignments student={studentData} />}
         {activeTab === "lms" && <Lms student={studentData} />}
         {activeTab === "results" && <Results student={studentData} />}
-        {activeTab === "fee" && <Fee studentId={studentData?.id} />}
+        {activeTab === "fee" && <Fee studentId={studentData?.id} student={studentData} />}
         {activeTab === "performance" && <MyPerformance student={studentData} />}
         {activeTab === "reports" && <Reports student={studentData} />}
         {activeTab === "myform" && <MyForm student={studentData} />}

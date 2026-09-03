@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Check, X, Eye } from "lucide-react";
+import { Check, X, Eye, Download } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import FeeSettings from "../FeeSettings/FeeSettings";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { downloadXlsx, S } from "../../lib/xlsx";
 import "./FeeVerification.css";
 
 const PAYMENT_METHODS = ["Easypaisa", "Bank Al Habib", "Raast", "Cash in College Office"];
@@ -76,6 +77,7 @@ export default function FeeVerification() {
   const [paymentDateByFee, setPaymentDateByFee] = useState({});
   const [paymentAmountByFee, setPaymentAmountByFee] = useState({});
   const [markingPaidId, setMarkingPaidId] = useState(null);
+  const [downloadingUnpaid, setDownloadingUnpaid] = useState(false);
 
   const fetchPending = async () => {
     setLoading(true);
@@ -318,6 +320,59 @@ export default function FeeVerification() {
 
   const fmtDue = (d) =>
     d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+  // Exports exactly what is on screen — the Overall list or the "up to this
+  // month" list, under whichever year filter is active — so the sheet can
+  // never disagree with the tab it was downloaded from.
+  const downloadUnpaidList = async () => {
+    const rowsSource = unpaidView === "monthly" ? feesUpToMonth : filteredUnpaidFees;
+    if (rowsSource.length === 0) return;
+    setDownloadingUnpaid(true);
+
+    const sorted = [...rowsSource].sort((a, b) => {
+      const nameCmp = (a.student?.name || "").localeCompare(b.student?.name || "");
+      return nameCmp !== 0 ? nameCmp : (a.due_date || "").localeCompare(b.due_date || "");
+    });
+    const total = sorted.reduce((sum, f) => sum + Number(f.remaining_amount || 0), 0);
+    const subtitle =
+      unpaidView === "monthly"
+        ? `Unpaid Fees — up to ${monthLabelOf(activeUnpaidMonth)} (${yearFilter})`
+        : `Unpaid Fees — Overall (${yearFilter})`;
+
+    const rows = [
+      [{ v: "Community Model Girls College, Rawalpindi", s: S.TITLE }],
+      [{ v: subtitle, s: S.LABEL }],
+      [],
+      ["Roll No", "Name", "Program", "Year", "Fee", "Due Date", "Pending (Rs)"].map((h) => ({ v: h, s: S.HEAD })),
+      ...sorted.map((f) => [
+        { v: f.student?.roll_no || "", s: S.TEXT },
+        { v: f.student?.name || "", s: S.TEXT },
+        { v: f.student?.program || "", s: S.TEXT },
+        { v: f.student?.year_of_study || "", s: S.CENTER },
+        { v: f.label || "Fee", s: S.TEXT },
+        { v: fmtDue(f.due_date), s: S.CENTER },
+        { v: Number(f.remaining_amount || 0), s: S.CENTER },
+      ]),
+      [
+        { s: S.BAND }, { s: S.BAND }, { s: S.BAND }, { s: S.BAND }, { s: S.BAND },
+        { v: "Total", s: S.BAND },
+        { v: total, s: S.BAND },
+      ],
+    ];
+
+    const columns = [
+      { width: 16 }, { width: 24 }, { width: 20 }, { width: 10 }, { width: 24 }, { width: 14 }, { width: 16 },
+    ];
+
+    const tag = unpaidView === "monthly" ? (activeUnpaidMonth || "month") : "overall";
+    await downloadXlsx(`Unpaid-Fees-${tag}-${yearFilter.replace(/\s+/g, "")}`, {
+      sheetName: "Unpaid Fees",
+      rows,
+      columns,
+      freeze: { row: 4 },
+    });
+    setDownloadingUnpaid(false);
+  };
 
   // One outstanding charge, with the controls that were previously spread across
   // the table row: adjust the amount, nudge on WhatsApp, or record a payment.
@@ -655,18 +710,27 @@ export default function FeeVerification() {
                 </button>
               ))}
             </div>
-            <div className="fee-v__view-toggle" role="group" aria-label="Pending fee view">
+            <div className="fee-v__filters-right">
+              <div className="fee-v__view-toggle" role="group" aria-label="Pending fee view">
+                <button
+                  onClick={() => setUnpaidView("overall")}
+                  className={"fee-v__view-btn " + (unpaidView === "overall" ? "fee-v__view-btn--active" : "")}
+                >
+                  Overall
+                </button>
+                <button
+                  onClick={() => setUnpaidView("monthly")}
+                  className={"fee-v__view-btn " + (unpaidView === "monthly" ? "fee-v__view-btn--active" : "")}
+                >
+                  Month wise
+                </button>
+              </div>
               <button
-                onClick={() => setUnpaidView("overall")}
-                className={"fee-v__view-btn " + (unpaidView === "overall" ? "fee-v__view-btn--active" : "")}
+                onClick={downloadUnpaidList}
+                disabled={downloadingUnpaid || filteredUnpaidFees.length === 0}
+                className="fee-v__download-btn"
               >
-                Overall
-              </button>
-              <button
-                onClick={() => setUnpaidView("monthly")}
-                className={"fee-v__view-btn " + (unpaidView === "monthly" ? "fee-v__view-btn--active" : "")}
-              >
-                Month wise
+                <Download size={14} /> {downloadingUnpaid ? "Preparing..." : "Download List (.xlsx)"}
               </button>
             </div>
           </div>

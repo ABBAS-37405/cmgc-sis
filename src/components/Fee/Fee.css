@@ -3,6 +3,11 @@
 
 .fee__success-banner { display: flex; align-items: center; gap: 8px; background: #dcfce7; border: 1px solid #86efac; color: #166534; font-size: 13px; font-weight: 500; padding: 12px 16px; border-radius: 10px; }
 
+.fee__toolbar { display: flex; justify-content: flex-end; }
+.fee__download-btn { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 8px; background: var(--card); white-space: nowrap; }
+.fee__download-btn:hover { background: var(--accent); color: #fff; }
+.fee__download-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .fee__summary { display: flex; align-items: center; gap: 14px; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 14px; padding: 18px 20px; color: white; }
 .fee__summary-icon { width: 42px; height: 42px; flex-shrink: 0; border-radius: 10px; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; }
 .fee__summary-text { flex: 1; }

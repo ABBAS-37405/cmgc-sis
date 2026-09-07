@@ -37,6 +37,36 @@
 .enter-results__confirm { color: #16a34a; font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
 
 @media (min-width: 768px) { .enter-results__layout { grid-template-columns: 240px 1fr; } }
+
+/* Class Test mode — a read-only roster-wide view of marks teachers already
+   entered in Class Tests, not a second place to type them. */
+.enter-results__ct-months { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.enter-results__ct-months-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--subtext); text-transform: uppercase; }
+.enter-results__ct-months-actions { display: flex; gap: 8px; }
+.enter-results__ct-months-actions button { font-size: 12px; font-weight: 600; color: var(--accent); text-transform: none; }
+.enter-results__ct-months-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.enter-results__ct-month { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.enter-results__ct-class-stat { font-size: 12px; color: var(--subtext); padding-top: 6px; border-top: 1px solid var(--border); }
+
+.enter-results__ct-badge-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.enter-results__ct-pct { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.enter-results__ct-pct--high { color: #16a34a; background: rgba(22,163,74,0.12); }
+.enter-results__ct-pct--mid { color: #d97706; background: rgba(217,119,6,0.12); }
+.enter-results__ct-pct--low { color: #dc2626; background: rgba(220,38,38,0.12); }
+.enter-results__ct-count { font-size: 11px; color: var(--subtext); }
+.enter-results__student-btn--active .enter-results__ct-count { color: rgba(255,255,255,0.85); }
+.enter-results__student-btn--active .enter-results__ct-pct { background: rgba(255,255,255,0.2); color: white; }
+
+.enter-results__ct-subject { border-top: 1px solid var(--border); padding: 12px 0; }
+.enter-results__ct-subject:first-of-type { border-top: none; padding-top: 0; }
+.enter-results__ct-subject-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.enter-results__ct-subject-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.enter-results__ct-subject-pct { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.enter-results__ct-tests { display: flex; flex-direction: column; gap: 4px; }
+.enter-results__ct-test { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 6px; background: var(--bg); font-size: 13px; }
+.enter-results__ct-test-title { color: var(--text); }
+.enter-results__ct-test-date { color: var(--subtext); font-size: 12px; }
+.enter-results__ct-test-score { font-weight: 600; color: var(--text); min-width: 90px; text-align: right; }
 /* Which combination this girl actually takes — shown only for FA-IT and
    Humanities, the two groups where the group name does not settle it. */
 .enter-results__combination {

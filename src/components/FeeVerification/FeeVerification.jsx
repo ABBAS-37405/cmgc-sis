@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Check, X, Eye, Download } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import FeeSettings from "../FeeSettings/FeeSettings";
-import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber } from "../../lib/whatsapp";
+import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { downloadXlsx, S } from "../../lib/xlsx";
 import "./FeeVerification.css";
 
@@ -56,6 +56,96 @@ const sendFeeReminderWhatsApp = async (fee, onPhoneSaved) => {
   );
 };
 
+const fmtStatementDate = (d) =>
+  d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+// Her whole record, paid and pending — the same figures the student's own
+// "Download Fee Statement" produces, just as WhatsApp text rather than a file:
+// click-to-chat cannot attach anything (see lib/whatsapp.js), so a message
+// spelling out every fee is the closest equivalent that can actually be sent.
+const buildFeeStatementMessage = (student, fees) => {
+  const sorted = [...fees].sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
+  const totalDue = fees.reduce((sum, f) => sum + Number(f.amount_due || 0), 0);
+  const totalPaid = fees.reduce((sum, f) => sum + Number(f.amount_paid || 0), 0);
+  const totalPending = fees.reduce((sum, f) => sum + Number(f.remaining_amount || 0), 0);
+
+  const lines = [
+    `Assalamualaikum, this is the CMGC fee record for ${student.name} (Roll No: ${student.roll_no}).`,
+    "",
+    ...sorted.map((f) => {
+      const remaining = Number(f.remaining_amount || 0);
+      const status = remaining === 0 ? "Paid" : f.status;
+      return (
+        `• ${f.label || f.program || student.program || "Fee"} (Due ${fmtStatementDate(f.due_date)}): ` +
+        `Rs ${Number(f.amount_due || 0).toLocaleString()} — Paid Rs ${Number(f.amount_paid || 0).toLocaleString()}, ` +
+        `Pending Rs ${remaining.toLocaleString()} [${status}]`
+      );
+    }),
+    "",
+    `Total Due: Rs ${totalDue.toLocaleString()}`,
+    `Total Paid: Rs ${totalPaid.toLocaleString()}`,
+    `Total Pending: Rs ${totalPending.toLocaleString()}`,
+    "",
+    totalPending > 0
+      ? "Kindly deposit the pending amount at your earliest convenience via the CMGC student portal or at the college office."
+      : "All fees are fully paid. Thank you!",
+  ];
+  return lines.join("\n");
+};
+
+// Every fee for this girl, paid ones included — the Unpaid tab's own query
+// deliberately drops those, so this is a separate fetch rather than reusing it.
+const fetchStudentFullFees = async (studentId) => {
+  const { data: feesData } = await supabase
+    .from("fees")
+    .select("id, amount_due, due_date, status, label, program, sort_order, payment_transactions(amount, status)")
+    .eq("student_id", studentId)
+    .order("due_date", { ascending: true })
+    .order("sort_order", { ascending: true, nullsFirst: true });
+
+  return (feesData || []).map((fee) => {
+    const paidAmount = (fee.payment_transactions || [])
+      .filter((t) => t.status === "Success")
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+    const remaining = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
+    return { ...fee, amount_paid: paidAmount, remaining_amount: remaining, status: remaining === 0 ? "Paid" : fee.status };
+  });
+};
+
+const sendFullFeeStatementWhatsApp = async (student, onPhoneSaved, onDone) => {
+  // Reserved inside the click gesture, before the fee lookup below, so the
+  // chat that follows isn't blocked as a popup once the awaits have run —
+  // same trick as StudentsList.doApprove.
+  const windowRef = reserveWhatsAppWindow();
+  try {
+    let number = whatsappNumberFor(student);
+    if (!isValidWhatsAppNumber(number)) {
+      const entered = window.prompt(
+        `WhatsApp number for ${student?.name || "this student"} is missing or invalid. Enter one (03XXXXXXXXX):`,
+        number || ""
+      );
+      if (!entered || !entered.trim()) {
+        if (windowRef && !windowRef.closed) windowRef.close();
+        return;
+      }
+      number = entered.trim();
+      await supabase.from("students").update({ whatsapp: number }).eq("id", student.id);
+      if (onPhoneSaved) onPhoneSaved(student.id, number);
+    }
+
+    const fees = await fetchStudentFullFees(student.id);
+    if (fees.length === 0) {
+      if (windowRef && !windowRef.closed) windowRef.close();
+      window.alert(`No fee records found for ${student.name}.`);
+      return;
+    }
+
+    openWhatsApp(number, buildFeeStatementMessage(student, fees), windowRef);
+  } finally {
+    if (onDone) onDone();
+  }
+};
+
 export default function FeeVerification() {
   const [pending, setPending] = useState([]);
   const [unpaidFees, setUnpaidFees] = useState([]);
@@ -78,6 +168,7 @@ export default function FeeVerification() {
   const [paymentAmountByFee, setPaymentAmountByFee] = useState({});
   const [markingPaidId, setMarkingPaidId] = useState(null);
   const [downloadingUnpaid, setDownloadingUnpaid] = useState(false);
+  const [sendingStatementFor, setSendingStatementFor] = useState(null);
 
   const fetchPending = async () => {
     setLoading(true);
@@ -452,19 +543,42 @@ export default function FeeVerification() {
   const renderStudentGroup = (group, keyPrefix) => {
     const key = keyPrefix + group.student.id;
     const open = expandedGroups.has(key);
+    const sending = sendingStatementFor === group.student.id;
     return (
       <div key={key} className={"fee-v__group " + (open ? "fee-v__group--open" : "")}>
-        <button className="fee-v__group-head" onClick={() => toggleGroup(key)} aria-expanded={open}>
-          <span className="fee-v__caret">{open ? "▾" : "▸"}</span>
-          <span className="fee-v__group-name">{group.student.name}</span>
-          <span className="fee-v__group-meta">{group.student.roll_no}</span>
-          <span className="fee-v__group-meta">{group.student.program}</span>
-          <span className="fee-v__group-meta">{group.student.year_of_study || "—"}</span>
-          <span className="fee-v__badge" title={`${group.fees.length} pending fee${group.fees.length === 1 ? "" : "s"}`}>
-            {group.fees.length}
-          </span>
-          <span className="fee-v__group-total">Rs {group.total.toLocaleString()}</span>
-        </button>
+        <div className="fee-v__group-head">
+          <button className="fee-v__group-toggle" onClick={() => toggleGroup(key)} aria-expanded={open}>
+            <span className="fee-v__caret">{open ? "▾" : "▸"}</span>
+            <span className="fee-v__group-name">{group.student.name}</span>
+            <span className="fee-v__group-meta">{group.student.roll_no}</span>
+            <span className="fee-v__group-meta">{group.student.program}</span>
+            <span className="fee-v__group-meta">{group.student.year_of_study || "—"}</span>
+            <span className="fee-v__badge" title={`${group.fees.length} pending fee${group.fees.length === 1 ? "" : "s"}`}>
+              {group.fees.length}
+            </span>
+            <span className="fee-v__group-total">Rs {group.total.toLocaleString()}</span>
+          </button>
+          <button
+            className="fee-v__whatsapp fee-v__group-whatsapp"
+            title="Send full fee record (paid & pending) via WhatsApp"
+            disabled={sending}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSendingStatementFor(group.student.id);
+              sendFullFeeStatementWhatsApp(
+                group.student,
+                (studentId, savedNumber) => {
+                  setUnpaidFees((prev) => prev.map((f) =>
+                    f.student?.id === studentId ? { ...f, student: { ...f.student, whatsapp: savedNumber } } : f
+                  ));
+                },
+                () => setSendingStatementFor(null)
+              );
+            }}
+          >
+            <WhatsappIcon />
+          </button>
+        </div>
         {open && <div className="fee-v__group-body">{group.fees.map(renderFeeDetail)}</div>}
       </div>
     );

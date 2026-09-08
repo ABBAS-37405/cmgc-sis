@@ -34,6 +34,7 @@
 .fee-v__edit-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fee-v__whatsapp { display: inline-flex; align-items: center; justify-content: center; color: #16a34a; border: 1px solid #86efac; padding: 6px 8px; border-radius: 8px; background: #f0fdf4; }
 .fee-v__whatsapp:hover { background: #dcfce7; }
+.fee-v__whatsapp:disabled { opacity: 0.5; cursor: not-allowed; }
 .fee-v__record-payment { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fee-v__record-payment select, .fee-v__record-payment input { font-size: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--text); font-family: inherit; }
 .fee-v__amount-input { width: 90px; }
@@ -64,8 +65,10 @@
 .fee-v__groups { display: flex; flex-direction: column; gap: 8px; }
 .fee-v__group { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .fee-v__group--open { border-color: var(--accent); }
-.fee-v__group-head { display: grid; grid-template-columns: 18px minmax(120px, 1.6fr) 1fr 1fr 0.8fr 34px auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 14px; }
-.fee-v__group-head:hover { background: var(--bg); }
+.fee-v__group-head { display: flex; align-items: center; gap: 6px; padding-right: 10px; }
+.fee-v__group-toggle { display: grid; grid-template-columns: 18px minmax(120px, 1.6fr) 1fr 1fr 0.8fr 34px auto; align-items: center; gap: 10px; flex: 1; min-width: 0; text-align: left; padding: 12px 14px; }
+.fee-v__group-toggle:hover { background: var(--bg); }
+.fee-v__group-whatsapp { flex-shrink: 0; }
 .fee-v__caret { color: var(--subtext); font-size: 12px; }
 .fee-v__group-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .fee-v__group-meta { font-size: 12px; color: var(--subtext); }
@@ -82,8 +85,8 @@
 .fee-v__detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 @media (max-width: 768px) {
-  .fee-v__group-head { grid-template-columns: 16px 1fr 30px auto; }
-  .fee-v__group-head .fee-v__group-meta { display: none; }
+  .fee-v__group-toggle { grid-template-columns: 16px 1fr 30px auto; }
+  .fee-v__group-toggle .fee-v__group-meta { display: none; }
 }
 
 /* ---------- Month picker (pending "up to", and collection "in") ---------- */

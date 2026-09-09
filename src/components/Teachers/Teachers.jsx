@@ -840,10 +840,7 @@ export default function Teachers({ allowedPrograms = [], adminProfile = null }) 
                         className="teachers__left-btn"
                         title={`Move ${t.name} to the Left Teachers list`}
                       >
-                        <UserMinus size={13} /> Left
-                      </button>
-                      <button onClick={() => handleDelete(t)} className="teachers__delete-btn">
-                        <Trash2 size={13} /> Remove
+                        <UserMinus size={13} /> Left / Remove
                       </button>
                     </div>
                   </div>

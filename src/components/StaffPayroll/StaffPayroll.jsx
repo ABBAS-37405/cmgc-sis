@@ -167,8 +167,15 @@ export default function StaffPayroll({ teachers = [], staff = [], adminProfile =
 /* Daily attendance register                                            */
 /* ==================================================================== */
 
-function DailyRegister({ roster }) {
+function DailyRegister({ roster: fullRoster }) {
   const [date, setDate] = useState(today());
+  // Someone who joined after this date was not yet on the college's staff, so a
+  // reopened old date must not offer her — an unset joining_date (a record from
+  // before the column existed) is treated as always eligible.
+  const roster = useMemo(
+    () => fullRoster.filter((p) => !p.joining_date || p.joining_date <= date),
+    [fullRoster, date]
+  );
   const [records, setRecords] = useState({});
   const [holiday, setHoliday] = useState(null); // the college_holidays row for this date
   const [loading, setLoading] = useState(false);
@@ -345,7 +352,11 @@ function DailyRegister({ roster }) {
       {loading ? (
         <p className="payroll__empty">Loading...</p>
       ) : roster.length === 0 ? (
-        <p className="payroll__empty">Nobody on the register yet. Add teachers or staff from the tabs above.</p>
+        <p className="payroll__empty">
+          {fullRoster.length === 0
+            ? "Nobody on the register yet. Add teachers or staff from the tabs above."
+            : `Nobody had joined by ${fmtDate(date)} yet.`}
+        </p>
       ) : (
         <>
           <div className="payroll__summary">

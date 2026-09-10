@@ -50,12 +50,16 @@ export function totalMonths(plan) {
 
 const iso = (d) => d.toISOString().split("T")[0];
 
+// Every monthly charge falls due on the 20th of its month — the last date the
+// office accepts a fee before it counts as late.
+const FEE_DUE_DAY = 20;
+
 /**
  * Turns a plan into the actual `fees` rows for one student.
  *
  * `due_month: null` means the charge falls due at admission — a week after
  * enrolment, matching what the office already did by hand. A numbered month
- * resolves to the 10th of the next occurrence of that month at or after the
+ * resolves to the 20th of the next occurrence of that month at or after the
  * previous instalment, so the schedule always runs forward: a 2nd-year plan
  * starting in July lands Sep–Dec in this year and Jan–Apr in the next, and a
  * student enrolling late never gets a February charge dated before November's.
@@ -97,12 +101,12 @@ export function buildFeeRows({ plan, studentId, program, year, from = new Date()
     } else {
       const month = Number(inst.due_month) - 1;
       let year = cursor.getFullYear();
-      due = new Date(year, month, 10);
+      due = new Date(year, month, FEE_DUE_DAY);
       // At most one roll is ever needed, but the guard keeps this terminating
       // even if a plan is edited into something strange.
       for (let guard = 0; due < cursor && guard < 3; guard += 1) {
         year += 1;
-        due = new Date(year, month, 10);
+        due = new Date(year, month, FEE_DUE_DAY);
       }
     }
     cursor = due;

@@ -42,6 +42,7 @@
 .fee__meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .fee__meta-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--subtext); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; }
 .fee__meta-chip--paid { color: #16a34a; border-color: #86efac; background: #f0fdf4; }
+.fee__meta-chip--fine { color: #b45309; border-color: #fde68a; background: #fffbeb; }
 
 .fee__payments { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .fee__payments h4 { font-size: 11px; font-weight: 700; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }

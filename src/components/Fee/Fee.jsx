@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, ChevronDown, ChevronUp, Upload, FileCheck, Wallet
 import { supabase } from "../../lib/supabaseClient";
 import { prepareUpload } from "../../lib/uploads";
 import { downloadXlsx, S } from "../../lib/xlsx";
+import { totalWithFine, feeLabelWithFine } from "../../lib/lateFee";
 import "./Fee.css";
 
 const buildProofPath = (fileName) => `payment-proofs/${new Date().getTime()}-${fileName}`;
@@ -100,7 +101,7 @@ export default function Fee({ studentId, student }) {
 
       const enrichedFees = feesData.map((fee) => {
         const paidAmount = Number(paidByFeeId[fee.id] || 0);
-        const remainingAmount = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
+        const remainingAmount = Math.max(totalWithFine(fee) - paidAmount, 0);
         const computedStatus = remainingAmount === 0 ? "Paid" : fee.status;
         const computedLastPaymentDate = fee.last_payment_date || lastPaymentDateByFeeId[fee.id];
         return {
@@ -215,7 +216,8 @@ export default function Fee({ studentId, student }) {
       .flatMap((f) => (f.transactions || []).map((t) => ({ ...t, feeLabel: f.label || f.program })))
       .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 
-    const totalDue = fees.reduce((sum, f) => sum + Number(f.amount_due || 0), 0);
+    const totalDue = fees.reduce((sum, f) => sum + totalWithFine(f), 0);
+    const totalFine = fees.reduce((sum, f) => sum + Number(f.fine_amount || 0), 0);
     const totalPaid = fees.reduce((sum, f) => sum + Number(f.amount_paid || 0), 0);
     const totalPendingAmt = fees.reduce((sum, f) => sum + Number(f.remaining_amount || 0), 0);
     const fmt = (d) => (d ? new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -225,11 +227,13 @@ export default function Fee({ studentId, student }) {
       [{ v: `Fee Statement — ${student?.name || ""} (${student?.roll_no || ""})`, s: S.LABEL }],
       [{ v: `${student?.program || ""}${student?.year_of_study ? " — " + student.year_of_study : ""}`, s: S.LABEL }],
       [],
-      ["Fee", "Due Date", "Amount Due (Rs)", "Paid (Rs)", "Pending (Rs)", "Status"].map((h) => ({ v: h, s: S.HEAD })),
+      ["Fee", "Due Date", "Amount Due (Rs)", "Fine (Rs)", "Total (Rs)", "Paid (Rs)", "Pending (Rs)", "Status"].map((h) => ({ v: h, s: S.HEAD })),
       ...sortedFees.map((f) => [
         { v: f.label || f.program || "Fee", s: S.TEXT },
         { v: fmt(f.due_date), s: S.CENTER },
         { v: Number(f.amount_due || 0), s: S.CENTER },
+        { v: Number(f.fine_amount || 0), s: S.CENTER },
+        { v: totalWithFine(f), s: S.CENTER },
         { v: Number(f.amount_paid || 0), s: S.CENTER },
         { v: Number(f.remaining_amount || 0), s: S.CENTER },
         { v: Number(f.remaining_amount || 0) === 0 ? "Paid" : f.status, s: S.CENTER },
@@ -237,6 +241,8 @@ export default function Fee({ studentId, student }) {
       [
         { s: S.BAND },
         { v: "Total", s: S.BAND },
+        { s: S.BAND },
+        { v: totalFine, s: S.BAND },
         { v: totalDue, s: S.BAND },
         { v: totalPaid, s: S.BAND },
         { v: totalPendingAmt, s: S.BAND },
@@ -258,7 +264,7 @@ export default function Fee({ studentId, student }) {
     ];
 
     const columns = [
-      { width: 22 }, { width: 14 }, { width: 16 }, { width: 14 }, { width: 16 }, { width: 16 },
+      { width: 22 }, { width: 14 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 16 },
     ];
 
     await downloadXlsx(`Fee-Statement-${student?.roll_no || studentId}`, {
@@ -318,7 +324,7 @@ export default function Fee({ studentId, student }) {
           <div className="fee__list">
             {fees.map((f) => {
               const remaining = Number(f.remaining_amount ?? 0);
-              const due = Number(f.amount_due || 0);
+              const due = totalWithFine(f);
               const paidSoFar = Math.max(due - remaining, 0);
               const paidPercent = due > 0 ? Math.min(100, Math.round((paidSoFar / due) * 100)) : 0;
               const isPaid = f.status === "Paid" || remaining === 0;
@@ -331,7 +337,7 @@ export default function Fee({ studentId, student }) {
                       {/* `label` names the charge ("Admission Fee", "2nd Installment").
                           Rows created before fee plans existed have none, so fall
                           back to the group name as before. */}
-                      <h3>{f.label || f.program}</h3>
+                      <h3>{feeLabelWithFine(f)}</h3>
                     </div>
                     {statusBadge(f.status, remaining)}
                   </div>
@@ -363,6 +369,11 @@ export default function Fee({ studentId, student }) {
                       <span className="fee__meta-chip fee__meta-chip--paid">
                         <CheckCircle size={12} />
                         Paid on {new Date(f.last_payment_date).toLocaleDateString("en-PK")}
+                      </span>
+                    )}
+                    {Number(f.fine_amount || 0) > 0 && (
+                      <span className="fee__meta-chip fee__meta-chip--fine">
+                        ⚠ Rs {Number(f.fine_amount).toLocaleString()} late fee
                       </span>
                     )}
                   </div>

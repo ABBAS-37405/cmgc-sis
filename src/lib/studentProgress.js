@@ -89,7 +89,7 @@ export async function buildStudentProgress(student, can = () => true) {
     supabase
       .from("fees")
       .select(
-        "id, label, amount_due, due_date, status, sort_order, " +
+        "id, label, amount_due, fine_amount, due_date, status, sort_order, " +
         "payment_transactions(amount, status, payment_method, reference_number, recorded_by, created_at)"
       )
       .eq("student_id", id),

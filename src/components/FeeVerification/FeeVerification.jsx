@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import FeeSettings from "../FeeSettings/FeeSettings";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
 import { downloadXlsx, S } from "../../lib/xlsx";
+import { LATE_FEE_AMOUNT, isLatePayment, totalWithFine, feeLabelWithFine } from "../../lib/lateFee";
 import "./FeeVerification.css";
 
 const PAYMENT_METHODS = ["Easypaisa", "Bank Al Habib", "Raast", "Cash in College Office"];
@@ -65,7 +66,7 @@ const fmtStatementDate = (d) =>
 // spelling out every fee is the closest equivalent that can actually be sent.
 const buildFeeStatementMessage = (student, fees) => {
   const sorted = [...fees].sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
-  const totalDue = fees.reduce((sum, f) => sum + Number(f.amount_due || 0), 0);
+  const totalDue = fees.reduce((sum, f) => sum + totalWithFine(f), 0);
   const totalPaid = fees.reduce((sum, f) => sum + Number(f.amount_paid || 0), 0);
   const totalPending = fees.reduce((sum, f) => sum + Number(f.remaining_amount || 0), 0);
 
@@ -76,8 +77,8 @@ const buildFeeStatementMessage = (student, fees) => {
       const remaining = Number(f.remaining_amount || 0);
       const status = remaining === 0 ? "Paid" : f.status;
       return (
-        `• ${f.label || f.program || student.program || "Fee"} (Due ${fmtStatementDate(f.due_date)}): ` +
-        `Rs ${Number(f.amount_due || 0).toLocaleString()} — Paid Rs ${Number(f.amount_paid || 0).toLocaleString()}, ` +
+        `• ${feeLabelWithFine(f) || f.program || student.program || "Fee"} (Due ${fmtStatementDate(f.due_date)}): ` +
+        `Rs ${totalWithFine(f).toLocaleString()} — Paid Rs ${Number(f.amount_paid || 0).toLocaleString()}, ` +
         `Pending Rs ${remaining.toLocaleString()} [${status}]`
       );
     }),
@@ -98,7 +99,7 @@ const buildFeeStatementMessage = (student, fees) => {
 const fetchStudentFullFees = async (studentId) => {
   const { data: feesData } = await supabase
     .from("fees")
-    .select("id, amount_due, due_date, status, label, program, sort_order, payment_transactions(amount, status)")
+    .select("id, amount_due, fine_amount, due_date, status, label, program, sort_order, payment_transactions(amount, status)")
     .eq("student_id", studentId)
     .order("due_date", { ascending: true })
     .order("sort_order", { ascending: true, nullsFirst: true });
@@ -107,7 +108,7 @@ const fetchStudentFullFees = async (studentId) => {
     const paidAmount = (fee.payment_transactions || [])
       .filter((t) => t.status === "Success")
       .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-    const remaining = Math.max(Number(fee.amount_due || 0) - paidAmount, 0);
+    const remaining = Math.max(totalWithFine(fee) - paidAmount, 0);
     return { ...fee, amount_paid: paidAmount, remaining_amount: remaining, status: remaining === 0 ? "Paid" : fee.status };
   });
 };
@@ -163,6 +164,9 @@ export default function FeeVerification() {
   const [editingFeeId, setEditingFeeId] = useState(null);
   const [feeAdjustmentAmount, setFeeAdjustmentAmount] = useState("");
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [editingFineId, setEditingFineId] = useState(null);
+  const [fineAdjustmentAmount, setFineAdjustmentAmount] = useState("");
+  const [savingFineAdjustment, setSavingFineAdjustment] = useState(false);
   const [paymentMethodByFee, setPaymentMethodByFee] = useState({});
   const [paymentDateByFee, setPaymentDateByFee] = useState({});
   const [paymentAmountByFee, setPaymentAmountByFee] = useState({});
@@ -191,7 +195,7 @@ export default function FeeVerification() {
     const { data: feesData } = await supabase
       .from("fees")
       .select(
-        "id, student_id, amount_due, amount_paid, due_date, status, label, sort_order, " +
+        "id, student_id, amount_due, amount_paid, fine_amount, due_date, status, label, sort_order, " +
         "students!inner(id, name, roll_no, program, year_of_study, phone, whatsapp), " +
         "payment_transactions(amount, status)"
       )
@@ -207,7 +211,7 @@ export default function FeeVerification() {
         return {
           ...fee,
           student: fee.students,
-          remaining_amount: Math.max(Number(fee.amount_due || 0) - paidAmount, 0),
+          remaining_amount: Math.max(totalWithFine(fee) - paidAmount, 0),
         };
       });
 
@@ -249,7 +253,7 @@ export default function FeeVerification() {
       if (newStatus === "Success") {
       const { data: feeData, error: feeError } = await supabase
         .from("fees")
-        .select("amount_due")
+        .select("amount_due, fine_amount, due_date")
         .eq("id", txn.fee_id)
         .single();
 
@@ -269,25 +273,34 @@ export default function FeeVerification() {
         const txDate = new Date(t.created_at);
         return !latest || txDate > latest ? txDate : latest;
       }, null);
-      const remaining = Math.max(Number(feeData?.amount_due || 0) - paidAmount, 0);
+
+      // Added once, the moment a deposit against this fee turns out to be late —
+      // never stacked on a later partial payment, and never touched again once
+      // set (the admin's own Edit Fine is the only other writer of this column).
+      const existingFine = Number(feeData?.fine_amount || 0);
+      const fineAmount = existingFine === 0 && isLatePayment(feeData?.due_date, txn.created_at)
+        ? LATE_FEE_AMOUNT
+        : existingFine;
+      const remaining = Math.max(Number(feeData?.amount_due || 0) + fineAmount - paidAmount, 0);
 
       await supabase
         .from("fees")
         .update({
           status: remaining > 0 ? "Partially Paid" : "Paid",
           amount_paid: paidAmount,
+          fine_amount: fineAmount,
           last_payment_date: latestPaymentDate ? latestPaymentDate.toISOString() : new Date().toISOString(),
         })
         .eq("id", txn.fee_id);
     } else {
       const { data: feeData } = await supabase
         .from("fees")
-        .select("amount_due, amount_paid")
+        .select("amount_due, amount_paid, fine_amount")
         .eq("id", txn.fee_id)
         .single();
 
       const previousPaid = Number(feeData?.amount_paid || 0);
-      const remaining = Math.max(Number(feeData?.amount_due || 0) - previousPaid, 0);
+      const remaining = Math.max(totalWithFine(feeData) - previousPaid, 0);
       await supabase
         .from("fees")
         .update({ status: remaining > 0 ? (previousPaid > 0 ? "Partially Paid" : "Unpaid") : "Paid" })
@@ -434,7 +447,7 @@ export default function FeeVerification() {
       [{ v: "Community Model Girls College, Rawalpindi", s: S.TITLE }],
       [{ v: subtitle, s: S.LABEL }],
       [],
-      ["Roll No", "Name", "Program", "Year", "Fee", "Due Date", "Pending (Rs)"].map((h) => ({ v: h, s: S.HEAD })),
+      ["Roll No", "Name", "Program", "Year", "Fee", "Due Date", "Fine (Rs)", "Pending (Rs)"].map((h) => ({ v: h, s: S.HEAD })),
       ...sorted.map((f) => [
         { v: f.student?.roll_no || "", s: S.TEXT },
         { v: f.student?.name || "", s: S.TEXT },
@@ -442,17 +455,19 @@ export default function FeeVerification() {
         { v: f.student?.year_of_study || "", s: S.CENTER },
         { v: f.label || "Fee", s: S.TEXT },
         { v: fmtDue(f.due_date), s: S.CENTER },
+        { v: Number(f.fine_amount || 0), s: S.CENTER },
         { v: Number(f.remaining_amount || 0), s: S.CENTER },
       ]),
       [
         { s: S.BAND }, { s: S.BAND }, { s: S.BAND }, { s: S.BAND }, { s: S.BAND },
         { v: "Total", s: S.BAND },
+        { s: S.BAND },
         { v: total, s: S.BAND },
       ],
     ];
 
     const columns = [
-      { width: 16 }, { width: 24 }, { width: 20 }, { width: 10 }, { width: 24 }, { width: 14 }, { width: 16 },
+      { width: 16 }, { width: 24 }, { width: 20 }, { width: 10 }, { width: 24 }, { width: 14 }, { width: 12 }, { width: 16 },
     ];
 
     const tag = unpaidView === "monthly" ? (activeUnpaidMonth || "month") : "overall";
@@ -473,6 +488,9 @@ export default function FeeVerification() {
         <span className="fee-v__detail-label">{fee.label || "Fee"}</span>
         <span className="fee-v__detail-amount">Rs {Number(fee.remaining_amount || 0).toLocaleString()}</span>
         <span className="fee-v__detail-due">Due {fmtDue(fee.due_date)}</span>
+        {Number(fee.fine_amount || 0) > 0 && (
+          <span className="fee-v__detail-fine">+ Rs {Number(fee.fine_amount).toLocaleString()} late fee</span>
+        )}
       </div>
 
       <div className="fee-v__detail-actions">
@@ -488,9 +506,25 @@ export default function FeeVerification() {
             </button>
             <button onClick={() => setEditingFeeId(null)} className="fee-v__reject">Cancel</button>
           </div>
+        ) : editingFineId === fee.id ? (
+          <div className="fee-v__edit-row">
+            <input
+              type="number"
+              min="0"
+              value={fineAdjustmentAmount}
+              onChange={(e) => setFineAdjustmentAmount(e.target.value)}
+            />
+            <button onClick={() => saveFineAdjustment(fee)} disabled={savingFineAdjustment} className="fee-v__view">
+              {savingFineAdjustment ? "Saving..." : "Save"}
+            </button>
+            <button onClick={() => setEditingFineId(null)} className="fee-v__reject">Cancel</button>
+          </div>
         ) : (
           <div className="fee-v__edit-row">
             <button onClick={() => startFeeEdit(fee)} className="fee-v__view">Edit Fee</button>
+            <button onClick={() => startFineEdit(fee)} className="fee-v__view" title="Increase, reduce, or clear the late fee">
+              {Number(fee.fine_amount || 0) > 0 ? "Edit Fine" : "Add Fine"}
+            </button>
             <button
               onClick={() => sendFeeReminderWhatsApp(fee, (studentId, savedNumber) => {
                 setUnpaidFees((prev) => prev.map((f) =>
@@ -600,8 +634,13 @@ export default function FeeVerification() {
       .eq("status", "Success");
 
     const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+    // This box edits the base charge only — the fine (if any) is untouched and
+    // is backed out of the new total so the combined remaining still comes to
+    // whatever was typed. "Edit Fine" below is the only thing that moves fine_amount.
+    const fineAmount = Number(fee.fine_amount || 0);
     const newRemainingAmount = Math.max(Number(feeAdjustmentAmount), 0);
     const newTotalDue = paidAmount + newRemainingAmount;
+    const newAmountDue = Math.max(newTotalDue - fineAmount, 0);
     const newStatus = newRemainingAmount > 0
       ? (fee.status === "Pending Verification" ? "Pending Verification" : (paidAmount > 0 ? "Partially Paid" : "Unpaid"))
       : "Paid";
@@ -609,7 +648,7 @@ export default function FeeVerification() {
     const { error } = await supabase
       .from("fees")
       .update({
-        amount_due: newTotalDue,
+        amount_due: newAmountDue,
         amount_paid: paidAmount,
         status: newStatus,
       })
@@ -627,6 +666,48 @@ export default function FeeVerification() {
     await fetchAll();
   };
 
+  // The office's own control over a fine — whether it was added automatically
+  // by a late deposit or never applied at all: increase it, reduce it, or clear
+  // it to 0. Independent of "Edit Fee" above, which only ever moves the base charge.
+  const startFineEdit = (fee) => {
+    setEditingFineId(fee.id);
+    setFineAdjustmentAmount(String(fee.fine_amount || 0));
+  };
+
+  const saveFineAdjustment = async (fee) => {
+    if (fineAdjustmentAmount === "" || isNaN(fineAdjustmentAmount)) return;
+    setSavingFineAdjustment(true);
+
+    const { data: transactions } = await supabase
+      .from("payment_transactions")
+      .select("amount, status")
+      .eq("fee_id", fee.id)
+      .eq("status", "Success");
+
+    const paidAmount = (transactions || []).reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+    const newFine = Math.max(Number(fineAdjustmentAmount), 0);
+    const newRemaining = Math.max(Number(fee.amount_due || 0) + newFine - paidAmount, 0);
+    const newStatus = newRemaining > 0
+      ? (fee.status === "Pending Verification" ? "Pending Verification" : (paidAmount > 0 ? "Partially Paid" : "Unpaid"))
+      : "Paid";
+
+    const { error } = await supabase
+      .from("fees")
+      .update({ fine_amount: newFine, status: newStatus })
+      .eq("id", fee.id);
+
+    setSavingFineAdjustment(false);
+    if (error) {
+      alert("Failed to update fine: " + error.message);
+      return;
+    }
+    setEditingFineId(null);
+    setFineAdjustmentAmount("");
+    await fetchPending();
+    await fetchUnpaidFees();
+    await fetchAll();
+  };
+
   const todayStr = () => new Date().toISOString().split("T")[0];
   const getPaymentMethod = (feeId) => paymentMethodByFee[feeId] || DEFAULT_PAYMENT_METHOD;
   const getPaymentDate = (feeId) => paymentDateByFee[feeId] || todayStr();
@@ -639,7 +720,17 @@ export default function FeeVerification() {
     const method = getPaymentMethod(fee.id);
     const date = getPaymentDate(fee.id);
     const amountToRecord = Number(getPaymentAmount(fee));
-    const remainingAmount = Number(fee.remaining_amount || 0);
+    const paidAtIso = new Date(date).toISOString();
+
+    // Added once, the moment this deposit turns out to be late — never touched
+    // again once set, so a fine the office has already waived or corrected by
+    // hand (Edit Fine) is never re-applied by a later partial payment.
+    const existingFine = Number(fee.fine_amount || 0);
+    const fineAmount = existingFine === 0 && isLatePayment(fee.due_date, paidAtIso)
+      ? LATE_FEE_AMOUNT
+      : existingFine;
+    const previousPaid = Math.max(Number(fee.amount_due || 0) + existingFine - Number(fee.remaining_amount || 0), 0);
+    const remainingAmount = Math.max(Number(fee.amount_due || 0) + fineAmount - previousPaid, 0);
 
     if (!amountToRecord || isNaN(amountToRecord) || amountToRecord <= 0) {
       alert("Please enter a valid amount paid.");
@@ -655,13 +746,12 @@ export default function FeeVerification() {
 
     const confirmMark = window.confirm(
       `Mark Rs ${amountToRecord.toLocaleString()} as paid for ${fee.student?.name || "this student"} via ${method} on ${date}?` +
+      (fineAmount > existingFine ? ` A Rs ${LATE_FEE_AMOUNT.toLocaleString()} late fee applies — this is after the due date.` : "") +
       (newRemaining > 0 ? ` Rs ${newRemaining.toLocaleString()} will remain pending.` : " This fully settles the fee.")
     );
     if (!confirmMark) return;
 
     setMarkingPaidId(fee.id);
-    const paidAtIso = new Date(date).toISOString();
-    const previousPaid = Number(fee.amount_due || 0) - remainingAmount;
 
     const { error: txnError } = await supabase.from("payment_transactions").insert({
       fee_id: fee.id,
@@ -684,6 +774,7 @@ export default function FeeVerification() {
       .update({
         status: newStatus,
         amount_paid: previousPaid + amountToRecord,
+        fine_amount: fineAmount,
         last_payment_date: paidAtIso,
       })
       .eq("id", fee.id);

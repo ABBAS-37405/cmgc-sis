@@ -1,0 +1,21 @@
+-- Late-payment fine on the fees table.
+--
+-- Rs 500 (LATE_FEE_AMOUNT in src/lib/lateFee.js), added automatically the
+-- moment a fee is actually paid after its own due date -- not merely because
+-- the due date has passed. A fee sitting unpaid for months earns no fine on
+-- its own; the fine follows the late deposit itself. Fee Verification writes
+-- this column the moment it approves a late payment proof (`resolve`) or
+-- records a late cash payment directly (`markFeePaid`), and only when the
+-- column is still 0 -- once set, only the admin's own edit touches it again.
+--
+-- Applies only to fees due on or after LATE_FEE_STARTS_FROM (1 October 2026):
+-- a fee already overdue when this rule shipped is never fined for a policy the
+-- office had not yet announced.
+--
+-- The admin can always overwrite this column directly from Fee Verification's
+-- "Edit Fine" control -- increase it, reduce it, or clear it to 0 -- exactly
+-- like amount_due already being freely editable there ("Edit Fee"). Nothing in
+-- the database enforces the amount or the cutover date; both are UI-side, in
+-- src/lib/lateFee.js.
+
+alter table fees add column if not exists fine_amount numeric not null default 0;

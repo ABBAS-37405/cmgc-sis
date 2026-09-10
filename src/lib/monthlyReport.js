@@ -16,6 +16,7 @@
 import { supabase } from "./supabaseClient";
 import { examTypeOf } from "./exams";
 import { ownSubjectsOnly } from "./studentSubjects";
+import { totalWithFine, feeLabelWithFine } from "./lateFee";
 
 /** "2026-08" -> { from: "2026-08-01", to: "2026-08-31", label: "August 2026" } */
 export function monthRange(month) {
@@ -164,7 +165,7 @@ export async function buildMonthlyReports(students, month, { examName = EXAM_CLA
     // Fee position as it stood at month end: every charge already due by then.
     supabase
       .from("fees")
-      .select("id, student_id, label, amount_due, due_date, status, sort_order, payment_transactions(amount, status)")
+      .select("id, student_id, label, amount_due, fine_amount, due_date, status, sort_order, payment_transactions(amount, status)")
       .in("student_id", ids)
       .lte("due_date", range.to),
   ]);
@@ -402,9 +403,9 @@ export function summariseFee(fees) {
       const paid = (f.payment_transactions || [])
         .filter((t) => t.status === "Success")
         .reduce((a, t) => a + (num(t.amount) || 0), 0);
-      const due = num(f.amount_due) || 0;
+      const due = totalWithFine(f);
       return {
-        label: f.label || "Fee",
+        label: feeLabelWithFine(f),
         dueDate: f.due_date,
         due,
         paid,

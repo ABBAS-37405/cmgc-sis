@@ -831,36 +831,65 @@ export default function FeeVerification() {
     }
 
     const feeId = txn.fee_id || txn.fees?.id;
-    if (feeId) {
-      const { data: feeData } = await supabase
-        .from("fees")
-        .select("amount_due, fine_amount")
-        .eq("id", feeId)
-        .single();
 
-      const { data: successTxns } = await supabase
-        .from("payment_transactions")
-        .select("amount, created_at")
-        .eq("fee_id", feeId)
-        .eq("status", "Success");
+    // select("*") rather than naming columns, so this keeps working whether or
+    // not the late-fee migration has been run. Never decide the fee's status on
+    // a failed read — writing "Paid" here (the zero-remaining default) is exactly
+    // how a re-opened fee vanished from the Unpaid tab instead of reappearing.
+    const { data: feeData, error: feeErr } = await supabase
+      .from("fees")
+      .select("*")
+      .eq("id", feeId)
+      .single();
 
-      const paidAmount = (successTxns || []).reduce((s, t) => s + Number(t.amount || 0), 0);
-      const latest = (successTxns || []).reduce((acc, t) => {
-        if (!t.created_at) return acc;
-        const d = new Date(t.created_at);
-        return !acc || d > acc ? d : acc;
-      }, null);
-      const remaining = Math.max(totalWithFine(feeData) - paidAmount, 0);
-      const status = remaining <= 0 ? "Paid" : paidAmount > 0 ? "Partially Paid" : "Unpaid";
+    if (feeErr || !feeData) {
+      setUndoingTxnId(null);
+      await fetchPending();
+      await fetchAll();
+      alert(
+        "The payment was undone, but the fee could not be re-opened automatically" +
+        (feeErr?.message ? ` (${feeErr.message})` : "") +
+        ". Open the Unpaid Fee tab and use \"Edit Fee\" to set the pending amount."
+      );
+      return;
+    }
 
-      await supabase
-        .from("fees")
-        .update({
-          amount_paid: paidAmount,
-          status,
-          last_payment_date: latest ? latest.toISOString() : null,
-        })
-        .eq("id", feeId);
+    const { data: successTxns } = await supabase
+      .from("payment_transactions")
+      .select("amount, created_at")
+      .eq("fee_id", feeId)
+      .eq("status", "Success");
+
+    const paidAmount = (successTxns || []).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const latest = (successTxns || []).reduce((acc, t) => {
+      if (!t.created_at) return acc;
+      const d = new Date(t.created_at);
+      return !acc || d > acc ? d : acc;
+    }, null);
+    const remaining = Math.max(totalWithFine(feeData) - paidAmount, 0);
+    const status = remaining <= 0 ? "Paid" : paidAmount > 0 ? "Partially Paid" : "Unpaid";
+
+    const { data: reopened, error: reopenErr } = await supabase
+      .from("fees")
+      .update({
+        amount_paid: paidAmount,
+        status,
+        last_payment_date: latest ? latest.toISOString() : null,
+      })
+      .eq("id", feeId)
+      .select("id");
+
+    if (reopenErr || !reopened || reopened.length === 0) {
+      setUndoingTxnId(null);
+      await fetchPending();
+      await fetchUnpaidFees();
+      await fetchAll();
+      alert(
+        "The payment was undone, but re-opening the fee failed" +
+        (reopenErr?.message ? ` (${reopenErr.message})` : " — your session may have expired, sign in again") +
+        ". The fee still shows as paid; fix it from the Unpaid Fee tab."
+      );
+      return;
     }
 
     setUndoingTxnId(null);

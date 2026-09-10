@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, X, Eye, Download } from "lucide-react";
+import { Check, X, Eye, Download, RotateCcw } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import FeeSettings from "../FeeSettings/FeeSettings";
 import { openWhatsApp, whatsappNumberFor, isValidWhatsAppNumber, reserveWhatsAppWindow } from "../../lib/whatsapp";
@@ -171,6 +171,7 @@ export default function FeeVerification() {
   const [paymentDateByFee, setPaymentDateByFee] = useState({});
   const [paymentAmountByFee, setPaymentAmountByFee] = useState({});
   const [markingPaidId, setMarkingPaidId] = useState(null);
+  const [undoingTxnId, setUndoingTxnId] = useState(null);
   const [downloadingUnpaid, setDownloadingUnpaid] = useState(false);
   const [sendingStatementFor, setSendingStatementFor] = useState(null);
 
@@ -790,6 +791,84 @@ export default function FeeVerification() {
     await fetchAll();
   };
 
+  // "Undo" on a row in All Transactions — for a payment recorded by a wrong
+  // click. The transaction is marked Rejected rather than deleted (the record of
+  // the correction is worth keeping, and every collection total here already
+  // counts only Success rows), then the fee is re-derived from whatever Success
+  // payments are left: amount_paid, status and last_payment_date all recompute,
+  // exactly as resolve() does it. A late fee already added stays put — only the
+  // Unpaid Fee tab's "Edit Fine" clears it, same as everywhere else.
+  const undoTransaction = async (txn) => {
+    const studentName = txn.fees?.students?.name || "this student";
+    const amt = Number(txn.amount || 0).toLocaleString();
+    const when = txn.created_at
+      ? new Date(txn.created_at).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })
+      : "";
+    const wasSuccess = txn.status === "Success";
+    const ok = window.confirm(
+      `Undo this Rs ${amt} payment for ${studentName}${when ? ` (recorded ${when})` : ""}?\n\n` +
+      (wasSuccess
+        ? "The entry will be marked Rejected and the fee re-opened so the correct payment can be recorded again. Any late fee already added stays — clear it from the Unpaid Fee tab if it was a mistake."
+        : "The pending entry will be marked Rejected.")
+    );
+    if (!ok) return;
+
+    setUndoingTxnId(txn.id);
+
+    const { data: voided, error: voidErr } = await supabase
+      .from("payment_transactions")
+      .update({ status: "Rejected", verified_by: "Admin (undo)" })
+      .eq("id", txn.id)
+      .select("id");
+
+    if (voidErr || !voided || voided.length === 0) {
+      setUndoingTxnId(null);
+      alert(
+        "Could not undo this payment. " +
+        (voidErr?.message || "It may already have been changed, or your session has expired — sign in again.")
+      );
+      return;
+    }
+
+    const feeId = txn.fee_id || txn.fees?.id;
+    if (feeId) {
+      const { data: feeData } = await supabase
+        .from("fees")
+        .select("amount_due, fine_amount")
+        .eq("id", feeId)
+        .single();
+
+      const { data: successTxns } = await supabase
+        .from("payment_transactions")
+        .select("amount, created_at")
+        .eq("fee_id", feeId)
+        .eq("status", "Success");
+
+      const paidAmount = (successTxns || []).reduce((s, t) => s + Number(t.amount || 0), 0);
+      const latest = (successTxns || []).reduce((acc, t) => {
+        if (!t.created_at) return acc;
+        const d = new Date(t.created_at);
+        return !acc || d > acc ? d : acc;
+      }, null);
+      const remaining = Math.max(totalWithFine(feeData) - paidAmount, 0);
+      const status = remaining <= 0 ? "Paid" : paidAmount > 0 ? "Partially Paid" : "Unpaid";
+
+      await supabase
+        .from("fees")
+        .update({
+          amount_paid: paidAmount,
+          status,
+          last_payment_date: latest ? latest.toISOString() : null,
+        })
+        .eq("id", feeId);
+    }
+
+    setUndoingTxnId(null);
+    await fetchPending();
+    await fetchUnpaidFees();
+    await fetchAll();
+  };
+
   return (
     <div className="fee-v">
       <div className="fee-v__tabs">
@@ -1087,6 +1166,7 @@ export default function FeeVerification() {
                   <th>Date</th>
                   <th>Status</th>
                   <th>Receipt</th>
+                  <th>Undo</th>
                 </tr>
               </thead>
               <tbody>
@@ -1120,6 +1200,20 @@ export default function FeeVerification() {
                           className="fee-v__view"
                         >
                           <Eye size={14} /> View
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      {t.status === "Success" || t.status === "Pending Verification" ? (
+                        <button
+                          onClick={() => undoTransaction(t)}
+                          disabled={undoingTxnId === t.id}
+                          className="fee-v__undo"
+                          title="Wrong entry? Undo this payment and re-open the fee"
+                        >
+                          <RotateCcw size={13} /> {undoingTxnId === t.id ? "Undoing..." : "Undo"}
                         </button>
                       ) : (
                         "—"

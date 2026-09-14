@@ -5,7 +5,7 @@ import { PROGRAMS } from "../../lib/academics";
 import { teacherPrograms, teacherSubjectsFor } from "../../lib/teacherAuth";
 import { WRITE_BLOCKED_HINT } from "../../lib/adminAuth";
 import {
-  LMS_BUCKET, LMS_CATEGORIES, YEAR_OPTIONS, categoryLabel,
+  LMS_BUCKET, LMS_CATEGORIES, LMS_ALL_SUBJECTS, YEAR_OPTIONS, categoryLabel,
   fetchMaterialsForStaff, removeMaterial, programsCovered, parseYouTube, isPlaylist,
 } from "../../lib/lms";
 import { prepareUpload } from "../../lib/uploads";
@@ -59,8 +59,14 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
   const [saved, setSaved] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
-  // Only the subjects she teaches that the chosen groups actually offer.
-  const subjectOptions = teacherSubjectsFor(teacher, selectedPrograms);
+  // Only the subjects she teaches that the chosen groups actually offer. The
+  // admin (no `teacher`) also gets `LMS_ALL_SUBJECTS`, for material every
+  // student needs regardless of her elective combination — a lesson plan, a
+  // college-wide notice. A teacher is scoped to her own subjects, so this
+  // never appears for her.
+  const subjectOptions = teacher
+    ? teacherSubjectsFor(teacher, selectedPrograms)
+    : [...teacherSubjectsFor(teacher, selectedPrograms), LMS_ALL_SUBJECTS];
   // A stable string, so the effect below has a dependency lint can check.
   const programKey = selectedPrograms.join("|");
 
@@ -68,7 +74,9 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
     setLoading(true);
     setMaterials(await fetchMaterialsForStaff({
       programs: visiblePrograms,
-      subjects: teacherSubjectsFor(teacher, visiblePrograms),
+      // `LMS_ALL_SUBJECTS` is not a subject any group offers, so it would
+      // otherwise be filtered straight out of the list below.
+      subjects: [...teacherSubjectsFor(teacher, visiblePrograms), LMS_ALL_SUBJECTS],
     }));
     setLoading(false);
   };

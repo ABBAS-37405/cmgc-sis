@@ -28,6 +28,16 @@ export const LMS_CATEGORIES = [
 export const categoryLabel = (id) =>
   LMS_CATEGORIES.find((c) => c.id === id)?.label || id;
 
+/**
+ * The sentinel subject for material every student needs regardless of her
+ * elective combination — a lesson plan, a college-wide announcement. Admin
+ * only: a teacher's own subjects are what `teachers.subjects[]` scopes her
+ * to, and this deliberately sits outside that list. Stored exactly like any
+ * other subject in `lms_materials.subject`, so it is not free to rename once
+ * material carries it.
+ */
+export const LMS_ALL_SUBJECTS = "All Subjects";
+
 export const YEAR_OPTIONS = ["Both Years", "1st Year", "2nd Year"];
 
 // -------------------------------------------------------------------------
@@ -119,7 +129,9 @@ export async function fetchMaterialsForStudent(student) {
   // elective combinations, so material published for the group reaches girls who
   // do not sit that subject. Filtering here also keeps the "new material" alert
   // honest — lmsAlerts.js reads exactly this list.
-  return ownSubjectsOnly(student, forHerClass);
+  // `LMS_ALL_SUBJECTS` rows carry no real subject to check, so they are passed
+  // through as `null` — subjectStatusFor treats a falsy subject as always hers.
+  return ownSubjectsOnly(student, forHerClass, (row) => (row.subject === LMS_ALL_SUBJECTS ? null : row.subject));
 }
 
 /** The teacher's own view: everything she is allowed to see, newest first. */

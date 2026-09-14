@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReportsPane from "./ReportsPane";
 import TestReports from "./TestReports";
+import SubjectReports from "./SubjectReports";
 import ClassPerformance from "../Performance/ClassPerformance";
 import Accounts from "./Accounts";
 import { hasPermission } from "../../lib/adminAuth";
@@ -13,18 +14,23 @@ import "./MonthlyReports.css";
  *   Monthly    per girl, per month — attendance, class tests, assignments, fee
  *   Exam       per girl, for one term exam — its marksheet, plus the same context
  *   Test       per class, for one class test — a result sheet and slips
+ *   Subjects   per subject, across every group and class — pick one, browse its tests
  *   Accounts   the college itself — fee income against salaries and expenses
  *
  * Monthly and Exam are the same screen (`ReportsPane`) with a different `mode`;
  * they differ only in whether an examination is part of the report. Test Reports
  * is genuinely different — it runs across a class rather than down a student —
- * so it is its own component. Accounts is different again: it is the only screen
- * in Reports that is not about a student at all.
+ * so it is its own component. Subjects Report is Test Reports entered from the
+ * other end: same `fetchTests` + `buildTestReport` and the same result-sheet
+ * rendering (`TestResultSheet`), just reached by picking a subject first instead
+ * of a group and class — see `SubjectReports.jsx`. Accounts is different again:
+ * it is the only screen in Reports that is not about a student at all.
  */
 const TABS = [
   { id: "monthly", label: "Monthly Reports", sub: "One PDF per student for a month — attendance, class tests, assignments and fee position. Send it on WhatsApp, or download the whole class at once." },
   { id: "exam", label: "Exam Reports", sub: "One PDF per student for a term exam — its marksheet, with the same attendance, assignments and fee context. Same sending and downloads as monthly." },
   { id: "tests", label: "Test Reports", sub: "One class test at a time: the result sheet for the notice board, and a page per student to send home." },
+  { id: "subjects", label: "Subjects Report", sub: "Pick a subject to see every test conducted in it, across every group and class — then open any one for its result sheet." },
   { id: "performance", label: "Class Performance", sub: "The picture behind the reports: class averages by test, by subject and by teacher, and how the marks are spread across the grade bands." },
   { id: "accounts", label: "Accounts", sub: "Fee income against salaries and running costs — net profit or loss for each month and for the whole year. Record bills, rent and other expenses here.", needs: "teachers" },
 ];
@@ -70,6 +76,8 @@ export default function MonthlyReports({ allowedPrograms = [], adminProfile }) {
           other mode's filters, exam selection and half-finished WhatsApp queue. */}
       {active.id === "tests" ? (
         <TestReports allowedPrograms={allowedPrograms} />
+      ) : active.id === "subjects" ? (
+        <SubjectReports allowedPrograms={allowedPrograms} />
       ) : active.id === "performance" ? (
         // teacher={null} puts it in full-range mode: every test in her groups,
         // and the by-teacher breakdown a single teacher's own screen omits.

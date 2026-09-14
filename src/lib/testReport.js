@@ -48,7 +48,7 @@ export function gradeFor(percent) {
  * groups — she then sees just her own girls in it, because the roster is filtered
  * again in buildTestReport().
  */
-export async function fetchTests({ allowedPrograms = [], program, year, limit = 200 } = {}) {
+export async function fetchTests({ allowedPrograms = [], program, year, subject, limit = 200 } = {}) {
   let query = supabase
     .from("class_tests")
     .select("id, subject, title, test_date, total_marks, program, programs, year_of_study")
@@ -56,6 +56,7 @@ export async function fetchTests({ allowedPrograms = [], program, year, limit = 
     .limit(limit);
 
   if (year && year !== "Both") query = query.eq("year_of_study", year);
+  if (subject) query = query.eq("subject", subject);
 
   const scope = program && program !== "All Programs" ? [program] : allowedPrograms;
   if (scope.length > 0) query = query.overlaps("programs", scope);

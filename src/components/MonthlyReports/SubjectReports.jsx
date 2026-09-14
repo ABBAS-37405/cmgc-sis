@@ -1,25 +1,31 @@
-import { useState, useEffect } from "react";
-import { AlertCircle, ClipboardList } from "lucide-react";
-import { PROGRAMS, YEARS } from "../../lib/academics";
+import { useState } from "react";
+import { AlertCircle, ClipboardList, ChevronLeft } from "lucide-react";
+import { PROGRAMS, subjectsForPrograms } from "../../lib/academics";
 import { fetchTests, buildTestReport, testReportFileName } from "../../lib/testReport";
 import { buildTestReportPdf, saveBlob } from "../../lib/reportPdf";
 import { TestList, TestResultSheet } from "./TestResultSheet";
 
-const ALL_PROGRAMS = "All Programs";
-
 /**
- * Result sheets for a single class test.
+ * Result sheets browsed by subject rather than by group/class.
  *
- * The other tab is one girl across a month; this one is one test across a class.
- * The PDF carries both halves — the sheet for the notice board, then a page per
- * girl to send home — so a mark can never disagree between the two.
+ * Test Reports narrows by "which group, which class" — right when you already
+ * know a test's roster. This screen answers a different question: "every
+ * Mathematics test, wherever it was set" — a subject coordinator's view rather
+ * than a class teacher's. It is the same report underneath (`fetchTests` +
+ * `buildTestReport`, two queries per test picked, none per subject listed), so
+ * the sheet it prints can never disagree with the one Test Reports would print
+ * for the same test.
+ *
+ * The subject list is `subjectsForPrograms(visiblePrograms)` — every subject
+ * offered by the groups this admin can see, the same scoping every other admin
+ * screen already applies.
  */
-export default function TestReports({ allowedPrograms = [] }) {
+export default function SubjectReports({ allowedPrograms = [] }) {
   const isRestricted = allowedPrograms.length > 0;
   const visiblePrograms = isRestricted ? PROGRAMS.filter((p) => allowedPrograms.includes(p)) : PROGRAMS;
+  const subjects = subjectsForPrograms(visiblePrograms);
 
-  const [program, setProgram] = useState(ALL_PROGRAMS);
-  const [year, setYear] = useState("Both");
+  const [subject, setSubject] = useState(null);
   const [tests, setTests] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [report, setReport] = useState(null);
@@ -29,13 +35,14 @@ export default function TestReports({ allowedPrograms = [] }) {
   const [building, setBuilding] = useState("");
   const [error, setError] = useState("");
 
-  const loadTests = async () => {
-    setLoadingTests(true);
-    setError("");
+  const openSubject = async (s) => {
+    setSubject(s);
     setReport(null);
     setSelectedId("");
+    setError("");
+    setLoadingTests(true);
     try {
-      setTests(await fetchTests({ allowedPrograms, program, year }));
+      setTests(await fetchTests({ allowedPrograms, subject: s }));
     } catch (e) {
       setError(e.message || "Could not load the tests.");
       setTests([]);
@@ -43,11 +50,13 @@ export default function TestReports({ allowedPrograms = [] }) {
     setLoadingTests(false);
   };
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadTests();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program, year]);
+  const backToSubjects = () => {
+    setSubject(null);
+    setTests([]);
+    setSelectedId("");
+    setReport(null);
+    setError("");
+  };
 
   const openTest = async (test) => {
     setSelectedId(test.id);
@@ -77,23 +86,28 @@ export default function TestReports({ allowedPrograms = [] }) {
     setBuilding("");
   };
 
+  if (!subject) {
+    return (
+      <div className="mrep__pane">
+        <p className="mrep__bar-label">
+          Pick a subject — {subjects.length} offered across {isRestricted ? "your groups" : "the college"}.
+        </p>
+        <div className="mrep__tabs">
+          {subjects.map((s) => (
+            <button key={s} className="mrep__tab" onClick={() => openSubject(s)}>{s}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mrep__pane">
-      <div className="mrep__filters">
-        <label className="mrep__field">
-          <span>Group</span>
-          <select value={program} onChange={(e) => setProgram(e.target.value)}>
-            <option value={ALL_PROGRAMS}>{isRestricted ? "All My Groups" : ALL_PROGRAMS}</option>
-            {visiblePrograms.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
-        <label className="mrep__field">
-          <span>Class</span>
-          <select value={year} onChange={(e) => setYear(e.target.value)}>
-            <option value="Both">Both</option>
-            {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </label>
+      <div className="mrep__bar">
+        <button className="mrep__btn mrep__btn--sm" onClick={backToSubjects}>
+          <ChevronLeft size={14} /> All subjects
+        </button>
+        <span className="mrep__bar-label">{subject}</span>
       </div>
 
       {error && <p className="mrep__error"><AlertCircle size={14} /> {error}</p>}
@@ -103,14 +117,16 @@ export default function TestReports({ allowedPrograms = [] }) {
       ) : tests.length === 0 ? (
         <div className="mrep__none">
           <ClipboardList size={28} />
-          <p>No class tests found for these filters.</p>
+          <p>No {subject} tests found.</p>
           <p className="mrep__none-hint">
             Tests appear here once a teacher (or an admin) has conducted one from the Class Tests screen.
           </p>
         </div>
       ) : (
         <>
-          <p className="mrep__bar-label">Pick a test — {tests.length} found, newest first.</p>
+          <p className="mrep__bar-label">
+            {tests.length} {subject} test{tests.length === 1 ? "" : "s"} found, newest first.
+          </p>
           <TestList tests={tests} selectedId={selectedId} onSelect={openTest} />
         </>
       )}

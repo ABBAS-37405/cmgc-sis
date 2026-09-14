@@ -41,7 +41,9 @@
 /* ---- list ---- */
 .lmsm__empty { font-size: 13px; color: var(--subtext); }
 .lmsm__list { display: flex; flex-direction: column; gap: 10px; }
-.lmsm__row { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px 15px; }
+.lmsm__row { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px 15px; }
+.lmsm__row--editing { border-color: var(--accent); }
+.lmsm__row-head { display: flex; align-items: flex-start; gap: 12px; }
 .lmsm__row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .lmsm__row-main strong { font-size: 14px; color: var(--text); }
 .lmsm__meta { font-size: 11.5px; color: var(--subtext); }
@@ -50,8 +52,18 @@
 .lmsm__tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--subtext); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; text-decoration: none; }
 .lmsm__tag--yt { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
 
+.lmsm__row-actions { flex-shrink: 0; display: flex; gap: 6px; }
+.lmsm__icon-btn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.lmsm__icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 .lmsm__remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: #b91c1c; }
 .lmsm__remove:hover { border-color: #fecaca; background: #fef2f2; }
+
+/* ---- inline edit ---- */
+.lmsm__edit {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;
+  border-top: 1px solid var(--border); padding-top: 12px;
+}
+.lmsm__hint .lmsm__clear { margin-left: 8px; }
 
 @media (max-width: 640px) {
   .lmsm__head { flex-direction: column; }

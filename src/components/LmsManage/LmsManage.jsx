@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Trash2, Plus, X, ExternalLink, MonitorPlay } from "lucide-react";
+import { Upload, Trash2, Plus, X, Pencil, ExternalLink, MonitorPlay } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { PROGRAMS } from "../../lib/academics";
 import { teacherPrograms, teacherSubjectsFor } from "../../lib/teacherAuth";
@@ -9,6 +9,7 @@ import {
   fetchMaterialsForStaff, removeMaterial, programsCovered, parseYouTube, isPlaylist,
 } from "../../lib/lms";
 import { prepareUpload } from "../../lib/uploads";
+import { pathFromPublicUrl } from "../../lib/storageCleanup";
 import "./LmsManage.css";
 
 const ALL_PROGRAMS = "All Programs";
@@ -58,6 +59,13 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editFile, setEditFile] = useState(null);
+  const [editDropFile, setEditDropFile] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
 
   // Only the subjects she teaches that the chosen groups actually offer. The
   // admin (no `teacher`) also gets `LMS_ALL_SUBJECTS`, for material every
@@ -195,6 +203,111 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
     await load();
   };
 
+  /* -------------------------------------------------------------- editing */
+
+  const startEdit = (item) => {
+    setShowForm(false);
+    setEditingId(item.id);
+    setEditForm({
+      title: item.title || "",
+      body: item.body || "",
+      link_url: item.link_url || "",
+      category: item.category || LMS_CATEGORIES[0].id,
+      year_of_study: item.year_of_study || YEAR_OPTIONS[0],
+    });
+    setEditFile(null);
+    setEditDropFile(false);
+    setEditError("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm(null);
+    setEditFile(null);
+    setEditDropFile(false);
+    setEditError("");
+  };
+
+  /** Uploads a replacement file, or hands back what is already on the row. */
+  const resolveEditFile = async (item) => {
+    if (editDropFile) return { url: null, name: null };
+    if (!editFile) return { url: item.file_url, name: item.file_name };
+
+    const ready = await prepareUpload(editFile, "material");
+    if (ready.error) return { error: ready.error };
+
+    const safe = ready.file.name.replace(/[^\w.-]/g, "_");
+    const path = `${(item.subject || "material").replace(/[^\w]/g, "_")}/${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage.from(LMS_BUCKET).upload(path, ready.file);
+    if (upErr) return { error: `File upload failed: ${upErr.message}` };
+
+    // ready.file.name, not editFile.name — a compressed scan is re-encoded as
+    // .jpg, and labelling it .png would misname the student's download.
+    return {
+      url: supabase.storage.from(LMS_BUCKET).getPublicUrl(path).data.publicUrl,
+      name: ready.file.name,
+    };
+  };
+
+  /** The old file, once the row safely points at the new one — same order StudentsList uses for a profile picture. */
+  const dropOldFile = async (oldUrl, newUrl) => {
+    if (!oldUrl || oldUrl === newUrl) return;
+    const path = pathFromPublicUrl(oldUrl, LMS_BUCKET);
+    if (path) await supabase.storage.from(LMS_BUCKET).remove([path]);
+  };
+
+  /**
+   * What may change is the content; the audience does not. Subject and groups
+   * decide which students this reaches and which entitlement check the write
+   * has to pass (`teacher_can('lms', p)` / `admin_can_lms()`) — the same reason
+   * `TeacherUploads` keeps them fixed on its own edit screen. To send this
+   * somewhere else, remove it and publish again with the groups it should go to.
+   */
+  const saveEdit = async (item) => {
+    setEditError("");
+    const f = editForm;
+    if (!f.title.trim()) return setEditError("Give it a title, so students know what it is.");
+    if (!f.body.trim() && !f.link_url.trim() && !editFile && (editDropFile || !item.file_url)) {
+      return setEditError("Leave something on it — written text, a link, or a file.");
+    }
+    if (f.link_url.trim() && !/^https?:\/\//i.test(f.link_url.trim())) {
+      return setEditError("The link should start with http:// or https://");
+    }
+
+    setEditSaving(true);
+    const resolved = await resolveEditFile(item);
+    if (resolved.error) {
+      setEditSaving(false);
+      return setEditError(resolved.error);
+    }
+
+    // .select("id") is not decoration: an update RLS refuses comes back as a
+    // plain success with zero rows, so without it this would report "saved" for
+    // a change the database threw away. See WRITE_BLOCKED_HINT.
+    const { data, error: dbError } = await supabase
+      .from("lms_materials")
+      .update({
+        title: f.title.trim(),
+        body: f.body.trim() || null,
+        link_url: f.link_url.trim() || null,
+        category: f.category,
+        year_of_study: f.year_of_study === "Both Years" ? null : f.year_of_study,
+        file_url: resolved.url,
+        file_name: resolved.name,
+      })
+      .eq("id", item.id)
+      .select("id");
+    setEditSaving(false);
+
+    if (dbError) return setEditError(dbError.message);
+    if (!data || data.length === 0) return setEditError(WRITE_BLOCKED_HINT);
+
+    await dropOldFile(item.file_url, resolved.url);
+
+    cancelEdit();
+    await load();
+  };
+
   return (
     <div className="lmsm">
       <div className="lmsm__head">
@@ -204,7 +317,7 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
             ? "Whatever you publish here appears in the LMS tab of every student in the chosen groups."
             : "Everything published for these groups, by you or by any teacher. Adding here works exactly as it does for a teacher."}</p>
         </div>
-        <button className="lmsm__btn lmsm__btn--primary" onClick={() => { setShowForm(!showForm); setError(""); }}>
+        <button className="lmsm__btn lmsm__btn--primary" onClick={() => { setShowForm(!showForm); setError(""); cancelEdit(); }}>
           {showForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Material</>}
         </button>
       </div>
@@ -310,32 +423,133 @@ export default function LmsManage({ teacher, allowedPrograms = [] }) {
         <div className="lmsm__list">
           {materials.map((m) => {
             const youtube = parseYouTube(m.link_url);
+            const isEditing = editingId === m.id;
             return (
-              <div key={m.id} className="lmsm__row">
-                <div className="lmsm__row-main">
-                  <strong>{m.title}</strong>
-                  <span className="lmsm__meta">
-                    {m.subject} · {programsCovered(m).join(", ")} · {m.year_of_study || "Both years"} · {when(m.created_at)}
-                  </span>
-                  {m.body && <p className="lmsm__row-body">{m.body}</p>}
-                  <div className="lmsm__row-tags">
-                    <span className="lmsm__tag">{categoryLabel(m.category)}</span>
-                    {youtube && (
-                      <span className="lmsm__tag lmsm__tag--yt">
-                        <MonitorPlay size={11} /> {isPlaylist(youtube) ? "Playlist" : "Video"}
-                      </span>
-                    )}
-                    {m.file_url && <span className="lmsm__tag">File</span>}
-                    {m.link_url && !youtube && (
-                      <a className="lmsm__tag" href={m.link_url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink size={11} /> Link
-                      </a>
-                    )}
+              <div key={m.id} className={`lmsm__row ${isEditing ? "lmsm__row--editing" : ""}`}>
+                <div className="lmsm__row-head">
+                  <div className="lmsm__row-main">
+                    <strong>{m.title}</strong>
+                    <span className="lmsm__meta">
+                      {m.subject} · {programsCovered(m).join(", ")} · {m.year_of_study || "Both years"} · {when(m.created_at)}
+                    </span>
+                    {m.body && <p className="lmsm__row-body">{m.body}</p>}
+                    <div className="lmsm__row-tags">
+                      <span className="lmsm__tag">{categoryLabel(m.category)}</span>
+                      {youtube && (
+                        <span className="lmsm__tag lmsm__tag--yt">
+                          <MonitorPlay size={11} /> {isPlaylist(youtube) ? "Playlist" : "Video"}
+                        </span>
+                      )}
+                      {m.file_url && <span className="lmsm__tag">File</span>}
+                      {m.link_url && !youtube && (
+                        <a className="lmsm__tag" href={m.link_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink size={11} /> Link
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="lmsm__row-actions">
+                    <button
+                      className="lmsm__icon-btn"
+                      onClick={() => (isEditing ? cancelEdit() : startEdit(m))}
+                      title={isEditing ? "Cancel editing" : "Edit this material"}
+                    >
+                      {isEditing ? <X size={15} /> : <Pencil size={15} />}
+                    </button>
+                    <button className="lmsm__remove" onClick={() => remove(m)} title="Remove from students' LMS">
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
-                <button className="lmsm__remove" onClick={() => remove(m)} title="Remove from students' LMS">
-                  <Trash2 size={15} />
-                </button>
+
+                {isEditing && (
+                  <div className="lmsm__edit">
+                    <div className="lmsm__field lmsm__field--wide">
+                      <label>Title</label>
+                      <input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="lmsm__field">
+                      <label>Kind</label>
+                      <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                        {LMS_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="lmsm__field">
+                      <label>Class</label>
+                      <select value={editForm.year_of_study} onChange={(e) => setEditForm({ ...editForm, year_of_study: e.target.value })}>
+                        {YEAR_OPTIONS.map((y) => <option key={y}>{y}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="lmsm__field lmsm__field--wide">
+                      <label>Write something</label>
+                      <textarea
+                        rows={4}
+                        value={editForm.body}
+                        onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="lmsm__field lmsm__field--wide">
+                      <label>Link</label>
+                      <input
+                        value={editForm.link_url}
+                        onChange={(e) => setEditForm({ ...editForm, link_url: e.target.value })}
+                        placeholder="https://www.youtube.com/watch?v=... or any website"
+                      />
+                      <LinkPreview url={editForm.link_url} />
+                    </div>
+
+                    <div className="lmsm__field lmsm__field--wide">
+                      <label>File</label>
+                      {m.file_url && !editFile && !editDropFile && (
+                        <p className="lmsm__hint">
+                          Current: {m.file_name || "the file on it now"}
+                          <button type="button" className="lmsm__clear" onClick={() => setEditDropFile(true)}>Remove it</button>
+                        </p>
+                      )}
+                      {editDropFile && (
+                        <p className="lmsm__hint">
+                          The file will be taken off when you save.
+                          <button type="button" className="lmsm__clear" onClick={() => setEditDropFile(false)}>Keep it</button>
+                        </p>
+                      )}
+                      <label className="lmsm__file">
+                        <Upload size={15} />
+                        {editFile ? editFile.name : m.file_url ? "Choose a different file" : "Attach a file"}
+                        <input
+                          type="file"
+                          hidden
+                          onChange={(e) => { setEditFile(e.target.files?.[0] || null); setEditDropFile(false); }}
+                        />
+                      </label>
+                      {editFile && (
+                        <button type="button" className="lmsm__clear" onClick={() => setEditFile(null)}>
+                          Keep the existing file instead
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="lmsm__hint lmsm__field--wide">
+                      Subject and groups are fixed here — they decide which students this reaches. To send it to
+                      different groups, remove it and publish again.
+                    </p>
+
+                    {editError && <p className="lmsm__error">{editError}</p>}
+
+                    <div className="lmsm__actions">
+                      <button className="lmsm__btn lmsm__btn--primary" onClick={() => saveEdit(m)} disabled={editSaving}>
+                        {editSaving ? "Saving..." : "Save Changes"}
+                      </button>
+                      <button className="lmsm__btn" onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

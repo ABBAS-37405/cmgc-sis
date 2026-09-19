@@ -173,6 +173,7 @@ export default function FeeVerification() {
   const [markingPaidId, setMarkingPaidId] = useState(null);
   const [undoingTxnId, setUndoingTxnId] = useState(null);
   const [downloadingUnpaid, setDownloadingUnpaid] = useState(false);
+  const [downloadingRegister, setDownloadingRegister] = useState(false);
   const [sendingStatementFor, setSendingStatementFor] = useState(null);
 
   const fetchPending = async () => {
@@ -479,6 +480,131 @@ export default function FeeVerification() {
       freeze: { row: 4 },
     });
     setDownloadingUnpaid(false);
+  };
+
+  const monthShortLabelOf = (key) =>
+    key === "no-date"
+      ? "Undated"
+      : new Date(`${key}-01T00:00:00`).toLocaleDateString("en-PK", { month: "short", year: "2-digit" });
+
+  // Every student's whole fee position in one sheet — her total charge, what
+  // she has paid broken down by the month it came in, and what is still
+  // pending — rather than the Unpaid tab's list, which only ever named the
+  // ones still owing. A fresh fetch rather than reusing unpaidFees/
+  // allTransactions: this needs every fee (paid ones included) and every
+  // student's total, neither of which either of those two states carries.
+  const downloadFullFeeRegister = async () => {
+    setDownloadingRegister(true);
+
+    const { data: feesData, error } = await supabase
+      .from("fees")
+      .select(
+        "id, student_id, amount_due, fine_amount, due_date, status, " +
+        "students!inner(id, name, roll_no, program, year_of_study), " +
+        "payment_transactions(amount, status, created_at)"
+      )
+      .is("students.deleted_at", null);
+
+    if (error) {
+      setDownloadingRegister(false);
+      alert("Failed to build the fee register: " + error.message);
+      return;
+    }
+    if (!feesData || feesData.length === 0) {
+      setDownloadingRegister(false);
+      return;
+    }
+
+    const scoped =
+      yearFilter === "Both" ? feesData : feesData.filter((f) => f.students?.year_of_study === yearFilter);
+
+    const byStudent = new Map();
+    const monthSet = new Set();
+
+    for (const fee of scoped) {
+      const student = fee.students;
+      if (!student) continue;
+      if (!byStudent.has(student.id)) {
+        byStudent.set(student.id, { student, totalDue: 0, totalPaid: 0, monthly: {} });
+      }
+      const entry = byStudent.get(student.id);
+      entry.totalDue += totalWithFine(fee);
+      for (const txn of fee.payment_transactions || []) {
+        if (txn.status !== "Success") continue;
+        const amt = Number(txn.amount || 0);
+        const key = txn.created_at ? txn.created_at.slice(0, 7) : "no-date";
+        monthSet.add(key);
+        entry.totalPaid += amt;
+        entry.monthly[key] = (entry.monthly[key] || 0) + amt;
+      }
+    }
+
+    if (byStudent.size === 0) {
+      setDownloadingRegister(false);
+      return;
+    }
+
+    const months = [...monthSet].sort();
+    const students = [...byStudent.values()].sort((a, b) => a.student.name.localeCompare(b.student.name));
+
+    const headerRow = [
+      "Roll No", "Name", "Program", "Year",
+      ...months.map(monthShortLabelOf),
+      "Total Fee (Rs)", "Total Paid (Rs)", "Total Pending (Rs)", "Status",
+    ].map((h) => ({ v: h, s: S.HEAD }));
+
+    const bodyRows = students.map(({ student, totalDue, totalPaid, monthly }) => {
+      const pending = Math.max(totalDue - totalPaid, 0);
+      const status = pending === 0 ? "Paid" : totalPaid > 0 ? "Partially Paid" : "Unpaid";
+      return [
+        { v: student.roll_no || "", s: S.TEXT },
+        { v: student.name || "", s: S.TEXT },
+        { v: student.program || "", s: S.TEXT },
+        { v: student.year_of_study || "", s: S.CENTER },
+        ...months.map((m) => ({ v: monthly[m] || 0, s: S.CENTER })),
+        { v: totalDue, s: S.CENTER },
+        { v: totalPaid, s: S.CENTER },
+        { v: pending, s: S.CENTER },
+        { v: status, s: S.CENTER },
+      ];
+    });
+
+    const grandDue = students.reduce((s, x) => s + x.totalDue, 0);
+    const grandPaid = students.reduce((s, x) => s + x.totalPaid, 0);
+    const grandPending = Math.max(grandDue - grandPaid, 0);
+    const monthTotals = months.map((m) => students.reduce((s, x) => s + (x.monthly[m] || 0), 0));
+
+    const totalRow = [
+      { s: S.BAND }, { v: "Total", s: S.BAND }, { s: S.BAND }, { s: S.BAND },
+      ...monthTotals.map((v) => ({ v, s: S.BAND })),
+      { v: grandDue, s: S.BAND },
+      { v: grandPaid, s: S.BAND },
+      { v: grandPending, s: S.BAND },
+      { s: S.BAND },
+    ];
+
+    const rows = [
+      [{ v: "Community Model Girls College, Rawalpindi", s: S.TITLE }],
+      [{ v: `Fee Register — Paid & Pending (${yearFilter})`, s: S.LABEL }],
+      [],
+      headerRow,
+      ...bodyRows,
+      totalRow,
+    ];
+
+    const columns = [
+      { width: 16 }, { width: 24 }, { width: 20 }, { width: 10 },
+      ...months.map(() => ({ width: 12 })),
+      { width: 14 }, { width: 14 }, { width: 16 }, { width: 16 },
+    ];
+
+    await downloadXlsx(`Fee-Register-${yearFilter.replace(/\s+/g, "")}`, {
+      sheetName: "Fee Register",
+      rows,
+      columns,
+      freeze: { row: 4, col: 4 },
+    });
+    setDownloadingRegister(false);
   };
 
   // One outstanding charge, with the controls that were previously spread across
@@ -1125,18 +1251,28 @@ export default function FeeVerification() {
                 </button>
               ))}
             </div>
-            <div className="fee-v__view-toggle" role="group" aria-label="Collection view">
+            <div className="fee-v__filters-right">
+              <div className="fee-v__view-toggle" role="group" aria-label="Collection view">
+                <button
+                  onClick={() => setTxView("overall")}
+                  className={"fee-v__view-btn " + (txView === "overall" ? "fee-v__view-btn--active" : "")}
+                >
+                  Overall
+                </button>
+                <button
+                  onClick={() => setTxView("monthly")}
+                  className={"fee-v__view-btn " + (txView === "monthly" ? "fee-v__view-btn--active" : "")}
+                >
+                  Monthly
+                </button>
+              </div>
               <button
-                onClick={() => setTxView("overall")}
-                className={"fee-v__view-btn " + (txView === "overall" ? "fee-v__view-btn--active" : "")}
+                onClick={downloadFullFeeRegister}
+                disabled={downloadingRegister}
+                className="fee-v__download-btn"
+                title="Every student's total fee, paid month by month, and what is still pending"
               >
-                Overall
-              </button>
-              <button
-                onClick={() => setTxView("monthly")}
-                className={"fee-v__view-btn " + (txView === "monthly" ? "fee-v__view-btn--active" : "")}
-              >
-                Monthly
+                <Download size={14} /> {downloadingRegister ? "Preparing..." : "Download Fee Register (.xlsx)"}
               </button>
             </div>
           </div>
